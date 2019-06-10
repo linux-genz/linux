@@ -38,6 +38,7 @@
 #include <linux/module.h>
 #include "genz.h"
 
+MODULE_LICENSE("GPL v2");
 static int sysfs_initialized; /* = 0 */
 
 static ssize_t genz_read_control(struct file * file,
@@ -128,6 +129,7 @@ err:
 	return retval;
 }
 
+/* not for modules. We will add sysfs as the drivers are loaded. 
 static int __init genz_sysfs_init(void)
 {
 	struct genz_dev *zdev = NULL;
@@ -143,5 +145,4 @@ static int __init genz_sysfs_init(void)
 	}
 	return retval;
 }
-late_initcall(genz_sysfs_init);
-
+*/

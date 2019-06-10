@@ -193,7 +193,7 @@ int __genz_register_driver(struct genz_driver *driver, struct module *module,
 		return ret;
 	}
 
-	pr_debug("Registered new genz driver %s\n", driver->name);
+	pr_info("Registered new genz driver %s\n", driver->name);
 	return 0;
 }
 EXPORT_SYMBOL(__genz_register_driver);
@@ -211,6 +211,53 @@ void __genz_unregister_driver(struct genz_driver *driver)
         driver_unregister(&driver->driver);
 }
 EXPORT_SYMBOL(__genz_unregister_driver);
+
+/**
+ * genz_register_bridge - register a new Gen-Z bridge driver
+ * @struct device *dev: the device structure to register
+ * @struct genz_driver *driver: the Gen-Z driver structure to register
+ * @struct module *module: owner module of the driver
+ * @const char *mod_name: module name string
+ *
+ * A driver calls genz_register_bridge() during probe of a device that
+ * is a bridge component. This marks the bridge component as a bridge
+ * so that a fabric manager can discover it through sysfs files named
+ * 'brigeN'. Typically a bridge device driver is a PCI device (for example)
+ * and the driver is both a PCI driver and a Gen-Z driver. 
+ *
+ * Return:
+ * Returns 0 on success. Returns a negative value on error.
+ */
+int genz_register_bridge(struct device *dev, struct genz_driver *driver,
+		struct module *module, const char *mod_name)
+{
+	int ret = 0;
+
+	return ret;
+}
+EXPORT_SYMBOL(genz_register_bridge);
+
+/**
+ * genz_unregister_bridge - unregister a Gen-Z bridge driver
+ * @struct genz_driver *driver: the Gen-Z driver structure to register
+ *
+ * A driver calls genz_unregister_bridge() to unregister a bridge
+ * driver with the Gen-Z sub-system. Typically a bridge device driver
+ * is a PCI device (for example) and the driver is both a PCI driver and
+ * a Gen-Z driver. The driver must call the appropriate native bus "unregister"
+ * function after calling genz_unregister_bridge(), e.g.
+ * pci_unregister_driver(). 
+ *
+ * Return:
+ * Returns 0 on success. Returns a negative value on error.
+ */
+int genz_unregister_bridge(struct genz_driver *driver)
+{
+	int ret = 0;
+
+	return ret;
+}
+EXPORT_SYMBOL(genz_unregister_bridge);
 
 static int __init genz_init(void) {
 	int ret;

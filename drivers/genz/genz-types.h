@@ -5984,9 +5984,9 @@ struct genz_structure_name {
 };
 
 struct control_structure_header {
-	uint64_t type			: 12;
-	uint64_t vers			: 4;
-	uint64_t size			: 16;
+	uint32_t type			: 12;
+	uint32_t vers			: 4;
+	uint32_t size			: 16;
 };
 
 /* The field containing a pointer can either be 4 bytes or 6 bytes long in the Core Spec. */
@@ -6008,6 +6008,8 @@ enum genz_control_pointer_flags {
 	GENZ_CONTROL_POINTER_NONE = 0,
 	GENZ_CONTROL_POINTER_CHAINED = 1,
 	GENZ_CONTROL_POINTER_ARRAY = 2,
+	GENZ_CONTROL_POINTER_GENERIC = 3,
+	GENZ_CONTROL_POINTER_LINK = 4, /* e.g. interface group, aggregate interface */
 };
 
 /*
