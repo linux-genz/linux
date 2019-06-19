@@ -2,8 +2,10 @@
 #
 # Makefile for the Gen-Z bus specific drivers.
 
-obj-$(CONFIG_GENZ)		+= genz-core.o \
-	                           genz-types.o \
-	                           genz-sysfs.o \
-#				   genz-control.o 
+genz-y := genz-core.o \
+          genz-types.o \
+          genz-sysfs.o \
+          genz-control.o 
+
+obj-$(CONFIG_GENZ)           += genz.o
 

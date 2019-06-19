@@ -53,6 +53,8 @@ typedef unsigned char uuid_str_t[37];	/* UUID string of format:
 /* Value of Z-UUID in control space that indicates a Gen-Z device */
 #define GENZ_Z_UUID	0x4813ea5f074e4be2a355a354145c9927
 
+typedef loff_t genz_control_cookie;
+
 /* Revisit: does this belong in mod_devicetable.h? */
 struct genz_device_id {
 	uuid_str_t	uuid_str;	/* Vendor assigned component or
@@ -64,11 +66,18 @@ struct genz_dev {
 	uuid_t				uuid;
 	struct resource 		*res;		/* Control space resources */
 	struct genz_control_info	*root_control_info;
+	struct kobject			*root_kobj; /* kobj for /sys/devices/genz/ */
 	struct genz_driver		*zdriver;
 	struct genz_dev			*bridge_zdev;
 	struct device			dev;		/* Generic device interface */
+	uint8_t				gcid;
 };
 #define to_genz_dev(n) container_of(n, struct genz_dev, dev)
+
+struct genz_bridge_dev {
+	struct genz_dev		zdev;
+	struct device		*bridge_dev; /* native device pointer */
+};
 
 struct genz_driver {
 	const char			*name;
@@ -77,22 +86,19 @@ struct genz_driver {
 	int (*remove)(struct genz_dev *dev);
 	int (*suspend)(struct genz_dev *dev);
 	int (*resume)(struct genz_dev *dev);
-	int (*loc_br_cntl_mmap)(struct genz_dev *dev); /* REVISIT: need flags? */
-	int (*loc_br_cntl_read)(struct genz_dev *dev, off_t offset, size_t size, void *data, uint flags);
-	int (*loc_br_cntl_write)(struct genz_dev *dev, off_t offset, size_t size, void *data, uint flags);
 	int (*control_mmap)(struct genz_dev *dev); /* REVISIT: need flags? */
-	int (*control_read)(struct genz_dev *dev, off_t offset, size_t size, void *data, uint flags);
-	int (*control_write)(struct genz_dev *dev, off_t offset, size_t size, void *data, uint flags);
+	int (*control_read)(struct genz_dev *dev, genz_control_cookie offset, size_t size, void *data, uint flags);
+	int (*control_write)(struct genz_dev *dev, genz_control_cookie offset, size_t size, void *data, uint flags);
 	int (*data_mmap)(struct genz_dev *dev);
-	int (*data_read)(struct genz_dev *dev, off_t offset, size_t size, void *data);
-	int (*data_write)(struct genz_dev *dev, off_t offset, size_t size, void *data);
+	int (*data_read)(struct genz_dev *dev, genz_control_cookie offset, size_t size, void *data);
+	int (*data_write)(struct genz_dev *dev, genz_control_cookie offset, size_t size, void *data);
 	struct device_driver		driver;
 };
 #define to_genz_driver(d) container_of(d, struct genz_driver, driver)
 
-inline bool zdev_is_local(struct genz_dev *zdev)
+static inline bool zdev_is_local_bridge(const struct genz_dev *zdev)
 {
-	return (zdev->zdriver && zdev->zdriver->loc_br_cntl_read);
+	return (zdev == zdev->bridge_zdev);
 }
 
 /*
@@ -102,15 +108,6 @@ inline bool zdev_is_local(struct genz_dev *zdev)
         __genz_register_driver(driver, THIS_MODULE, KBUILD_MODNAME)
 #define genz_unregister_driver(driver)             \
         __genz_unregister_driver(driver)
-
-/* Control space structure used to represent the /sys hierarchy. */
-struct genz_control_struct {
-	struct	kobject kobj;
-	off_t	start;
-	off_t	end;
-	struct genz_control_struct *parent;
-};
-#define to_genz_control_struct(kobj) struct genz_control_struct, kobj)
 
 /* 
  * Don't call these directly - use the macros. 
@@ -127,6 +124,7 @@ static inline int is_genz_bridge_device(struct device *dev)
 	return dev->type == &genz_bridge_type;
 }
 
+/* Control space structure used to represent the /sys hierarchy. */
 struct genz_control_info {
 	struct kobject          kobj;
 	struct resource         *c_access_res; /* points into the c-access
@@ -136,13 +134,14 @@ struct genz_control_info {
 	struct genz_control_info *parent, *sibling, *child; /* control structure hierarchy used for creating /sys hierarchy */
 	struct genz_dev		*zdev;
 	off_t                   start;
-	uint32_t		type;		/* version from the control_structure_header */
-	uint8_t			version;	/* version from the control_structure_header */
+	uint32_t		type;		/* type from the control_structure_header */
+	uint8_t			vers;		/* version from the control_structure_header */
 	size_t                  size;		/* size in bytes */
-	struct req_zmmu         *zmmu;  /* placeholder for zmmu entry */
+	struct req_zmmu         *zmmu;  	/* placeholder for zmmu entry */
+	struct bin_attribute	battr;
 };
 
-#define to_genz_control_info_obj(x) container_of(x, struct genz_control_info, kobj)
+#define to_genz_control_info(x) container_of(x, struct genz_control_info, kobj)
 
 struct genz_control_info_attribute {
 	struct attribute attr;
@@ -152,6 +151,7 @@ struct genz_control_info_attribute {
 		struct genz_control_info_attribute *attr,
 		const char *buf, size_t count);
 };
+#define to_genz_control_info_attr(x) container_of(x, struct genz_control_info_attribute, attr)
 
 void genz_lock_rescan_remove(void);
 void genz_unlock_rescan_remove(void);

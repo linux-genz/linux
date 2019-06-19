@@ -39,6 +39,7 @@
 #include <linux/kernel.h>
 #include "genz.h"
 #include "genz-types.h"
+#include "genz-control.h"
 
 static bool no_genz;
 module_param(no_genz, bool, 0444);
@@ -88,7 +89,7 @@ int genz_validate_control_space_structure_type(int type)
 }
 EXPORT_SYMBOL_GPL(genz_validate_control_space_structure_type);
 
-static int is_genz_device(struct core_structure *core)
+static int is_genz_device(struct genz_core_structure *core)
 {
 	/* Check that the Z-UUID is the Gen-Z spec value */
 	if (core == NULL)
@@ -99,7 +100,7 @@ static int is_genz_device(struct core_structure *core)
 
 static int genz_match_id(
 	struct device *dev,
-	struct core_structure *core,
+	struct genz_core_structure *core,
 	struct genz_device_id *id)
 {
 	/*
@@ -110,15 +111,15 @@ static int genz_match_id(
 	return 0;
 }
 
-static struct core_structure * genz_read_core(struct device *dev)
+static struct genz_core_structure * genz_read_core(struct device *dev)
 {
-	return (struct core_structure *) NULL;
+	return (struct genz_core_structure *) NULL;
 }
 
 static int genz_match_device(struct device *dev, struct device_driver *drv)
 {
         struct genz_driver *driver = to_genz_driver(drv);
-	struct core_structure *core;
+	struct genz_core_structure *core;
 	int match;
 
 	core = genz_read_core(dev);
@@ -212,6 +213,22 @@ void __genz_unregister_driver(struct genz_driver *driver)
 }
 EXPORT_SYMBOL(__genz_unregister_driver);
 
+static int initialize_zdev(struct genz_dev *zdev,
+			struct genz_driver *driver,
+			struct module *module,
+			const char *mod_name)
+{
+	/* zdev->uuid = NULL; */
+	zdev->res = NULL;
+	zdev->root_control_info = NULL;
+	zdev->root_kobj = NULL; /* kobj for /sys/devices/genz/ */
+	/* zdev->zdriver = driver; */
+	zdev->bridge_zdev = NULL;
+	/* zdev->dev = driver; */		/* Generic device interface */
+	zdev->gcid = 0;
+	return 0;
+}
+
 /**
  * genz_register_bridge - register a new Gen-Z bridge driver
  * @struct device *dev: the device structure to register
@@ -232,7 +249,15 @@ int genz_register_bridge(struct device *dev, struct genz_driver *driver,
 		struct module *module, const char *mod_name)
 {
 	int ret = 0;
+	struct genz_bridge_dev *zbdev;
 
+	/* Allocate a genz_bridge_dev */
+
+	/* Initialize the genz_bridge_dev */
+	initialize_zdev(&zbdev->zdev, driver, module, mod_name);
+	zbdev->bridge_dev = dev;
+
+	ret = genz_bridge_create_control_files(zbdev);
 	return ret;
 }
 EXPORT_SYMBOL(genz_register_bridge);

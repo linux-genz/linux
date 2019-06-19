@@ -100,8 +100,6 @@ static int genz_create_capabilities_sysfs(struct genz_dev *zdev)
 int __must_check genz_create_sysfs_dev_files(struct genz_dev *zdev)
 {
 	int retval;
-	int rom_size;
-	struct bin_attribute *attr;
 
 	if (!sysfs_initialized)
 		return -EACCES;

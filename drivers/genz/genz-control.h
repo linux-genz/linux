@@ -36,23 +36,20 @@
 
 #include "genz.h"
 
-struct genz_control_cookie {
-	int	cookie;
-};
-
-int  genz_map_core( struct genz_dev zdev, struct genz_core ** core);
-int genz_find_control_structure(struct genz_dev zdev, int type, int version);
-int genz_request_control_structure(struct genz_dev zdev, int index, int type,
-	int version, struct genz_control_cookie * cookie);
-void genz_release_control_structure(struct genz_dev zdev,
-	struct genz_control_cookie cookie);
-int genz_map_control_structure(struct genz_dev zdev,
-	struct genz_control_cookie cookie, size_t *size, void **ctrl_struct);
-int genz_request_control_table(struct genz_dev zdev,
-	struct genz_control_cookie cookie, int table_offset,
-	int table_prt_size, struct genz_control_cookie * table_cookie);
-void genz_release_control_table( struct genz_dev zdev,
-	struct genz_control_cookie cookie);
-int genz_map_control_table(struct genz_dev zdev,
-	struct genz_control_cookie cookie, size_t *size,
+int  genz_map_core( struct genz_dev *zdev, struct genz_core_structure ** core);
+int genz_find_control_structure(struct genz_dev *zdev, int type, int version);
+int genz_request_control_structure(struct genz_dev *zdev, int index, int type,
+	int version, genz_control_cookie * cookie);
+void genz_release_control_structure(struct genz_dev *zdev,
+	genz_control_cookie cookie);
+int genz_map_control_structure( struct genz_dev *zdev,
+	genz_control_cookie cookie, size_t *size, void **ctrl_struct);
+int genz_request_control_table(struct genz_dev *zdev,
+	genz_control_cookie cookie, int table_offset,
+	int table_prt_size, genz_control_cookie * table_cookie);
+void genz_release_control_table( struct genz_dev *zdev,
+	genz_control_cookie cookie);
+int genz_map_control_table(struct genz_dev *zdev,
+	genz_control_cookie cookie, size_t *size,
 	void **control_table);
+int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev);
