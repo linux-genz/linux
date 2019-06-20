@@ -41,123 +41,123 @@
 /* *************************************************************************** */
 
 struct genz_control_structure_ptr core_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x48 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x4c },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x50 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x54 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x58 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x5c },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x60 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x64 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x68 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x6c }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x70 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x74 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x78 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x7c }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x80 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x84 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x130 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x134 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x138 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x13c },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_6_BYTE_POINTER, 0x140 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_6_BYTE_POINTER, 0x146 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x14c },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x48 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x4c },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x50 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x54 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x58 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x5c },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x60 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x64 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x68 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x6c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x70 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x74 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x78 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x7c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x80 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x84 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x130 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x134 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x138 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x13c },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_6_BYTE_POINTER, 0x140 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_6_BYTE_POINTER, 0x146 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x14c },
 };
 
 struct genz_control_structure_ptr opcode_set_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr interface_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x70 },
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x78 },
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x7c },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x80 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x84 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x88 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x8c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x80 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x84 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x88 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x8c }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr interface_phy_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x8 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0xc }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0xc }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr interface_statistics_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x8 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0xc }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x8 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0xc }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_error_and_signal_event_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x14 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x14 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_media_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x4 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x4 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0xc },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x74 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x78 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x7c }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x80 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x84 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x88 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x8c }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x90 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x94 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x98 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x9c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x74 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x78 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x7c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x80 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x84 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x88 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x8c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x90 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x94 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x98 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x9c }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_switch_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x30 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x34 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x38 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x3c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x30 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x34 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x38 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x3c }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_statistics_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x8 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0xc }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0xc }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_extension_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x4 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x8 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0xc },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x10 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x14 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x18 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x1c },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x20 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x24 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x28 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x2c },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_6_BYTE_POINTER, 0x30 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_6_BYTE_POINTER, 0x38 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x8 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0xc },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x10 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x14 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x18 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x1c },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x20 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x24 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x28 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x2c },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_6_BYTE_POINTER, 0x30 },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_6_BYTE_POINTER, 0x38 },
 };
 
 struct genz_control_structure_ptr component_multicast_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x20 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x24 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x28 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x20 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x24 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x28 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_security_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x20 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x20 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_tr_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x8 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x8 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_image_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_6_BYTE_POINTER, 0x10 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_6_BYTE_POINTER, 0x10 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x18 },
 };
 
@@ -166,112 +166,112 @@ struct genz_control_structure_ptr component_precision_time_structure_ptrs[] = {
 };
 
 struct genz_control_structure_ptr component_mechanical_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_destination_table_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x20 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x24 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x28 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x2c }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x30 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x20 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x24 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x28 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x2c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x30 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr service_uuid_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x8 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x8 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_c_access_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x4 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x18, GENZ_C_ACCESS_R_KEY_TABLE, genz_c_access_r_key_size }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr requester_p2p_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x38 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x3c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x3c }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_pa_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x20 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x24 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x28 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x2c }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x34 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x48 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x4c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x20 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x24 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x28 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x2c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x34 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x48 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x4c }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_lpd_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x4 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x54 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x54 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_sod_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x14 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x14 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr congestion_management_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x8 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0xc }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x8 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0xc }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_pm_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x8 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x8 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_re_table_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_6_BYTE_POINTER, 0x10 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_6_BYTE_POINTER, 0x10 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_6_BYTE_POINTER, 0x18 },
 };
 
 struct genz_control_structure_ptr component_lph_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x4 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x54 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x60 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x54 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x60 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_page_grid_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x20 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x20 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x24 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x28 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x2c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x28 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x2c }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_page_table_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x4 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x4 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x34 },
 };
 
 struct genz_control_structure_ptr component_interleave_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x4 },
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x20 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x20 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_firmware_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x8 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x8 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr component_sw_management_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr c_cert_table_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x0 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x4 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, YY }, //FIXME: incorrec hex value! /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, -1 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x0 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x4 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, YY }, //FIXME: incorrec hex value! /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, -1 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr reliable_multicast_table_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_6_BYTE_POINTER, 0x0 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_6_BYTE_POINTER, 0x0 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr opcode_set_table_ptrs[] = {
@@ -283,20 +283,20 @@ struct genz_control_structure_ptr elog_table_ptrs[] = {
 };
 
 struct genz_control_structure_ptr sec_table_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x0 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x4 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, YY }, //FIXME: incorrec hex value! /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x0 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x4 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, YY }, //FIXME: incorrec hex value! /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr backup_mgmt_table_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x68 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x6c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x68 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x6c }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr packet_relay_access_key_interface_structure_fields_optional_ptrs[] = {
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x90 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x94 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_GENERIC, GENZ_4_BYTE_POINTER, 0x98 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x90 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x94 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x98 }, /* FIXME: Unknwon pointer type! */
 };
 
 

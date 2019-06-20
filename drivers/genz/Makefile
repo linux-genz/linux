@@ -5,7 +5,8 @@
 genz-y := genz-core.o \
           genz-types.o \
           genz-sysfs.o \
-          genz-control.o 
+          genz-control.o \
+          genz-size.o
 
 obj-$(CONFIG_GENZ)           += genz.o
 

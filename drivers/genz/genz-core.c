@@ -37,6 +37,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/slab.h>
 #include "genz.h"
 #include "genz-types.h"
 #include "genz-control.h"
@@ -75,17 +76,14 @@ EXPORT_SYMBOL_GPL(genz_disabled);
  */
 int genz_validate_control_space_structure_type(int type)
 {
-	int valid = 0;
-	switch (type) {
-		case GENZ_CORE_STRUCTURE:
-		case GENZ_OPCODE_SET_STRUCTURE:
-		case GENZ_INTERFACE_STRUCTURE:
-		case GENZ_INTERFACE_PHY_STRUCTURE:
-		case GENZ_INTERFACE_STATISTICS_STRUCTURE:
-		/* add them all once we have the enum */
-			valid = 1;
-	}
-	return valid;
+	/* Use the genz_control_structure_type_to_ptrs array to check type */
+	if (type < 0 || type > genz_control_structure_type_to_ptrs_nelems)
+		return(0);
+	/*
+	 * If there is a hole in the array, then it has a NULL entry. Make
+	 * sure this type has a valid entry.
+	 */
+	return (genz_control_structure_type_to_ptrs[type].ptr != NULL);
 }
 EXPORT_SYMBOL_GPL(genz_validate_control_space_structure_type);
 
@@ -252,6 +250,9 @@ int genz_register_bridge(struct device *dev, struct genz_driver *driver,
 	struct genz_bridge_dev *zbdev;
 
 	/* Allocate a genz_bridge_dev */
+	zbdev = kzalloc(sizeof(*zbdev), GFP_KERNEL);
+	if (zbdev == NULL)
+		return -ENOMEM;
 
 	/* Initialize the genz_bridge_dev */
 	initialize_zdev(&zbdev->zdev, driver, module, mod_name);

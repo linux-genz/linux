@@ -671,7 +671,7 @@ int traverse_control_pointers(struct genz_dev *zdev,
 			continue;
 
 		/* Validate the header is as expected */
-		if (!(csp->flags & GENZ_CONTROL_POINTER_GENERIC)) {
+		if (csp->ptr_type != GENZ_GENERIC_STRUCTURE) {
 			if (hdr.type != csp->ptr_type) {
 				pr_debug("%s: expected type %d but found %d\n",
 					__func__, csp->ptr_type, hdr.type);
@@ -879,7 +879,14 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 			control_dir);
 	return 0;
 }
-
 EXPORT_SYMBOL_GPL(genz_bridge_create_control_files);
 
 
+/**
+ * genz_bridge_remove_control_files() - remove sysfs files for a local bridge
+ */
+int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev)
+{
+	return 0;
+}
+EXPORT_SYMBOL_GPL(genz_bridge_remove_control_files);

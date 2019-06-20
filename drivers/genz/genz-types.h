@@ -67,6 +67,7 @@ typedef struct {
 #include <linux/uuid.h>
 
 #endif
+#include "genz.h"
 
 struct genz_control_structure_header {
     uint32_t type   : 12;
@@ -82,14 +83,16 @@ enum genz_pointer_size {
 
 enum genz_control_pointer_flags {
     GENZ_CONTROL_POINTER_NONE = 0,
-    GENZ_CONTROL_POINTER_CHAINED = 1,
-    GENZ_CONTROL_POINTER_ARRAY = 2,
-    GENZ_CONTROL_POINTER_GENERIC = 3,
-    GENZ_CONTROL_POINTER_LINK = 4, /* e.g. interface group, aggregate interface */
+    GENZ_CONTROL_POINTER_CHAINED = 1, /* e.g. Interface structures */
+    GENZ_CONTROL_POINTER_ARRAY = 2, /* Table of structures, e.g. C-Access R-Key table. */
+    GENZ_CONTROL_POINTER_STRUCTURE = 3, /* Points to a structure. Use ptr_type to see if it is generic or a particular type.  */
+    GENZ_CONTROL_POINTER_TABLE_WITH_HEADER = 4, /* Header followed by table of structures, e.g. ELog Table */
+    GENZ_CONTROL_POINTER_TABLE = 5 /* Just a table, e.g. OEM Data Field */
 };
 
 /* Add all types in order like "GENZ_<structure name> = <type number> */
 enum genz_control_structure_type { 
+    GENZ_GENERIC_STRUCTURE = -1,
     GENZ_CORE_STRUCTURE = 0,
     GENZ_OPCODE_SET_STRUCTURE = 1,
     GENZ_INTERFACE_STRUCTURE = 2,
@@ -185,8 +188,8 @@ struct genz_control_structure_ptr {
     enum genz_control_pointer_flags flags;
     enum genz_pointer_size ptr_size;
     uint32_t pointer_offset;
-    enum genz_control_structure_type ptr_type; /* non-Generic structure validation of the pointer */
-    //uint (*table_size)(union genz_control_structure *ctl_struct);
+    enum genz_control_structure_type ptr_type; /* structure validation of the pointer */
+    size_t (*table_size)(struct genz_control_info *ci);
 };
 
 /*
@@ -4600,4 +4603,6 @@ union genz_control_structure {
     struct genz_msod_table genz_msod_table_ptr;
     struct genz_re_table genz_re_table_ptr;
 };
+
+extern size_t genz_c_access_r_key_size(struct genz_control_info *ci);
 #endif
