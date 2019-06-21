@@ -83,11 +83,13 @@ enum genz_pointer_size {
 
 enum genz_control_pointer_flags {
     GENZ_CONTROL_POINTER_NONE = 0,
-    GENZ_CONTROL_POINTER_CHAINED = 1, /* e.g. Interface structures */
-    GENZ_CONTROL_POINTER_ARRAY = 2, /* Table of structures, e.g. C-Access R-Key table. */
-    GENZ_CONTROL_POINTER_STRUCTURE = 3, /* Points to a structure. Use ptr_type to see if it is generic or a particular type.  */
-    GENZ_CONTROL_POINTER_TABLE_WITH_HEADER = 4, /* Header followed by table of structures, e.g. ELog Table */
-    GENZ_CONTROL_POINTER_TABLE = 5 /* Just a table, e.g. OEM Data Field */
+    GENZ_CONTROL_POINTER_CHAIN_START = 1, /* e.g. Interface structures */
+    GENZ_CONTROL_POINTER_CHAINED = 2, /* e.g. Interface structures */
+    GENZ_CONTROL_POINTER_ARRAY = 3, /* Table of structures, e.g. C-Access R-Key table. */
+    GENZ_CONTROL_POINTER_STRUCTURE = 4, /* Points to a structure. Use ptr_type to see if it is generic or a particular type.  */
+    GENZ_CONTROL_POINTER_TABLE_WITH_HEADER = 5, /* Header followed by table of structures, e.g. ELog Table */
+    GENZ_CONTROL_POINTER_TABLE = 6 /* Just a table, e.g. OEM Data Field */
+
 };
 
 /* Add all types in order like "GENZ_<structure name> = <type number> */
@@ -189,7 +191,7 @@ struct genz_control_structure_ptr {
     enum genz_pointer_size ptr_size;
     uint32_t pointer_offset;
     enum genz_control_structure_type ptr_type; /* structure validation of the pointer */
-    size_t (*table_size)(struct genz_control_info *ci);
+    ssize_t (*table_size)(struct genz_control_info *ci);
 };
 
 /*
@@ -4604,5 +4606,5 @@ union genz_control_structure {
     struct genz_re_table genz_re_table_ptr;
 };
 
-extern size_t genz_c_access_r_key_size(struct genz_control_info *ci);
+extern ssize_t genz_c_access_r_key_size(struct genz_control_info *ci);
 #endif

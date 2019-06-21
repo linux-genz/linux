@@ -37,7 +37,7 @@
 #include "genz-types.h"
 #include "genz.h"
 
-size_t genz_control_structure_size(struct genz_control_info *ci)
+ssize_t genz_control_structure_size(struct genz_control_info *ci)
 {
 	if (ci == NULL) {
 		pr_debug("%s: genz_control_info is NULL\n", __func__);
@@ -51,11 +51,12 @@ size_t genz_control_structure_size(struct genz_control_info *ci)
 }
 EXPORT_SYMBOL_GPL(genz_control_structure_size);
 
-size_t genz_c_access_r_key_size(struct genz_control_info *ci)
+ssize_t genz_c_access_r_key_size(struct genz_control_info *ci)
 {
-	size_t sz = 0;
-	size_t num_entries;
+	ssize_t sz = 0;
+	uint64_t num_entries;
 	int ret;
+	struct genz_component_c_access_structure c_access;
 
 	if (ci == NULL) {
 		pr_debug("%s: genz_control_info is NULL\n", __func__);
@@ -66,33 +67,33 @@ size_t genz_c_access_r_key_size(struct genz_control_info *ci)
 			__func__, ci->type);
 		return 0;
 	}
-	/* Read the 40 bit C-Access Table Size field at offset 0x10 */
+	/* Read the 40 bit C-Access Table Size field at offset 0x18 */
 	/* Revisit: defines for the field size (5 bytes) and offset (0x18)? */
 	ret = ci->zdev->bridge_zdev->zdriver->control_read(ci->zdev,
-			ci->start+0x18, 5, &num_entries, 0);
-
+			ci->start, sizeof(c_access), &c_access, 0);
 	if (ret) {
-                pr_debug("%s: control read of pointer failed with %d\n",
+                pr_debug("%s: control read of c_access structure failed with %d\n",
                         __func__, ret);
                 return -1;
 	}
+	num_entries = c_access.c_access_table_size;
 	if (num_entries == 0) {
 		/* If C-Access Table Size is 0 then the size is 2^40 */
-		num_entries = (size_t)BIT(40);
+		num_entries = (uint64_t)BIT(40);
 	}
 	/*
 	 * The num_entries is not the number of bytes in the table. In
 	 * this case, each table entry is 8 bytes.
-	 * Revisit: use a define for 8 bytes/entry?
+	 * Revisit: use a define for 8 bytes/entry? Use sizeof(struct <XXX>_entry
 	 */
 	sz = num_entries * 8;
 	return(sz);
 }
 EXPORT_SYMBOL_GPL(genz_c_access_r_key_size);
 
-size_t genz_oem_data_size(struct genz_control_info *ci)
+ssize_t genz_oem_data_size(struct genz_control_info *ci)
 {
-	size_t sz;
+	ssize_t sz;
 	off_t oem_data_ptr;
 	int ret;
 
@@ -126,10 +127,10 @@ size_t genz_oem_data_size(struct genz_control_info *ci)
 }
 EXPORT_SYMBOL_GPL(genz_oem_data_size);
 
-size_t genz_elog_size(struct genz_control_info *ci)
+ssize_t genz_elog_size(struct genz_control_info *ci)
 {
-	size_t sz;
-	int num_entries;
+	ssize_t sz;
+	uint32_t num_entries;
 	off_t elog_ptr;
 	int ret;
 
@@ -144,6 +145,7 @@ size_t genz_elog_size(struct genz_control_info *ci)
 	}
 
 	/* Read the 4 byte pointer to the Elog table at offset 0x14 */
+	/* Revisit: add a macro/inline to call control_read more easily */
 	ret = ci->zdev->bridge_zdev->zdriver->control_read(ci->zdev,
 			ci->start+0x14, 4, &elog_ptr, 0);
 	if (ret || !elog_ptr) {
@@ -161,7 +163,7 @@ size_t genz_elog_size(struct genz_control_info *ci)
 	}
 	if (num_entries == 0) {
 		/* If ELog Table Size is 0 then the size is 2^16 */
-		num_entries = (size_t)BIT(16);
+		num_entries = (uint32_t)BIT(16);
 	}
 	/*
 	 * The num_entries is not the number of bytes in the table. In
@@ -173,3 +175,12 @@ size_t genz_elog_size(struct genz_control_info *ci)
 	return(sz);
 }
 EXPORT_SYMBOL_GPL(genz_elog_size);
+
+ssize_t genz_lprt_size(struct genz_control_info *ci)
+{
+	/* LPRT pointer is in the interface structure but the LPRT size is
+	 * in the Component Switch structure. Use the driver interfaces
+	 * to read the switch structure LPRT_size field (offset 0x10).
+	 */
+	return 0;
+}

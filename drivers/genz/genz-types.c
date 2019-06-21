@@ -54,7 +54,7 @@ struct genz_control_structure_ptr core_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x70 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x74 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x78 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x7c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_CHAIN_START, GENZ_4_BYTE_POINTER, 0x7c }, /* Interface: CHAINED??? */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x80 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x84 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x130 },
@@ -73,8 +73,8 @@ struct genz_control_structure_ptr opcode_set_structure_ptrs[] = {
 
 struct genz_control_structure_ptr interface_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x70 },
-    { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x78 },
-    { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x7c },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x78 },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x7c },
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x80 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x84 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x88 }, /* FIXME: Unknwon pointer type! */
