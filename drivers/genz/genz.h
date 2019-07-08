@@ -64,13 +64,14 @@ struct genz_device_id {
 
 struct genz_dev {
 	uuid_t				uuid;
-	struct resource 		*res;		/* Control space resources */
+	struct resource 		*res;		/* Control/Data space resources */
 	struct genz_control_info	*root_control_info;
 	struct kobject			*root_kobj; /* kobj for /sys/devices/genz/ */
 	struct genz_driver		*zdriver;
 	struct genz_dev			*bridge_zdev;
 	struct device			dev;		/* Generic device interface */
-	uint8_t				gcid;
+	uint32_t			gcid;
+/* Revisit: add fabric_num, cclass, fru_uuid from the netlink ADD command */
 };
 #define to_genz_dev(n) container_of(n, struct genz_dev, dev)
 

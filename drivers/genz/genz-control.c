@@ -968,7 +968,7 @@ static int traverse_control_pointers(struct genz_dev *zdev,
 	struct kobject *dir)
 {
 	int i;
-	int ret;
+	int ret = 0;
 	struct genz_control_structure_ptr *csp;
 
 	for (i = 0; i < pi->num_ptrs; i++) {

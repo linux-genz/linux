@@ -41,6 +41,7 @@
 #include "genz.h"
 #include "genz-types.h"
 #include "genz-control.h"
+#include "genz-netlink.h"
 
 static bool no_genz;
 module_param(no_genz, bool, 0444);
@@ -135,6 +136,7 @@ static int genz_match_device(struct device *dev, struct device_driver *drv)
 
 static int genz_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
+	/* Revisit: use this for hot-add/delete */
 	return 0;
 }
 
@@ -286,7 +288,7 @@ int genz_unregister_bridge(struct genz_driver *driver)
 EXPORT_SYMBOL(genz_unregister_bridge);
 
 static int __init genz_init(void) {
-	int ret;
+	int ret = 0;
 
 	if (genz_disabled())
 		return -ENODEV;
@@ -297,14 +299,23 @@ static int __init genz_init(void) {
 		goto error_bus;
 	}
 
+	ret = genz_nl_init();
+	if (ret) {
+		pr_err("genz_nl_init failed (%d)\n", ret);
+		goto error_nl;
+	}
+
+	return ret;
+error_nl:
+	bus_unregister(&genz_bus_type);
 error_bus:
-	
 	return ret;
 }
 module_init(genz_init);
 
 static void __exit genz_exit(void) {
 	bus_unregister(&genz_bus_type);
+	genz_nl_exit();
 }
 
 module_exit(genz_exit);
