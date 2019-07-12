@@ -125,6 +125,11 @@ struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric)
 
         INIT_LIST_HEAD(&zdev->fabric_list);
         zdev->dev.type = &genz_dev_type;
+	zdev->res.name = "Gen-Z MEM";
+	zdev->res.start = 0;
+	zdev->res.end = -1;
+	zdev->res.flags = 0;
+	zdev->desc = IORES_DESC_NONE;
 
         return zdev;
 }

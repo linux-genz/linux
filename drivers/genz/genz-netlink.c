@@ -39,6 +39,7 @@
 #include <linux/netlink.h>
 #include <net/genetlink.h>
 #include <linux/skbuff.h>
+#include <linux/ioport.h> /* for resource type IORESOURCE_GENZ_CONTROL */
 #include "genz.h"
 #include "genz-netlink.h"
 #include "genz-probe.h"
@@ -127,6 +128,19 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 		}
 		zres = alloc_and_add_zres(zdev);
 		if (zres == NULL) {
+			/* Revisit: use the uuid string for the name? */
+			zres->res.name = "zdev->uuid";
+			zres->res.start = mem_start;
+			zres->res.end = mem_start + mem_len -1;
+			zres->res.flags = (mem_type == GENZ_CONTROL) ? IORESOURCE_GENZ_CONTROL : 0;
+			zres->res.desc = IORES_DESC_NONE;
+			zres->ro_rkey = ro_rkey;
+			zres->rw_rkey = rw_rkey;
+			ret = insert_resource(&zres->res, &zdev->parent_res);
+			if (ret < 0) {
+				/* Revisit: undo everything! */
+				printk(KERN_INFO "%s: insert_resource failed with %d\n", __FUNCTION__, ret);
+			}
 		}	
 		printk(KERN_INFO "\t\t\tMR_START: 0x%llx\n\t\t\t\tMR_LENGTH: %lld\n\t\t\t\tMR_TYPE: %s\n\t\t\t\tRO_RKEY: 0x%x\n\t\t\t\tRW_KREY 0x%x\n", mem_start, mem_len, (mem_type == GENZ_DATA ? "DATA":"CONTROL"), ro_rkey, rw_rkey);
 	}
@@ -193,7 +207,8 @@ static int parse_resource_list(const struct nlattr * resource_list,
 static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 {
 	uint32_t fabric_num, gcid, cclass;
-	uint8_t *fru_uuid;
+	uuid_t fru_uuid;
+	uint8_t *byte_uuid;
 	/*
 	 * message handling code goes here; return 0 on success,
 	 * negative value on failure.
@@ -226,7 +241,9 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (info->attrs[GENZ_A_FRU_UUID]) {
-		fru_uuid = nla_data(info->attrs[GENZ_A_FRU_UUID]);
+		byte_uuid = nla_data(info->attrs[GENZ_A_FRU_UUID]);
+		/* Revisit: make a cast_uuid macro */
+		fru_uuid = *((uuid_t *)&byte_uuid);
 		printk(KERN_DEBUG "\tFRU_UUID: %pUL\n", fru_uuid);
 	} else {
 		printk(KERN_ERR "%s: missing required FRU_UUID\n", __FUNCTION__);
@@ -234,8 +251,10 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (info->attrs[GENZ_A_RESOURCE_LIST]) {
-		parse_resource_list(info->attrs[GENZ_A_RESOURCE_LIST],
+		ret = parse_resource_list(info->attrs[GENZ_A_RESOURCE_LIST],
 			fabric_num, gcid, cclass, fru_uuid);
+		if (ret < 0) {
+		}
 	} else {
 		printk(KERN_ERR "%s: Must supply at least one resource\n", __FUNCTION__);
 		return -EINVAL;

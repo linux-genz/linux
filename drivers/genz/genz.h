@@ -67,11 +67,13 @@ struct genz_device_id {
  * IORESOURCE_BITS.
  */
 struct genz_resource {
-	struct list_head list;
+	struct list_head component_list;
+	struct list_head dev_list;
 	struct resource res;
 	uint32_t ro_rkey;
 	uint32_t rw_rkey;
 };
+#define to_genz_res(n) container_of(n, struct genz_resource, res)
 
 struct genz_fabric {
 	struct list_head node;  	/* node in list of fabrics */
@@ -81,19 +83,26 @@ struct genz_fabric {
 	struct kref	kref;
 };
 
+struct genz_component {
+	uint32_t		gcid;
+	uint8_t			cclass;
+	uuid_t			fru_uuid;
+	struct list_head	control_zres_list;
+	struct list_head	data_zres_list;
+};
+
 struct genz_dev {
 	struct list_head	fabric_list; /* Node in the per-fabric list */
-	uint8_t 		*uuid; /* UUID of this component/service/virtual UUID */
+	uuid_t 		uuid; /* UUID of this component/service/virtual UUID */
 	int                     zres_count;
+	struct list_head	zres_list;
 	struct genz_resource 	*zres;	/* pointer to dynamic array of resources for this device */
 	struct genz_control_info *root_control_info;
 	struct kobject		*root_kobj; /* kobj for /sys/devices/genz/ */
 	struct genz_driver	*zdriver;
 	struct genz_bridge_dev	*zbdev;
+	struct genz_component	*zcomp; /* parent component */
 	struct device		dev;		/* Generic device interface */
-	uint32_t		gcid;
-	uint8_t			cclass;
-	uint8_t			*fru_uuid;
 };
 #define to_genz_dev(n) container_of(n, struct genz_dev, dev)
 
@@ -103,6 +112,8 @@ struct genz_bridge_dev {
 	struct genz_dev		zdev;
 	struct device		*bridge_dev; /* native device pointer */
 	struct genz_fabric	*fabric;
+	void 			*private;    /* for bridge driver */
+	/* Revisit: add address space */
 };
 
 struct genz_driver {
