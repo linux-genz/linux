@@ -40,6 +40,7 @@
 #include "genz.h"
 #include "genz-types.h"
 #include "genz-probe.h"
+#include "genz-sysfs.h"
 
 /* Global list of struct genz_fabric. Protected by semaphore XXX. */
 LIST_HEAD(genz_fabrics);
@@ -111,7 +112,6 @@ static void genz_release_dev(struct device *dev)
         struct genz_dev *zdev;
 
         zdev = to_genz_dev(dev);
-        genz_bus_put(zdev->bus);
         kfree(zdev);
 }
 
@@ -125,7 +125,6 @@ struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric)
 
         INIT_LIST_HEAD(&zdev->fabric_list);
         zdev->dev.type = &genz_dev_type;
-        zdev->fabric = fabric;
 
         return zdev;
 }

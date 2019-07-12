@@ -7,7 +7,8 @@ genz-y := genz-core.o \
           genz-sysfs.o \
           genz-control.o \
           genz-size.o \
-          genz-netlink.o
+          genz-netlink.o \
+          genz-probe.o
 
 obj-$(CONFIG_GENZ)           += genz.o
 
