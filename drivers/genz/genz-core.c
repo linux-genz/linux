@@ -150,6 +150,7 @@ struct bus_type genz_bus_type = {
 	.uevent =	genz_uevent,
 	.shutdown =	genz_shutdown,
 };
+EXPORT_SYMBOL(genz_bus_type);
 
 static int genz_probe(struct device *dev)
 {
@@ -219,11 +220,11 @@ static int initialize_zdev(struct genz_dev *zdev,
 			const char *mod_name)
 {
 	/* zdev->uuid = NULL; */
-	zdev->res = NULL;
+	zdev->zres = NULL;
 	zdev->root_control_info = NULL;
 	zdev->root_kobj = NULL; /* kobj for /sys/devices/genz/ */
 	/* zdev->zdriver = driver; */
-	zdev->bridge_zdev = NULL;
+	zdev->zbdev = NULL;
 	/* zdev->dev = driver; */		/* Generic device interface */
 	zdev->gcid = 0;
 	return 0;

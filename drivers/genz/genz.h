@@ -62,22 +62,47 @@ struct genz_device_id {
 	kernel_ulong_t	driver_data;	/* Data private to the driver */
 };
 
+/*
+ * Gen-Z resources can be control or data space in the struct resources 
+ * IORESOURCE_BITS.
+ */
+struct genz_resource {
+	struct list_head list;
+	struct resource res;
+	uint32_t ro_rkey;
+	uint32_t rw_rkey;
+};
+
+struct genz_fabric {
+	struct list_head node;  	/* node in list of fabrics */
+	uint32_t number;		/* fabric_number */
+	struct list_head devices;	/* List of devices on this fabric */
+	struct list_head bridges;	/* List of local bridges on fabric */
+	struct kref	kref;
+};
+
 struct genz_dev {
-	uuid_t				uuid;
-	struct resource 		*res;		/* Control/Data space resources */
-	struct genz_control_info	*root_control_info;
-	struct kobject			*root_kobj; /* kobj for /sys/devices/genz/ */
-	struct genz_driver		*zdriver;
-	struct genz_dev			*bridge_zdev;
-	struct device			dev;		/* Generic device interface */
-	uint32_t			gcid;
-/* Revisit: add fabric_num, cclass, fru_uuid from the netlink ADD command */
+	struct list_head	fabric_list; /* Node in the per-fabric list */
+	uint8_t 		*uuid; /* UUID of this component/service/virtual UUID */
+	int                     zres_count;
+	struct genz_resource 	*zres;	/* pointer to dynamic array of resources for this device */
+	struct genz_control_info *root_control_info;
+	struct kobject		*root_kobj; /* kobj for /sys/devices/genz/ */
+	struct genz_driver	*zdriver;
+	struct genz_bridge_dev	*zbdev;
+	struct device		dev;		/* Generic device interface */
+	uint32_t		gcid;
+	uint8_t			cclass;
+	uint8_t			*fru_uuid;
 };
 #define to_genz_dev(n) container_of(n, struct genz_dev, dev)
 
+
 struct genz_bridge_dev {
+	struct list_head	node;		/* node in list of bridges on fabric */
 	struct genz_dev		zdev;
 	struct device		*bridge_dev; /* native device pointer */
+	struct genz_fabric	*fabric;
 };
 
 struct genz_driver {
@@ -97,9 +122,10 @@ struct genz_driver {
 };
 #define to_genz_driver(d) container_of(d, struct genz_driver, driver)
 
-static inline bool zdev_is_local_bridge(const struct genz_dev *zdev)
+static inline bool zdev_is_local_bridge(struct genz_dev *zdev)
 {
-	return (zdev == zdev->bridge_zdev);
+	return ((zdev != NULL && zdev->zbdev != NULL) ?
+			(&zdev->dev == zdev->zbdev->bridge_dev) : 0);
 }
 
 /*
@@ -154,6 +180,10 @@ struct genz_control_info_attribute {
 };
 #define to_genz_control_info_attr(x) container_of(x, struct genz_control_info_attribute, attr)
 
+/* Global Variables */
+extern struct list_head genz_fabrics;
+
+/* Function Prototypes */
 void genz_lock_rescan_remove(void);
 void genz_unlock_rescan_remove(void);
 

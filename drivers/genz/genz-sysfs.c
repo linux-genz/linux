@@ -127,6 +127,11 @@ err:
 	return retval;
 }
 
+/* Revisit: look at pci-sysfs.c for all the rest of the attr stuff */
+const struct device_type genz_dev_type = {
+//	.groups = genz_dev_attr_groups,
+};
+
 /* not for modules. We will add sysfs as the drivers are loaded. 
 static int __init genz_sysfs_init(void)
 {

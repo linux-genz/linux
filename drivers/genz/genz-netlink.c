@@ -39,7 +39,9 @@
 #include <linux/netlink.h>
 #include <net/genetlink.h>
 #include <linux/skbuff.h>
+#include "genz.h"
 #include "genz-netlink.h"
+#include "genz-probe.h"
 
 
 /* Netlink Generic Attribute Policy */
@@ -72,7 +74,18 @@ const static struct nla_policy genz_genl_mem_region_policy[GENZ_A_MR_MAX + 1] = 
 	[GENZ_A_MR_RW_RKEY] = { .type = NLA_U32 },
 };
 
-static int parse_mr_list(const struct nlattr * mr_list)
+static struct genz_resource * alloc_and_add_zres(struct genz_dev *zdev)
+{
+	struct genz_resource *zr;
+
+	zr = kzalloc(sizeof(*zr), GFP_KERNEL);
+	if (!zr)
+		return NULL;
+	list_add_tail(&zr->list, &zdev->zres->list);
+	return(zr);
+}
+
+static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 {
 	struct nlattr *nested_attr;
 	struct nlattr *mr_attrs[GENZ_A_MR_MAX + 1];
@@ -85,6 +98,7 @@ static int parse_mr_list(const struct nlattr * mr_list)
 	uint32_t ro_rkey = -1U;
 	uint32_t rw_rkey = -1U;
 	struct netlink_ext_ack extack;
+	struct genz_resource *zres;
 
 	printk(KERN_INFO "\t\tMemory Region List:\n");
 	/* Go through the nested list of memory region structures */
@@ -111,24 +125,44 @@ static int parse_mr_list(const struct nlattr * mr_list)
 		if (mr_attrs[GENZ_A_MR_RW_RKEY]) {
 			rw_rkey = nla_get_u32(mr_attrs[GENZ_A_MR_RW_RKEY]);
 		}
+		zres = alloc_and_add_zres(zdev);
+		if (zres == NULL) {
+		}	
 		printk(KERN_INFO "\t\t\tMR_START: 0x%llx\n\t\t\t\tMR_LENGTH: %lld\n\t\t\t\tMR_TYPE: %s\n\t\t\t\tRO_RKEY: 0x%x\n\t\t\t\tRW_KREY 0x%x\n", mem_start, mem_len, (mem_type == GENZ_DATA ? "DATA":"CONTROL"), ro_rkey, rw_rkey);
 	}
 	printk(KERN_INFO "\t\tend of Memory Region List\n");
 	return ret;
 }
 
-static int parse_resource_list(const struct nlattr * resource_list)
+static int parse_resource_list(const struct nlattr * resource_list,
+	uint32_t fabric_num,
+	uint32_t gcid,
+	uint32_t cclass,
+	uint8_t *fru_uuid)
 {
 	struct nlattr *nested_attr;
 	struct nlattr *u_attrs[GENZ_A_U_MAX + 1];
 	int ret = 0;
 	int rem;
 	struct netlink_ext_ack extack;
+	struct genz_fabric *fabric;
+	struct genz_dev *zdev;
 
+	fabric = genz_find_fabric(fabric_num);
+	if (!fabric) 
+		return -ENOMEM;
 	printk(KERN_INFO "\tRESOURCE_LIST:\n");
-
 	/* Go through the nested list of UUID structures */
 	nla_for_each_nested(nested_attr, resource_list, rem) {
+		zdev = genz_alloc_dev(fabric);
+		if (!zdev)  {
+			/* kref_put on the fabric structure */
+			kref_put(&fabric->kref, genz_free_fabric);
+			return -ENOMEM;
+		}
+		zdev->gcid = gcid;
+		zdev->cclass = cclass;
+		zdev->fru_uuid = fru_uuid;
 
 		/* Extract the nested UUID structure */
 		ret = nla_parse_nested(u_attrs, GENZ_A_U_MAX,
@@ -140,12 +174,14 @@ static int parse_resource_list(const struct nlattr * resource_list)
 			uint8_t * uuid;
 			
 			uuid = nla_data(u_attrs[GENZ_A_U_UUID]);
-			printk(KERN_INFO "\t\tUUID: %pUL\n", uuid);
-		}
-		if (u_attrs[GENZ_A_U_MRL]) {
-			ret = parse_mr_list(u_attrs[GENZ_A_U_MRL]);
-			if (ret) {
-				printk(KERN_ERR "\tparse of MRL failed\n");
+			printk(KERN_INFO "\t\tUUID: %pUL\n", (void *) uuid);
+		} else {
+			if (u_attrs[GENZ_A_U_MRL]) {
+				ret = parse_mr_list(zdev, u_attrs[GENZ_A_U_MRL]);
+				if (ret) {
+					printk(KERN_ERR "\tparse of MRL failed\n");
+				}
+			} else {
 			}
 		}
 	}
@@ -156,33 +192,55 @@ static int parse_resource_list(const struct nlattr * resource_list)
 /* Netlink Generic Handler */
 static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 {
+	uint32_t fabric_num, gcid, cclass;
+	uint8_t *fru_uuid;
 	/*
 	 * message handling code goes here; return 0 on success,
 	 * negative value on failure.
 	 */
 	if (info->attrs[GENZ_A_FABRIC_NUM]) {
-		printk(KERN_INFO "Port: %u\n\tFABRIC_NUM: %d", info->snd_portid,
-			nla_get_u32(info->attrs[GENZ_A_FABRIC_NUM]));
+		fabric_num = nla_get_u32(info->attrs[GENZ_A_FABRIC_NUM]);
+		printk(KERN_DEBUG "Port: %u\n\tFABRIC_NUM: %d", info->snd_portid,
+			fabric_num);
+	} else {
+		printk(KERN_ERR "%s: missing required fabric number\n", __FUNCTION__);
+		return -EINVAL;
 	}
-
+		
 	if (info->attrs[GENZ_A_GCID]) {
-		printk(KERN_INFO "\tGCID: %d ",
-			nla_get_u32(info->attrs[GENZ_A_GCID]));
+		gcid = nla_get_u32(info->attrs[GENZ_A_GCID]);
+		printk(KERN_DEBUG "\tGCID: %d ",
+			gcid);
+	} else {
+		printk(KERN_ERR "%s: missing required GCID\n", __FUNCTION__);
+		return -EINVAL;
 	}
 
 	if (info->attrs[GENZ_A_CCLASS]) {
-		printk(KERN_INFO "\tC-Class = %d\n",
-			(uint32_t) nla_get_u32(info->attrs[GENZ_A_CCLASS]));
+		cclass = nla_get_u32(info->attrs[GENZ_A_CCLASS]);
+		printk(KERN_DEBUG "\tC-Class = %d\n",
+			(uint32_t) cclass);
+	} else {
+		printk(KERN_ERR "%s: missing required CCLASS\n", __FUNCTION__);
+		return -EINVAL;
 	}
+
 	if (info->attrs[GENZ_A_FRU_UUID]) {
-		uint8_t * fru_uuid;
-			
 		fru_uuid = nla_data(info->attrs[GENZ_A_FRU_UUID]);
-		printk(KERN_INFO "\tFRU_UUID: %pUL\n", fru_uuid);
+		printk(KERN_DEBUG "\tFRU_UUID: %pUL\n", fru_uuid);
+	} else {
+		printk(KERN_ERR "%s: missing required FRU_UUID\n", __FUNCTION__);
+		return -EINVAL;
 	}
+
 	if (info->attrs[GENZ_A_RESOURCE_LIST]) {
-		parse_resource_list(info->attrs[GENZ_A_RESOURCE_LIST]);
+		parse_resource_list(info->attrs[GENZ_A_RESOURCE_LIST],
+			fabric_num, gcid, cclass, fru_uuid);
+	} else {
+		printk(KERN_ERR "%s: Must supply at least one resource\n", __FUNCTION__);
+		return -EINVAL;
 	}
+
 	return 0;
 }
 

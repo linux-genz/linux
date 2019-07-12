@@ -117,7 +117,7 @@ static int validate_ci(struct genz_control_info *ci,
 		size_t size,
 		char * data,
 		struct genz_dev **zdev,
-		struct genz_dev **bridge_zdev)
+		struct genz_bridge_dev **bridge_zdev)
 {
 	struct genz_driver *zdriver;
 
@@ -126,12 +126,12 @@ static int validate_ci(struct genz_control_info *ci,
 		pr_debug("%s: genz_control_info has NULL zdev\n", __func__);
 		return -EINVAL;
 	}
-	*bridge_zdev = (*zdev)->bridge_zdev;
+	*bridge_zdev = (*zdev)->zbdev;
 	if (*bridge_zdev == NULL) {
 		pr_debug("%s: bridge_zdev is NULL\n", __func__);
 		return -EINVAL;
 	} 
-	zdriver = (*bridge_zdev)->zdriver;
+	zdriver = (*bridge_zdev)->zdev.zdriver;
 	if (zdriver == NULL) {
 		pr_debug("%s: zdriver is NULL\n", __func__);
 		return -EINVAL;
@@ -164,7 +164,7 @@ static ssize_t read_control_structure(struct file *fd,
 {
 	struct genz_control_info *ci;
 	struct genz_dev *zdev;
-	struct genz_dev *bridge_zdev;
+	struct genz_bridge_dev *bridge_zdev;
 	ssize_t ret = 0;
 	int err;
 
@@ -175,7 +175,7 @@ static ssize_t read_control_structure(struct file *fd,
 		/* Revisit: what should it return on error? */
 		return err;
 	}
-	ret = bridge_zdev->zdriver->control_read(zdev, ci->start+offset,
+	ret = bridge_zdev->zdev.zdriver->control_read(zdev, ci->start+offset,
 			(int)size, (void *)data, 0);
 	if (ret) {
 		pr_debug("%s: control read failed with %ld\n",
@@ -194,7 +194,7 @@ static ssize_t write_control_structure(struct file *fd,
 {
 	struct genz_control_info *ci;
 	struct genz_dev *zdev;
-	struct genz_dev *bridge_zdev;
+	struct genz_bridge_dev *bridge_zdev;
 	ssize_t ret = 0;
 	int err;
 
@@ -204,7 +204,7 @@ static ssize_t write_control_structure(struct file *fd,
 		pr_debug("%s: arguments invalid error: %d\n", __func__, err);
 		return err;
 	}
-	ret = bridge_zdev->zdriver->control_write(zdev, ci->start+offset,
+	ret = bridge_zdev->zdev.zdriver->control_write(zdev, ci->start+offset,
 			(int)size, (void *)data, 0);
 	if (ret) {
 		pr_debug("%s: control write failed with %ld\n",
@@ -720,9 +720,38 @@ static struct genz_control_info * alloc_control_info(struct genz_dev *zdev,
 static int traverse_array(struct genz_dev *zdev,
 			struct genz_control_info *parent,
 			struct genz_control_ptr_info *pi,
-			struct kobject *dir,
+			struct kobject *struct_dir,
 			struct genz_control_structure_ptr *csp)
 {
+	struct genz_control_info *ci;
+	struct genz_control_structure_header hdr;
+	int ret = 0;
+
+	/* Allocate a genz_control_info/kobject for this directory */
+	ci = alloc_control_info(zdev, &hdr, csp->pointer_offset, parent);
+	if (ci == NULL) {
+		pr_debug("%s: failed to allocate control_info\n", __func__);
+		return -ENOMEM;
+	}
+
+	kobject_init(&ci->kobj, &control_info_ktype);
+	ret = kobject_add(&ci->kobj, struct_dir, "%s",
+				genz_structure_name(hdr.type));
+	if (ret < 0) {
+		kobject_put(&ci->kobj);
+		kfree(ci);
+		return ret;
+	}
+
+	/* Now initialize the binary attribute file. */
+	ci->battr.attr.name = genz_structure_name(hdr.type);
+	ci->battr.attr.mode = S_IRUSR | S_IWUSR;
+	ci->battr.size = ci->size;
+	ci->battr.read =  read_control_structure;
+	ci->battr.write = write_control_structure;
+	ci->battr.private = ci; /* Revisit: is this used/needed? */
+
+	ret = sysfs_create_bin_file(&ci->kobj, &ci->battr);
 	return 0;
 }
 
@@ -1031,8 +1060,7 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	}
 
 	zdev = &zbdev->zdev;
-	/* A bridge zdev points to its own zdev in bridge_zdev */
-	if (zdev->bridge_zdev != zdev) {
+	if (!zdev_is_local_bridge(zdev)) {
                 pr_debug("%s: zbdev not a bridge\n", __func__);
 		return -EINVAL;
 	}
