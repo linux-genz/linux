@@ -42,6 +42,7 @@
 #include "genz-types.h"
 #include "genz-control.h"
 #include "genz-netlink.h"
+#include "genz-probe.h"
 
 static bool no_genz;
 module_param(no_genz, bool, 0444);
@@ -220,6 +221,8 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 			struct module *module,
 			const char *mod_name)
 {
+	struct genz_component *zcomp;
+
 	/* Allocate a genz_component */
 	zcomp = kzalloc(sizeof(*zcomp), GFP_KERNEL);
 	if (zcomp == NULL) {
@@ -229,14 +232,10 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 
 	/* Revisit: How do we get the bridge's fabric number here? */
 	zbdev->fabric = genz_find_fabric(0);
-	zbdev->fabric = fab;
 	zbdev->bridge_dev = dev;
-	zbdev->zres = NULL;
-	zbdev->root_control_info = NULL;
-	zbdev->root_kobj = NULL; /* kobj for /sys/devices/genz/ */
 	
-	list_add_tail(zbdev, &zbdev->fabric.bridges);
-	list_add_tail(&zbdev->zdev, &zbdev->fabric.devices);
+	list_add_tail(&zbdev->fab_bridge_node, &zbdev->fabric->bridges);
+	list_add_tail(&zbdev->zdev.fab_dev_node, &zbdev->fabric->devices);
 
 	return 0;
 }
@@ -262,7 +261,6 @@ int genz_register_bridge(struct device *dev, struct genz_driver *driver,
 {
 	int ret = 0;
 	struct genz_bridge_dev *zbdev;
-	struct genz_component *zcomp;
 
 	/* Allocate a genz_bridge_dev */
 	zbdev = kzalloc(sizeof(*zbdev), GFP_KERNEL);
@@ -270,7 +268,7 @@ int genz_register_bridge(struct device *dev, struct genz_driver *driver,
 		return -ENOMEM;
 
 	/* Initialize the genz_bridge_dev */
-	ret = initialize_zbdev(&zbdev->zdev, driver, module, mod_name);
+	ret = initialize_zbdev(zbdev, dev, driver, module, mod_name);
 	if (ret < 0) {
 		kfree (zbdev);
 		return ret;

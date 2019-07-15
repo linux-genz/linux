@@ -99,6 +99,25 @@ struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
 	return found;
 }
 
+struct genz_component *genz_alloc_component(void)
+{
+	struct genz_component *zcomp;
+
+	zcomp = kzalloc(sizeof(*zcomp), GFP_KERNEL);
+	if (!zcomp)
+		return NULL;
+	kref_get(&zcomp->kref);
+	return(zcomp);
+}
+
+void genz_free_component(struct kref *kref)
+{
+	struct genz_component *c;
+
+	c = container_of(kref, struct genz_component, kref);
+	kfree(c);
+}
+
 /**
  * genz_release_dev - Free a Gen-Z device structure when all users of it are
  *                   finished
@@ -112,18 +131,30 @@ static void genz_release_dev(struct device *dev)
         struct genz_dev *zdev;
 
         zdev = to_genz_dev(dev);
+	if (zdev == NULL)
+		return;
+	if (zdev->zcomp)
+		kref_put(&zdev->zcomp->kref, genz_free_component);
         kfree(zdev);
 }
 
 struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric)
 {
         struct genz_dev *zdev;
+        struct genz_component *zcomp;
 
         zdev = kzalloc(sizeof(*zdev), GFP_KERNEL);
         if (!zdev)
                 return NULL;
 
-        list_add_tail(&zdev->fabric_list, &fabric->devices);
+        /* Allocate a genz_component */
+        zcomp = genz_alloc_component();
+        if (zcomp == NULL) {
+		kfree(zdev);
+                return NULL;
+        }
+        zdev->zcomp = zcomp;
+        list_add_tail(&zdev->fab_dev_node, &fabric->devices);
         zdev->dev.type = &genz_dev_type;
         INIT_LIST_HEAD(&zdev->zres_list);
 

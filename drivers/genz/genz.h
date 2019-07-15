@@ -87,12 +87,14 @@ struct genz_component {
 	uint32_t		gcid;
 	uint8_t			cclass;
 	uuid_t			fru_uuid;
+	uint32_t		fabric_num;
 	struct list_head	control_zres_list;
 	struct list_head	data_zres_list;
+	struct kref		kref;
 };
 
 struct genz_dev {
-	struct list_head	fabric_list; /* Node in the per-fabric list */
+	struct list_head	fab_dev_node; /* Node in the per-fabric list */
 	uuid_t 		uuid; /* UUID of this component/service/virtual UUID */
 	int                     zres_count;
 	struct list_head	zres_list;
@@ -108,7 +110,7 @@ struct genz_dev {
 
 
 struct genz_bridge_dev {
-	struct list_head	node;		/* node in list of bridges on fabric */
+	struct list_head	fab_bridge_node;	/* node in list of bridges on fabric */
 	struct genz_dev		zdev;
 	struct device		*bridge_dev; /* native device pointer */
 	struct genz_fabric	*fabric;
