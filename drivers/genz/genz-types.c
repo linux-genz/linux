@@ -54,7 +54,7 @@ struct genz_control_structure_ptr core_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x70 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x74 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x78 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_CHAIN_START, GENZ_4_BYTE_POINTER, 0x7c, GENZ_INTERFACE_STRUCTURE }, /* Interface: CHAINED??? */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x7c }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x80 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x84 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x130 },
@@ -73,12 +73,15 @@ struct genz_control_structure_ptr opcode_set_structure_ptrs[] = {
 
 struct genz_control_structure_ptr interface_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x70 },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x78 },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x7c },
+    { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x78 },
+    { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x7c },
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x80 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x84 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x88 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x8c }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x90 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x94 }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x98 }, /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr interface_phy_structure_ptrs[] = {
@@ -184,7 +187,7 @@ struct genz_control_structure_ptr service_uuid_structure_ptrs[] = {
 
 struct genz_control_structure_ptr component_c_access_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x4 },
-    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x18, GENZ_C_ACCESS_R_KEY_TABLE, genz_c_access_r_key_size }, /* FIXME: Unknwon pointer type! */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x1c }, /* FIXME: Unknwon pointer type! */
 };
 
@@ -206,6 +209,9 @@ struct genz_control_structure_ptr component_pa_structure_ptrs[] = {
 
 struct genz_control_structure_ptr component_lpd_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x4 },
+};
+
+struct genz_control_structure_ptr component_lpd_structure_array_ptrs[] = {
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x54 }, /* FIXME: Unknwon pointer type! */
 };
 
@@ -263,14 +269,12 @@ struct genz_control_structure_ptr component_sw_management_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x18 }, /* FIXME: Unknwon pointer type! */
 };
 
-struct genz_control_structure_ptr c_cert_table_ptrs[] = {
+struct genz_control_structure_ptr c_cert_table_array_ptrs[] = {
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x0 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x4 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, YY }, //FIXME: incorrec hex value! /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, -1 }, /* FIXME: Unknwon pointer type! */
 };
 
-struct genz_control_structure_ptr reliable_multicast_table_ptrs[] = {
+struct genz_control_structure_ptr reliable_multicast_table_array_ptrs[] = {
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_6_BYTE_POINTER, 0x0 }, /* FIXME: Unknwon pointer type! */
 };
 
@@ -282,21 +286,14 @@ struct genz_control_structure_ptr elog_table_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x4 },
 };
 
-struct genz_control_structure_ptr sec_table_ptrs[] = {
+struct genz_control_structure_ptr sec_table_array_ptrs[] = {
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x0 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x4 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, YY }, //FIXME: incorrec hex value! /* FIXME: Unknwon pointer type! */
 };
 
 struct genz_control_structure_ptr backup_mgmt_table_ptrs[] = {
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x68 }, /* FIXME: Unknwon pointer type! */
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x6c }, /* FIXME: Unknwon pointer type! */
-};
-
-struct genz_control_structure_ptr packet_relay_access_key_interface_structure_fields_optional_ptrs[] = {
-    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x90 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x94 }, /* FIXME: Unknwon pointer type! */
-    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x98 }, /* FIXME: Unknwon pointer type! */
 };
 
 
@@ -324,6 +321,7 @@ struct genz_control_ptr_info genz_control_structure_type_to_ptrs[] = {
     { requester_p2p_structure_ptrs, sizeof(requester_p2p_structure_ptrs)/sizeof(requester_p2p_structure_ptrs[0]), sizeof(struct genz_requester_p2p_structure), "requester_p2p" },
     { component_pa_structure_ptrs, sizeof(component_pa_structure_ptrs)/sizeof(component_pa_structure_ptrs[0]), sizeof(struct genz_component_pa_structure), "component_pa" },
     { component_lpd_structure_ptrs, sizeof(component_lpd_structure_ptrs)/sizeof(component_lpd_structure_ptrs[0]), sizeof(struct genz_component_lpd_structure), "component_lpd" },
+    { component_lpd_structure_array_ptrs, sizeof(component_lpd_structure_array_ptrs)/sizeof(component_lpd_structure_array_ptrs[0]), sizeof(struct genz_component_lpd_structure_array), "component_lpd" },
     { component_sod_structure_ptrs, sizeof(component_sod_structure_ptrs)/sizeof(component_sod_structure_ptrs[0]), sizeof(struct genz_component_sod_structure), "component_sod" },
     { congestion_management_structure_ptrs, sizeof(congestion_management_structure_ptrs)/sizeof(congestion_management_structure_ptrs[0]), sizeof(struct genz_congestion_management_structure), "congestion_management" },
     { component_pm_structure_ptrs, sizeof(component_pm_structure_ptrs)/sizeof(component_pm_structure_ptrs[0]), sizeof(struct genz_component_pm_structure), "component_pm" },
@@ -334,13 +332,12 @@ struct genz_control_ptr_info genz_control_structure_type_to_ptrs[] = {
     { component_interleave_structure_ptrs, sizeof(component_interleave_structure_ptrs)/sizeof(component_interleave_structure_ptrs[0]), sizeof(struct genz_component_interleave_structure), "component_interleave" },
     { component_firmware_structure_ptrs, sizeof(component_firmware_structure_ptrs)/sizeof(component_firmware_structure_ptrs[0]), sizeof(struct genz_component_firmware_structure), "component_firmware" },
     { component_sw_management_structure_ptrs, sizeof(component_sw_management_structure_ptrs)/sizeof(component_sw_management_structure_ptrs[0]), sizeof(struct genz_component_sw_management_structure), "component_sw_management" },
-    { c_cert_table_ptrs, sizeof(c_cert_table_ptrs)/sizeof(c_cert_table_ptrs[0]), sizeof(struct genz_c_cert_table), "c_cert_table_ptrs" },
-    { reliable_multicast_table_ptrs, sizeof(reliable_multicast_table_ptrs)/sizeof(reliable_multicast_table_ptrs[0]), sizeof(struct genz_reliable_multicast_table), "reliable_multicast_table_ptrs" },
+    { c_cert_table_array_ptrs, sizeof(c_cert_table_array_ptrs)/sizeof(c_cert_table_array_ptrs[0]), sizeof(struct genz_c_cert_table_array), "c_cert_table_array_ptrs" },
+    { reliable_multicast_table_array_ptrs, sizeof(reliable_multicast_table_array_ptrs)/sizeof(reliable_multicast_table_array_ptrs[0]), sizeof(struct genz_reliable_multicast_table_array), "reliable_multicast_table_array_ptrs" },
     { opcode_set_table_ptrs, sizeof(opcode_set_table_ptrs)/sizeof(opcode_set_table_ptrs[0]), sizeof(struct genz_opcode_set_table), "opcode_set_table_ptrs" },
     { elog_table_ptrs, sizeof(elog_table_ptrs)/sizeof(elog_table_ptrs[0]), sizeof(struct genz_elog_table), "log_table_ptrs" },
-    { sec_table_ptrs, sizeof(sec_table_ptrs)/sizeof(sec_table_ptrs[0]), sizeof(struct genz_sec_table), "sec_table_ptrs" },
+    { sec_table_array_ptrs, sizeof(sec_table_array_ptrs)/sizeof(sec_table_array_ptrs[0]), sizeof(struct genz_sec_table_array), "sec_table_array_ptrs" },
     { backup_mgmt_table_ptrs, sizeof(backup_mgmt_table_ptrs)/sizeof(backup_mgmt_table_ptrs[0]), sizeof(struct genz_backup_mgmt_table), "backup_mgmt_table_ptrs" },
-    { packet_relay_access_key_interface_structure_fields_optional_ptrs, sizeof(packet_relay_access_key_interface_structure_fields_optional_ptrs)/sizeof(packet_relay_access_key_interface_structure_fields_optional_ptrs[0]), sizeof(struct genz_packet_relay_access_key_interface_structure_fields_optional), "packet_relay_access_key_interface" },
 };
 
 
