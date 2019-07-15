@@ -214,19 +214,30 @@ void __genz_unregister_driver(struct genz_driver *driver)
 }
 EXPORT_SYMBOL(__genz_unregister_driver);
 
-static int initialize_zdev(struct genz_dev *zdev,
+static int initialize_zbdev(struct genz_bridge_dev *zbdev,
+			struct device *dev,
 			struct genz_driver *driver,
 			struct module *module,
 			const char *mod_name)
 {
-	/* zdev->uuid = NULL; */
-	zdev->zres = NULL;
-	zdev->root_control_info = NULL;
-	zdev->root_kobj = NULL; /* kobj for /sys/devices/genz/ */
-	/* zdev->zdriver = driver; */
-	zdev->zbdev = NULL;
-	/* zdev->dev = driver; */		/* Generic device interface */
-	zdev->gcid = 0;
+	/* Allocate a genz_component */
+	zcomp = kzalloc(sizeof(*zcomp), GFP_KERNEL);
+	if (zcomp == NULL) {
+		return -ENOMEM;
+	}
+	zbdev->zdev.zcomp = zcomp;
+
+	/* Revisit: How do we get the bridge's fabric number here? */
+	zbdev->fabric = genz_find_fabric(0);
+	zbdev->fabric = fab;
+	zbdev->bridge_dev = dev;
+	zbdev->zres = NULL;
+	zbdev->root_control_info = NULL;
+	zbdev->root_kobj = NULL; /* kobj for /sys/devices/genz/ */
+	
+	list_add_tail(zbdev, &zbdev->fabric.bridges);
+	list_add_tail(&zbdev->zdev, &zbdev->fabric.devices);
+
 	return 0;
 }
 
@@ -251,6 +262,7 @@ int genz_register_bridge(struct device *dev, struct genz_driver *driver,
 {
 	int ret = 0;
 	struct genz_bridge_dev *zbdev;
+	struct genz_component *zcomp;
 
 	/* Allocate a genz_bridge_dev */
 	zbdev = kzalloc(sizeof(*zbdev), GFP_KERNEL);
@@ -258,8 +270,11 @@ int genz_register_bridge(struct device *dev, struct genz_driver *driver,
 		return -ENOMEM;
 
 	/* Initialize the genz_bridge_dev */
-	initialize_zdev(&zbdev->zdev, driver, module, mod_name);
-	zbdev->bridge_dev = dev;
+	ret = initialize_zbdev(&zbdev->zdev, driver, module, mod_name);
+	if (ret < 0) {
+		kfree (zbdev);
+		return ret;
+	}
 
 	ret = genz_bridge_create_control_files(zbdev);
 	return ret;
