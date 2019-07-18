@@ -107,7 +107,7 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 	nla_for_each_nested(nested_attr,  mr_list, rem) {
 		/* Revisit: learn about netlink_ext_ack */
 		/* Extract the nested Memory Region structure */
-		ret = nla_parse_nested(mr_attrs, GENZ_A_MR_MAX,
+		ret = nla_parse_nested_deprecated(mr_attrs, GENZ_A_MR_MAX,
 			nested_attr, genz_genl_mem_region_policy, &extack);
 		if (ret < 0) {
 			printk(KERN_ERR "nla_parse_nested returned %d\n", ret);	
@@ -128,7 +128,7 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 			rw_rkey = nla_get_u32(mr_attrs[GENZ_A_MR_RW_RKEY]);
 		}
 		zres = alloc_and_add_zres(zdev);
-		if (zres == NULL) {
+		if (zres != NULL) {
 			/* Revisit: use the uuid string for the name? */
 			zres->res.name = "zdev->uuid";
 			zres->res.start = mem_start;
@@ -182,7 +182,7 @@ static int parse_resource_list(const struct nlattr * resource_list,
 		zdev->zcomp = zcomp;
 
 		/* Extract the nested UUID structure */
-		ret = nla_parse_nested(u_attrs, GENZ_A_U_MAX,
+		ret = nla_parse_nested_deprecated(u_attrs, GENZ_A_U_MAX,
 			nested_attr, genz_genl_resource_policy, &extack);
 		if (ret < 0) {
 			printk(KERN_ERR "nla_parse_nested of UUID list returned %d\n", ret);	
@@ -210,31 +210,34 @@ static int parse_resource_list(const struct nlattr * resource_list,
 static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 {
 	uint8_t *byte_uuid;
-	struct genz_component *zcomp;
+	struct genz_component *zcomp = NULL;
+	uint32_t fabric_num, gcid;
 	int ret = 0;
 
-	zcomp = genz_alloc_component();
-	if (zcomp == NULL) {
-		return -ENOMEM;
-	}
-
 	if (info->attrs[GENZ_A_FABRIC_NUM]) {
-		zcomp->fabric_num = nla_get_u32(info->attrs[GENZ_A_FABRIC_NUM]);
-		printk(KERN_DEBUG "Port: %u\n\tFABRIC_NUM: %d", info->snd_portid,
-			zcomp->fabric_num);
+		fabric_num = nla_get_u32(info->attrs[GENZ_A_FABRIC_NUM]);
+		printk(KERN_DEBUG "Port: %u\n\tFABRIC_NUM: %d",
+			info->snd_portid, fabric_num);
 	} else {
 		printk(KERN_ERR "%s: missing required fabric number\n", __FUNCTION__);
 		return -EINVAL;
 	}
 		
+/* Revist: find_fabric here */
 	if (info->attrs[GENZ_A_GCID]) {
-		zcomp->gcid = nla_get_u32(info->attrs[GENZ_A_GCID]);
-		printk(KERN_DEBUG "\tGCID: %d ",
-			zcomp->gcid);
+		gcid = nla_get_u32(info->attrs[GENZ_A_GCID]);
+		printk(KERN_DEBUG "\tGCID: %d ", gcid);
 	} else {
 		printk(KERN_ERR "%s: missing required GCID\n", __FUNCTION__);
 		return -EINVAL;
 	}
+	/* Revisit: add a find_component() */
+	zcomp = genz_alloc_component();
+	if (zcomp == NULL) {
+		return -ENOMEM;
+	}
+	zcomp->fabric_num = fabric_num;
+	zcomp->gcid = gcid;
 
 	if (info->attrs[GENZ_A_CCLASS]) {
 		zcomp->cclass = nla_get_u32(info->attrs[GENZ_A_CCLASS]);
@@ -242,29 +245,35 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 			(uint32_t) zcomp->cclass);
 	} else {
 		printk(KERN_ERR "%s: missing required CCLASS\n", __FUNCTION__);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err;
 	}
 
 	if (info->attrs[GENZ_A_FRU_UUID]) {
 		byte_uuid = nla_data(info->attrs[GENZ_A_FRU_UUID]);
-		/* Revisit: make a cast_uuid macro */
-		zcomp->fru_uuid = *((uuid_t *)&byte_uuid);
+		zcomp->fru_uuid = GENZ_CAST_UUID(byte_uuid);
 		printk(KERN_DEBUG "\tFRU_UUID: %pUb\n", &zcomp->fru_uuid);
 	} else {
 		printk(KERN_ERR "%s: missing required FRU_UUID\n", __FUNCTION__);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err;
 	}
 
 	if (info->attrs[GENZ_A_RESOURCE_LIST]) {
 		ret = parse_resource_list(info->attrs[GENZ_A_RESOURCE_LIST],
 			zcomp);
-		if (ret < 0) {
-		}
+		if (ret < 0) 
+			goto err;
 	} else {
 		printk(KERN_ERR "%s: Must supply at least one resource\n", __FUNCTION__);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err;
 	}
 
+	return ret;
+err:
+	if (zcomp)
+		kref_put(&zcomp->kref, genz_free_component);
 	return ret;
 }
 

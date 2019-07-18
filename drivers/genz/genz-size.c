@@ -69,7 +69,7 @@ ssize_t genz_c_access_r_key_size(struct genz_control_info *ci)
 	}
 	/* Read the 40 bit C-Access Table Size field at offset 0x18 */
 	/* Revisit: defines for the field size (5 bytes) and offset (0x18)? */
-	ret = ci->zdev->zbdev->zdev.zdriver->control_read(ci->zdev,
+	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
 			ci->start, sizeof(c_access), &c_access, 0);
 	if (ret) {
                 pr_debug("%s: control read of c_access structure failed with %d\n",
@@ -108,7 +108,7 @@ ssize_t genz_oem_data_size(struct genz_control_info *ci)
 	}
 
 	/* Read the 4 byte pointer to the OEM Data table at offset 0x90 */
-	ret = ci->zdev->zbdev->zdev.zdriver->control_read(ci->zdev,
+	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
 			ci->start+0x90, 4, &oem_data_ptr, 0);
 	if (ret || !oem_data_ptr) {
                 pr_debug("%s: control read of OEM Data PTR failed with %d\n",
@@ -116,7 +116,7 @@ ssize_t genz_oem_data_size(struct genz_control_info *ci)
                 return -1;
 	}
 	/* Read the table size in bytes from the first 2 bytes of the table */
-	ret = ci->zdev->zbdev->zdev.zdriver->control_read(ci->zdev,
+	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
 			oem_data_ptr, 2, &sz, 0);
 	if (ret) {
                 pr_debug("%s: control read of OEM Data table size failed with %d\n",
@@ -146,7 +146,7 @@ ssize_t genz_elog_size(struct genz_control_info *ci)
 
 	/* Read the 4 byte pointer to the Elog table at offset 0x14 */
 	/* Revisit: add a macro/inline to call control_read more easily */
-	ret = ci->zdev->zbdev->zdev.zdriver->control_read(ci->zdev,
+	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
 			ci->start+0x14, 4, &elog_ptr, 0);
 	if (ret || !elog_ptr) {
                 pr_debug("%s: control read of ELog PTR failed with %d\n",
@@ -154,7 +154,7 @@ ssize_t genz_elog_size(struct genz_control_info *ci)
                 return -1;
 	}
 	/* Read the table size in bytes from the first 2 bytes of the table */
-	ret = ci->zdev->zbdev->zdev.zdriver->control_read(ci->zdev,
+	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
 			elog_ptr, 2, &num_entries, 0);
 	if (ret) {
                 pr_debug("%s: control read of ELog table size failed with %d\n",

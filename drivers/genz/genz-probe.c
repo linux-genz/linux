@@ -46,6 +46,38 @@
 LIST_HEAD(genz_fabrics);
 DECLARE_RWSEM(genz_fabrics_sem);
 
+static ssize_t fabric_attr_show(struct kobject *kobj,
+                             struct attribute *attr,
+                             char *buf)
+{
+        struct genz_fabric_attribute *attribute;
+        struct genz_fabric *fab;
+
+        attribute = to_genz_fabric_attr(attr);
+        fab = to_genz_fabric(kobj);
+
+        if (!attribute->show)
+                return -EIO;
+
+        return attribute->show(fab, attribute, buf);
+}
+
+static void fabric_release(struct kobject *kobj)
+{
+	struct genz_fabric *fab;
+
+	fab = to_genz_fabric(kobj);
+	kfree(fab);
+}
+
+static const struct sysfs_ops fabric_sysfs_ops = {
+	.show = fabric_attr_show,
+};
+static struct kobj_type fabric_ktype = {
+	.sysfs_ops = &fabric_sysfs_ops,
+	.release = fabric_release,
+};
+
 static struct genz_fabric *genz_alloc_fabric(void)
 {
 	struct genz_fabric *f;
@@ -56,6 +88,9 @@ static struct genz_fabric *genz_alloc_fabric(void)
 
         INIT_LIST_HEAD(&f->devices);
         INIT_LIST_HEAD(&f->bridges);
+
+	/* Create /sys/devices/genz<N> directory kobject */
+	
         return f;
 }
 
@@ -91,6 +126,7 @@ struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
 			return found;
 		}
 		found->number = fabric_num;
+		kobject_init(&found->kobj, &fabric_ktype);
 		kref_init(&found->kref);
 		down_write(&genz_fabrics_sem);
 		list_add_tail(&found->node, &genz_fabrics);
@@ -99,6 +135,38 @@ struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
 	return found;
 }
 
+static ssize_t component_attr_show(struct kobject *kobj,
+                             struct attribute *attr,
+                             char *buf)
+{
+        struct genz_component_attribute *attribute;
+        struct genz_component *comp;
+
+        attribute = to_genz_component_attr(attr);
+        comp = to_genz_component(kobj);
+
+        if (!attribute->show)
+                return -EIO;
+
+        return attribute->show(comp, attribute, buf);
+}
+
+static void component_release(struct kobject *kobj)
+{
+	struct genz_component *comp;
+
+	comp = to_genz_component(kobj);
+	kfree(comp);
+}
+
+static const struct sysfs_ops component_sysfs_ops = {
+	.show = component_attr_show,
+};
+static struct kobj_type component_ktype = {
+	.sysfs_ops = &component_sysfs_ops,
+	.release = component_release,
+};
+
 struct genz_component *genz_alloc_component(void)
 {
 	struct genz_component *zcomp;
@@ -106,7 +174,8 @@ struct genz_component *genz_alloc_component(void)
 	zcomp = kzalloc(sizeof(*zcomp), GFP_KERNEL);
 	if (!zcomp)
 		return NULL;
-	kref_get(&zcomp->kref);
+	kobject_init(&zcomp->kobj, &component_ktype);
+	kref_init(&zcomp->kref);
 	return(zcomp);
 }
 

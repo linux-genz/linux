@@ -81,7 +81,7 @@ enum genz_pointer_size {
     GENZ_6_BYTE_POINTER = 6,
 };
 
-enum genz_control_pointer_flags {
+enum genz_control_pointer_type {
     GENZ_CONTROL_POINTER_NONE = 0,
     GENZ_CONTROL_POINTER_STRUCTURE = 1, /* Points to a structure. Use ptr_type to see if it is generic or a particular type.  */
     GENZ_CONTROL_POINTER_CHAINED = 2, /* e.g. Interface structures */
@@ -202,10 +202,10 @@ enum genz_control_structure_type {
 };
 
 struct genz_control_structure_ptr {
-    enum genz_control_pointer_flags flags;
+    enum genz_control_pointer_type ptr_type;
     enum genz_pointer_size ptr_size;
     uint32_t pointer_offset;
-    enum genz_control_structure_type ptr_type; /* non-Generic structure validation of the pointer */
+    enum genz_control_structure_type struct_type; /* non-Generic structure validation of the pointer */
     //ssize_t (*table_size)(union genz_control_structure *ctl_struct);
 };
 

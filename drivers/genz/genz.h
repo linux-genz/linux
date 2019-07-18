@@ -52,6 +52,7 @@ typedef unsigned char uuid_str_t[37];	/* UUID string of format:
 
 /* Value of Z-UUID in control space that indicates a Gen-Z device */
 #define GENZ_Z_UUID	0x4813ea5f074e4be2a355a354145c9927
+#define GENZ_CAST_UUID(u) *((uuid_t *)&(u))
 
 typedef loff_t genz_control_cookie;
 
@@ -79,66 +80,127 @@ struct genz_fabric {
 	struct list_head node;  	/* node in list of fabrics */
 	uint32_t number;		/* fabric_number */
 	struct list_head devices;	/* List of devices on this fabric */
+	struct list_head components;	/* List of components on this fabric */
+	struct list_head subnets;	/* List of subnets on this fabric */
 	struct list_head bridges;	/* List of local bridges on fabric */
+	struct kobject	kobj;		/* /sys/devices/genz<N> */
 	struct kref	kref;
 };
+#define to_genz_fabric(x) container_of(x, struct genz_fabric, kobj)
+
+struct genz_fabric_attribute {
+	struct attribute attr;
+        ssize_t (*show)(struct genz_fabric *fab,
+		struct genz_fabric_attribute *attr, char *buf);
+        ssize_t (*store)(struct genz_fabric *fab,
+		struct genz_fabric_attribute *attr,
+		const char *buf, size_t count);
+};
+#define to_genz_fabric_attr(x) container_of(x, struct genz_fabric_attribute, attr)
+
+struct genz_subnet {
+	struct genz_component	*comp;
+	struct list_head	fab_subnet_node; /* per-fabric list of subnets*/
+	struct kobject		kobj; /* /sys/devices/genz<N>/SID */
+};
+#define to_genz_subnet(x) container_of(x, struct genz_subnet, kobj)
+
+struct genz_subnet_attribute {
+	struct attribute attr;
+        ssize_t (*show)(struct genz_subnet *s,
+		struct genz_subnet_attribute *attr, char *buf);
+        ssize_t (*store)(struct genz_subnet *s,
+		struct genz_subnet_attribute *attr,
+		const char *buf, size_t count);
+};
+#define to_genz_subnet_attr(x) container_of(x, struct genz_subnet_attribute, attr)
 
 struct genz_component {
 	uint32_t		gcid;
 	uint8_t			cclass;
 	uuid_t			fru_uuid;
 	uint32_t		fabric_num;
-	struct list_head	control_zres_list;
-	struct list_head	data_zres_list;
+	struct list_head	fab_comp_node; /* Node in the per-fabric list */
+	struct list_head	control_zres_list; /* head of zres list */
+	struct list_head	data_zres_list;    /* head of zres list */
+	struct kobject		kobj;  /* /sys/devices/genz<N>/SID/CID */
 	struct kref		kref;
 };
+#define to_genz_component(x) container_of(x, struct genz_component, kobj)
+
+struct genz_component_attribute {
+	struct attribute attr;
+        ssize_t (*show)(struct genz_component *c,
+		struct genz_component_attribute *attr, char *buf);
+        ssize_t (*store)(struct genz_component *c,
+		struct genz_component_attribute *attr,
+		const char *buf, size_t count);
+};
+#define to_genz_component_attr(x) container_of(x, struct genz_component_attribute, attr)
 
 struct genz_dev {
 	struct list_head	fab_dev_node; /* Node in the per-fabric list */
-	uuid_t 		uuid; /* UUID of this component/service/virtual UUID */
+	uuid_t 			uuid;      /* component/service/virtual UUID */
 	int                     zres_count;
 	struct list_head	zres_list;
-	struct genz_resource 	*zres;	/* pointer to dynamic array of resources for this device */
+	struct genz_resource 	*zres;	      /* array of device's resources */
 	struct genz_control_info *root_control_info;
-	struct kobject		*root_kobj; /* kobj for /sys/devices/genz/ */
-	struct genz_driver	*zdriver;
+	struct kobject		*root_kobj; /* kobj for /sys/devices/genz<N> */
+	struct genz_driver	*zdrv;
 	struct genz_bridge_dev	*zbdev;
-	struct genz_component	*zcomp; /* parent component */
-	struct device		dev;		/* Generic device interface */
+	struct genz_component	*zcomp;     /* parent component */
+	struct device		dev;	    /* Generic device interface */
 };
 #define to_genz_dev(n) container_of(n, struct genz_dev, dev)
 
+struct genz_driver {
+	const char			*name;
+	struct genz_device_id		*id_table; /* Null terminated array */
+	int (*probe)(struct genz_dev *zdev, const struct genz_device_id *id);
+	int (*remove)(struct genz_dev *zdev);
+	int (*suspend)(struct genz_dev *zdev);
+	int (*resume)(struct genz_dev *zdev);
+	struct device_driver		driver;
+};
+#define to_genz_driver(d) container_of(d, struct genz_driver, driver)
+
+struct genz_bridge_driver {
+	struct genz_driver	zdrv; /* Revisit: need this or is it all in native driver? */
+	int (*control_mmap)(struct genz_dev *zdev); /* Revisit: need flags? */
+	int (*control_read)(struct genz_dev *zdev, genz_control_cookie offset, size_t size, void *data, uint flags);
+	int (*control_write)(struct genz_dev *zdev, genz_control_cookie offset, size_t size, void *data, uint flags);
+	int (*data_mmap)(struct genz_dev *zdev);
+	int (*data_read)(struct genz_dev *zdev, genz_control_cookie offset, size_t size, void *data);
+	int (*data_write)(struct genz_dev *zdev, genz_control_cookie offset, size_t size, void *data);
+};
+#define to_genz_bridge_driver(d) container_of(d, struct genz_bridge_driver, driver)
 
 struct genz_bridge_dev {
 	struct list_head	fab_bridge_node;	/* node in list of bridges on fabric */
 	struct genz_dev		zdev;
+	struct genz_bridge_driver *zbdrv;
 	struct device		*bridge_dev; /* native device pointer */
 	struct genz_fabric	*fabric;
 	void 			*private;    /* for bridge driver */
 	/* Revisit: add address space */
 };
 
-struct genz_driver {
-	const char			*name;
-	struct genz_device_id		*id_table; /* Null terminated array */
-	int (*probe)(struct genz_dev *dev, const struct genz_device_id *id);
-	int (*remove)(struct genz_dev *dev);
-	int (*suspend)(struct genz_dev *dev);
-	int (*resume)(struct genz_dev *dev);
-	int (*control_mmap)(struct genz_dev *dev); /* REVISIT: need flags? */
-	int (*control_read)(struct genz_dev *dev, genz_control_cookie offset, size_t size, void *data, uint flags);
-	int (*control_write)(struct genz_dev *dev, genz_control_cookie offset, size_t size, void *data, uint flags);
-	int (*data_mmap)(struct genz_dev *dev);
-	int (*data_read)(struct genz_dev *dev, genz_control_cookie offset, size_t size, void *data);
-	int (*data_write)(struct genz_dev *dev, genz_control_cookie offset, size_t size, void *data);
-	struct device_driver		driver;
-};
-#define to_genz_driver(d) container_of(d, struct genz_driver, driver)
-
 static inline bool zdev_is_local_bridge(struct genz_dev *zdev)
 {
 	return ((zdev != NULL && zdev->zbdev != NULL) ?
 			(&zdev->dev == zdev->zbdev->bridge_dev) : 0);
+}
+
+/* SID is 16 bits starting at bit 13 of a GCID */
+static inline int genz_get_sid(int gcid)
+{
+	return(0xFFFF & (gcid >> 12));
+}
+
+/* CID is first 12 bits of a GCID */
+static inline int genz_get_cid(int gcid)
+{
+	return(0xFFF & gcid);
 }
 
 /*

@@ -60,7 +60,7 @@ int genz_valid_struct_type(int type)
 }
 
 /**
- * genz_structure_name - return the name of a given control structure type
+ * genz_structure_name - return the name of a given control structure ptr_type
  * int type - the control structure type
  * Returns the name of a structure type or NULL if the type is not vaild.
  */
@@ -119,7 +119,7 @@ static int validate_ci(struct genz_control_info *ci,
 		struct genz_dev **zdev,
 		struct genz_bridge_dev **bridge_zdev)
 {
-	struct genz_driver *zdriver;
+	struct genz_bridge_driver *zdriver;
 
 	*zdev = ci->zdev;
 	if (ci->zdev == NULL) {
@@ -131,7 +131,7 @@ static int validate_ci(struct genz_control_info *ci,
 		pr_debug("%s: bridge_zdev is NULL\n", __func__);
 		return -EINVAL;
 	} 
-	zdriver = (*bridge_zdev)->zdev.zdriver;
+	zdriver = (*bridge_zdev)->zbdrv;
 	if (zdriver == NULL) {
 		pr_debug("%s: zdriver is NULL\n", __func__);
 		return -EINVAL;
@@ -175,7 +175,7 @@ static ssize_t read_control_structure(struct file *fd,
 		/* Revisit: what should it return on error? */
 		return err;
 	}
-	ret = bridge_zdev->zdev.zdriver->control_read(zdev, ci->start+offset,
+	ret = bridge_zdev->zbdrv->control_read(zdev, ci->start+offset,
 			(int)size, (void *)data, 0);
 	if (ret) {
 		pr_debug("%s: control read failed with %ld\n",
@@ -204,7 +204,7 @@ static ssize_t write_control_structure(struct file *fd,
 		pr_debug("%s: arguments invalid error: %d\n", __func__, err);
 		return err;
 	}
-	ret = bridge_zdev->zdev.zdriver->control_write(zdev, ci->start+offset,
+	ret = bridge_zdev->zbdrv->control_write(zdev, ci->start+offset,
 			(int)size, (void *)data, 0);
 	if (ret) {
 		pr_debug("%s: control write failed with %ld\n",
@@ -221,7 +221,7 @@ static ssize_t write_control_structure(struct file *fd,
  *  a struct genz_control_info. The genz_control_info has a tree
  *  representation with pointers to a parent, sibling, and child. The
  *  table genz_control_pointers
- *  defines the offset to each pointer for each structure type. This
+ *  defines the offset to each pointer for each structure ptr_type. This
  *  includes pointers to tables.
  *
  */
@@ -251,7 +251,7 @@ static int genz_create_control_chain_siblings(
 	struct genz_control_info *sibling,
 	int type_id,
 	off_t start,
-	genz_control_pointer_flags flags,
+	genz_control_pointer_type ptr_type,
 	off_t chain_ptr_offset)
 {
 	struct genz_control_info *s;
@@ -260,7 +260,7 @@ static int genz_create_control_chain_siblings(
 	do {
 		sibling_offset = genz_control_structure_pointers[type_id][].offset;
 		sibling_id_type = genz_control_structure_pointers[type_id][i].pointer_type_id;
-		sibling_flags = genz_control_structure_pointers[type_id][i].flags;
+		sibling_type = genz_control_structure_pointers[type_id][i].ptr_type;
 		ret = read_ptr(zdev, start+child_offset, &ptr_offset);
 		if (ret < 0) {
 			pr_debug("read_ptr failed\n");
@@ -309,14 +309,14 @@ static int genz_create_control_children(
 	struct genz_control_info *c;
 	struct genz_control_info *sibling = NULL;
 	off_t child_id_type;
-	off_t child_flags;
+	off_t child_type;
 	off_t ptr_byte_offset;
 	off_t ptr_offset;
 	
 	for (i = 0; i < num_children; i++) {
 		child_offset = genz_control_structure_pointers[type_id][i].offset;
 		child_id_type = genz_control_structure_pointers[type_id][i].pointer_type_id;
-		child_flags = genz_control_structure_pointers[type_id][i].flags;
+		child_type = genz_control_structure_pointers[type_id][i].ptr_type;
 		ret = read_ptr(zdev, start+child_offset, &ptr_offset);
 		if (ret < 0) {
 			pr_debug("read_ptr failed\n");
@@ -350,8 +350,8 @@ static int genz_create_control_children(
 		 * are siblings.
 		 */
 		/* REVISIT: add a GENZ_CONTRL_POINTER_ARRAY type - complicated - see Component LPD Structure */
-		if (child_flags & GENZ_CONTROL_POINTER_CHAINED) {
-			ret = genz_create_control_chain_siblings(zdev, sibling, child_offset, child_id_type, child_flags, 
+		if (child_type & GENZ_CONTROL_POINTER_CHAINED) {
+			ret = genz_create_control_chain_siblings(zdev, sibling, child_offset, child_id_type, child_type, 
 				genz_control_structure_pointers[type_id][i].chain_ptr_offset);
 			
 		} else {
@@ -384,9 +384,9 @@ static int genz_create_control_hierarchy(struct genz_dev *zdev)
 	}
 
 	/* Check that the type matches expected core structre type 0 */
-	if (hdr.type != 0) {
+	if (hdr.ptr_type != 0) {
 		pr_debug("Core Structure header type is not core. Found %d\n",
-			hdr.type);
+			hdr.ptr_type);
 		return -ENOENT;
 	}
 
@@ -465,7 +465,7 @@ static int find_opcode_set_structure(struct genz_dev *zdev, int version);
  */
 int genz_find_control_structure(
 	struct genz_dev *zdev,
-	int type,
+	int ptr_type,
 	int version)
 {
 	int count = 0;
@@ -480,11 +480,11 @@ int genz_find_control_structure(
 			return -ENOENT;
 		}
 	}
-	if (!genz_validate_control_space_structure_type(type)) {
+	if (!genz_validate_control_space_structure_type(ptr_type)) {
 		/* Not a standard control structure. Search the extensions */
-		find_vendor_defined_structure(zdev, type, version);
+		find_vendor_defined_structure(zdev, ptr_type, version);
 	}
-	switch (type) {
+	switch (ptr_type) {
 		case CORE_STRUCTURE:
 			/* There is only one core structure. Match the version */
 			if (zdev->core->vers == version || version == -1)
@@ -512,7 +512,7 @@ int genz_find_control_structure(
 EXPORT_SYMBOL_GPL(genz_find_control_structure);
 #endif
   
-/* Request the Nth control structure that matches the given type and
+/* Request the Nth control structure that matches the given ptr_type and
  * version and return a cookie that can be used to map the structure.
  * This creates the ZMMU entry required for access.  Creates a struct
  * resource behind the scenes.
@@ -520,7 +520,7 @@ EXPORT_SYMBOL_GPL(genz_find_control_structure);
 int genz_request_control_structure(
 	struct genz_dev *zdev,
 	int index,
-	int type,
+	int ptr_type,
 	int version,
 	genz_control_cookie * cookie)
 {
@@ -543,7 +543,7 @@ void genz_release_control_structure(
 EXPORT_SYMBOL_GPL(genz_release_control_structure);
 
 /*
- * Map the Nth control structure that matches the given type and version
+ * Map the Nth control structure that matches the given ptr_type and version
  * and return the size and pointer.
  */
 int genz_map_control_structure(
@@ -625,7 +625,7 @@ static int read_header_at_offset(struct genz_dev *zdev,
 	
 	*hdr_offset = 0;
 	/* Read the given offset to get the pointer to the control structure */
-	ret = zdev->zdriver->control_read(zdev, start+offset,
+	ret = zdev->zbdev->zbdrv->control_read(zdev, start+offset,
 				(int)psize, (void *)hdr_offset, 0);
 	if (ret) {
 		pr_debug("%s: control read of pointer failed with %d\n",
@@ -638,7 +638,7 @@ static int read_header_at_offset(struct genz_dev *zdev,
 		return ENOENT;
 
 	/* Read a control structure header at that pointer location */
-	ret = zdev->zdriver->control_read(zdev, *hdr_offset,
+	ret = zdev->zbdev->zbdrv->control_read(zdev, *hdr_offset,
 		sizeof(struct genz_control_structure_header), (void *)hdr, 0);
 	if (ret) {
 		pr_debug("%s: control read of header structure failed with %d\n",
@@ -665,17 +665,17 @@ static int read_and_validate_header(struct genz_dev *zdev,
 		return ENOENT;
 
 	/* Validate the header is as expected */
-	if (csp->ptr_type != GENZ_GENERIC_STRUCTURE) {
-		if (hdr->type != csp->ptr_type) {
+	if (csp->struct_type != GENZ_GENERIC_STRUCTURE) {
+		if (hdr->type != csp->struct_type) {
 			pr_debug("%s: expected type %d but found %d\n",
-				__func__, csp->ptr_type, hdr->type);
+				__func__, csp->struct_type, hdr->type);
 			return -EINVAL;
 		}
 	}
 	/* Validate the structure size. 
 	   Revisit: Could get the structure from the type and then
 	   compare to the sizeof(struct...). Would need to be version
-	   aware. Could have flags that say it is fixed size or
+	   aware. Could have ptr_type that say it is fixed size or
 	   variable size minimum. */
 	if (hdr->size == 0) {
 		pr_debug("%s: structure size is 0.\n", __func__);
@@ -783,7 +783,7 @@ static int type_is_chained(int type)
 	csp = genz_control_structure_type_to_ptrs[type].ptr;
 	num_ptrs = genz_control_structure_type_to_ptrs[type].num_ptrs;
 	for (i = 0; i < num_ptrs; i++) {
-		if (csp[i].flags == GENZ_CONTROL_POINTER_CHAINED)
+		if (csp[i].type == GENZ_CONTROL_POINTER_CHAINED)
 			return 1;
 	}
 	return 0;
@@ -806,7 +806,7 @@ static off_t find_chain_offset(struct genz_control_ptr_info *pinfo)
 	csp = pinfo->ptr;
 	num_ptrs = pinfo->num_ptrs;
 	for (i = 0; i < num_ptrs; i++) {
-		if (csp[i].flags == GENZ_CONTROL_POINTER_CHAINED) {
+		if (csp[i].ptr_type == GENZ_CONTROL_POINTER_CHAINED) {
 			if (chain_offset != -ENOENT) {
 				/* Already found a CHAIN. */
 				pr_debug("%s: Already found a CHAIN offset %d. New one: %d\n", __func__, chain_offset, csp[i].pointer_offset);
@@ -1003,7 +1003,7 @@ static int traverse_control_pointers(struct genz_dev *zdev,
 	for (i = 0; i < pi->num_ptrs; i++) {
 		csp = &(pi->ptr[i]);
 
-		switch (csp->flags) {
+		switch (csp->ptr_type) {
 			case GENZ_CONTROL_POINTER_NONE:
 				break;
 			case GENZ_CONTROL_POINTER_STRUCTURE:
@@ -1066,13 +1066,13 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	}
 
 	/* A bridge must have control_read function */
-	if (zdev->zdriver->control_read == NULL) {
+	if (zdev->zbdev->zbdrv->control_read == NULL) {
                 pr_debug("%s: missing control_read()\n", __func__);
 		return -EINVAL;
 	}
 
 	/* Start at offset 0 for the core structure */
-	ret = zdev->zdriver->control_read(zdev, 0, sizeof(hdr), (void *)&hdr, 0);
+	ret = zdev->zbdev->zbdrv->control_read(zdev, 0, sizeof(hdr), (void *)&hdr, 0);
 	if (ret) {
 		pr_debug("%s: initial control read of core structure failed with %d\n",
 			__func__, ret);
@@ -1089,9 +1089,9 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	}
 
 	/* Validate the core structure size. 
-	   Revisit: Could get the structure from the type and then compare
+	   Revisit: Could get the structure from the ptr_type and then compare
 	   to the sizeof(struct...). Would need to be version aware. Could
-	   have flags that say it is fixed size or variable size minimum. */
+	   have ptr_type that say it is fixed size or variable size minimum. */
 	if (hdr.size == 0) {
 		pr_debug("%s: core structure size is 0.\n", __func__);
 		return -EINVAL;
@@ -1175,3 +1175,80 @@ int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(genz_bridge_remove_control_files);
+
+/**
+ * genz_create_sysfs_dev_files(struct genz_dev *zdev)
+ * zdev - a struct genz_dev for a new device
+ *
+ * populate the sysfs /sys/devices/genz0 hierarchy for a new device.
+ */
+/* Revisit: this is in a private header. figure out the right way... */
+#ifdef NOT_YET
+extern struct kset *devices_kset;
+int genz_create_sysfs_dev_files(struct genz_dev *zdev)
+{
+	int ret = 0;
+	struct kobject *sid, *cid, *attrib_dir;
+
+	if (zdev == NULL) {
+                pr_debug("%s: zdev is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	/*
+	 * get the fabric number for the /sys/devices/genz<N> directory
+	 * kobject.
+	 */
+	if (zdev->root_kobj == NULL) {
+		goto err_genz;
+	}
+	ret = kobject_init_and_add(zdev->root_kobj, &control_info_ktype,
+			&devices_kset->kobj, "genz%d", zdev->zcomp->fabric_num);
+	if (ret < 0) {
+		goto err_genz;
+	}
+
+	/* Next parse the gcid to get the SID for the next directory */
+	sid = kobject_create();
+	if (sid == NULL) {
+		goto err_genz;
+	}
+	ret = kobject_init_and_add(sid, &control_info_ktype, zdev->root_kobj,
+			"%04d", genz_get_sid(zdev->zcomp->gcid));
+	if (ret < 0) {
+		goto err_sid;
+	}
+	
+	/* Next parse the gcid to get the CID for the next directory */
+	cid = kobject_create();
+	if (cid == NULL) {
+		goto err_sid;
+	}
+	ret = kobject_init_and_add(cid, &control_info_ktype, sid,
+			"%03d", genz_get_cid(zdev->zcomp->gcid));
+	if (ret < 0) {
+		goto err_cid;
+	}
+
+	/* Add the attribs directory */
+	attrib_dir = kobject_create();
+	if (attrib_dir == NULL) {
+		goto err_cid;
+	}
+	ret = kobject_init_and_add(attrib_dir, &control_info_ktype, cid,
+			"attribs");
+	if (ret < 0) {
+		goto err_attrib;
+	}
+
+err_attrib:
+	kobject_put(attrib_dir);
+err_cid:
+	kobject_put(cid);
+err_sid:
+	kobject_put(sid);
+err_genz:
+	kobject_put(zdev->root_kobj);
+	return ret;
+}
+#endif

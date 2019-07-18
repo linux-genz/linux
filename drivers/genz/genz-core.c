@@ -217,18 +217,18 @@ EXPORT_SYMBOL(__genz_unregister_driver);
 
 static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 			struct device *dev,
-			struct genz_driver *driver,
-			struct module *module,
-			const char *mod_name)
+			struct genz_bridge_driver *zbdrv)
 {
 	struct genz_component *zcomp;
 
 	/* Allocate a genz_component */
-	zcomp = kzalloc(sizeof(*zcomp), GFP_KERNEL);
+	zcomp = genz_alloc_component();
 	if (zcomp == NULL) {
 		return -ENOMEM;
 	}
 	zbdev->zdev.zcomp = zcomp;
+	zbdev->zbdrv = zbdrv;
+	zbdev->zdev.zdrv = &zbdrv->zdrv;
 
 	/* Revisit: How do we get the bridge's fabric number here? */
 	zbdev->fabric = genz_find_fabric(0);
@@ -256,19 +256,20 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
  * Return:
  * Returns 0 on success. Returns a negative value on error.
  */
-int genz_register_bridge(struct device *dev, struct genz_driver *driver,
-		struct module *module, const char *mod_name)
+int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv)
+	
 {
 	int ret = 0;
 	struct genz_bridge_dev *zbdev;
 
 	/* Allocate a genz_bridge_dev */
+	/* Revisist: need an genz_allocate_bridge_dev() */
 	zbdev = kzalloc(sizeof(*zbdev), GFP_KERNEL);
 	if (zbdev == NULL)
 		return -ENOMEM;
 
 	/* Initialize the genz_bridge_dev */
-	ret = initialize_zbdev(zbdev, dev, driver, module, mod_name);
+	ret = initialize_zbdev(zbdev, dev, zbdrv);
 	if (ret < 0) {
 		kfree (zbdev);
 		return ret;

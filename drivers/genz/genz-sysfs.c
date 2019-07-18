@@ -97,6 +97,7 @@ static int genz_create_capabilities_sysfs(struct genz_dev *zdev)
 	return 0;
 }
 
+#ifdef NOT_YET
 int __must_check genz_create_sysfs_dev_files(struct genz_dev *zdev)
 {
 	int retval;
@@ -126,6 +127,7 @@ err_create_structure_files:
 err:
 	return retval;
 }
+#endif
 
 /* Revisit: look at pci-sysfs.c for all the rest of the attr stuff */
 const struct device_type genz_dev_type = {
