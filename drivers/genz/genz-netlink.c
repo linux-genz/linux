@@ -201,6 +201,11 @@ static int parse_resource_list(const struct nlattr * resource_list,
 			} else {
 			}
 		}
+		ret = genz_device_add(zdev);
+		if (ret) {
+			printk(KERN_ERR "\tgenz_device_add failed\n");
+			/* Revisit: more clean up here */
+		}
 	}
 	printk(KERN_INFO "\tend of RESOURCE_LIST\n");
 	return ret;

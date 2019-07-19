@@ -39,3 +39,4 @@ void genz_free_fabric(struct kref *kref);
 struct genz_component *genz_alloc_component(void);
 void genz_free_component(struct kref *kref);
 struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric);
+int genz_device_add(struct genz_dev *zdev);

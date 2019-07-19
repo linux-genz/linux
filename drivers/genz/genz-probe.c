@@ -231,3 +231,14 @@ struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric)
 }
 EXPORT_SYMBOL(genz_alloc_dev);
 
+int genz_device_add(struct genz_dev *zdev)
+{
+	int ret;
+	
+	device_initialize(&zdev->dev);
+	zdev->dev.release = genz_release_dev;
+
+	ret = device_add(&zdev->dev);
+	return ret;
+}
+EXPORT_SYMBOL(genz_device_add);
