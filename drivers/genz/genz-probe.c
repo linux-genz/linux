@@ -89,10 +89,36 @@ static struct genz_fabric *genz_alloc_fabric(void)
         INIT_LIST_HEAD(&f->devices);
         INIT_LIST_HEAD(&f->bridges);
 
-	/* Create /sys/devices/genz<N> directory kobject */
-	
         return f;
 }
+
+static int genz_fabric *genz_init_fabric(struct genz_fabric *f,
+		uint32_t fabric_num)
+{
+	int ret = 0;
+
+	/*
+         * The /sys/devices/genz<N> directory is created by adding a
+         * struct device. This is not claimed by driver. We use the device's
+         * kobject as the parent for the sysfs tree. Use device_put on this
+         * fabric device when the zdev is done being used.
+         */
+        /* setting the bus and id uses simple enumeration to get genz<N> */
+        f->device.bus = &genz_bus_type;
+        f->device.id = zdev->zbdev->fabric->number;
+
+        ret = device_register(&f->device);
+	if (ret) {
+		put_device(&f->device);
+		return ret;
+	}
+	
+	f->number = fabric_num;
+	kref_init(&f->kref);
+
+	return ret;
+}
+
 
 void genz_free_fabric(struct kref *kref)
 {
@@ -125,9 +151,7 @@ struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
 			up_write(&genz_fabrics_sem);
 			return found;
 		}
-		found->number = fabric_num;
-		kobject_init(&found->kobj, &fabric_ktype);
-		kref_init(&found->kref);
+		ret = genz_init_fabric(fabric_num);
 		down_write(&genz_fabrics_sem);
 		list_add_tail(&found->node, &genz_fabrics);
 		up_write(&genz_fabrics_sem);

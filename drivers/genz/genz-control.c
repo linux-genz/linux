@@ -1189,23 +1189,11 @@ int genz_create_sysfs_dev_files(struct genz_dev *zdev)
 {
 	int ret = 0;
 	struct kobject *sid, *cid, *attrib_dir;
+	struct device *fab_dev;
 
 	if (zdev == NULL) {
                 pr_debug("%s: zdev is NULL\n", __func__);
 		return -EINVAL;
-	}
-
-	/*
-	 * get the fabric number for the /sys/devices/genz<N> directory
-	 * kobject.
-	 */
-	if (zdev->root_kobj == NULL) {
-		goto err_genz;
-	}
-	ret = kobject_init_and_add(zdev->root_kobj, &control_info_ktype,
-			&devices_kset->kobj, "genz%d", zdev->zcomp->fabric_num);
-	if (ret < 0) {
-		goto err_genz;
 	}
 
 	/* Next parse the gcid to get the SID for the next directory */
