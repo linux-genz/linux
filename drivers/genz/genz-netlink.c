@@ -51,6 +51,7 @@ const static struct nla_policy genz_genl_policy[GENZ_A_MAX + 1] = {
 	[GENZ_A_GCID] = { .type = NLA_U32 },
 	[GENZ_A_CCLASS] = { .type = NLA_U16 },
 	[GENZ_A_FRU_UUID] = { .len = UUID_LEN },
+	[GENZ_A_MGR_UUID] = { .len = UUID_LEN },
 	[GENZ_A_RESOURCE_LIST] = { .type = NLA_NESTED },
 };
 
@@ -167,7 +168,7 @@ static int parse_resource_list(const struct nlattr * resource_list,
 	struct genz_fabric *fabric;
 	struct genz_dev *zdev;
 
-	fabric = genz_find_fabric(zcomp->fabric_num);
+	fabric = genz_find_fabric(zcomp->subnet->fabric->number);
 	if (!fabric) 
 		return -ENOMEM;
 	printk(KERN_INFO "\tRESOURCE_LIST:\n");
@@ -175,8 +176,7 @@ static int parse_resource_list(const struct nlattr * resource_list,
 	nla_for_each_nested(nested_attr, resource_list, rem) {
 		zdev = genz_alloc_dev(fabric);
 		if (!zdev)  {
-			/* kref_put on the fabric structure */
-			kref_put(&fabric->kref, genz_free_fabric);
+			/* Revisit: clean up fabric? */
 			return -ENOMEM;
 		}
 		zdev->zcomp = zcomp;
@@ -218,6 +218,8 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 	struct genz_component *zcomp = NULL;
 	uint32_t fabric_num, gcid;
 	int ret = 0;
+	struct genz_fabric *f;
+	struct genz_subnet *s;
 
 	if (info->attrs[GENZ_A_FABRIC_NUM]) {
 		fabric_num = nla_get_u32(info->attrs[GENZ_A_FABRIC_NUM]);
@@ -227,8 +229,12 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 		printk(KERN_ERR "%s: missing required fabric number\n", __FUNCTION__);
 		return -EINVAL;
 	}
-		
-/* Revist: find_fabric here */
+	f = genz_find_fabric(fabric_num);
+	if (f == NULL) {
+		printk(KERN_ERR "%s: failed to find fabric %d\n", __FUNCTION__, fabric_num);
+		return -EINVAL;
+	}
+
 	if (info->attrs[GENZ_A_GCID]) {
 		gcid = nla_get_u32(info->attrs[GENZ_A_GCID]);
 		printk(KERN_DEBUG "\tGCID: %d ", gcid);
@@ -237,12 +243,19 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 		return -EINVAL;
 	}
 	/* Revisit: add a find_component() */
+	s = genz_find_subnet(genz_get_sid(gcid), f);
+	/* Revisit: alloc_component should be a find_component because
+           it could already exist */
 	zcomp = genz_alloc_component();
 	if (zcomp == NULL) {
+		printk(KERN_ERR "%s: genz_alloc_component failed\n", __FUNCTION__);
 		return -ENOMEM;
 	}
-	zcomp->fabric_num = fabric_num;
-	zcomp->gcid = gcid;
+	ret = genz_init_component(zcomp, s, genz_get_cid(gcid));
+	if (ret) {
+		printk(KERN_ERR "%s: genz_init_component failed with %d\n", __FUNCTION__, ret);
+		return -ret;
+	}
 
 	if (info->attrs[GENZ_A_CCLASS]) {
 		zcomp->cclass = nla_get_u32(info->attrs[GENZ_A_CCLASS]);
@@ -264,6 +277,16 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 		goto err;
 	}
 
+	if (info->attrs[GENZ_A_MGR_UUID]) {
+		byte_uuid = nla_data(info->attrs[GENZ_A_MGR_UUID]);
+		f->mgr_uuid = GENZ_CAST_UUID(byte_uuid);
+		printk(KERN_DEBUG "\tMGR_UUID: %pUb\n", &f->mgr_uuid);
+	} else {
+		printk(KERN_ERR "%s: missing required MGR_UUID\n", __FUNCTION__);
+		ret = -EINVAL;
+		goto err;
+	}
+return 0;
 	if (info->attrs[GENZ_A_RESOURCE_LIST]) {
 		ret = parse_resource_list(info->attrs[GENZ_A_RESOURCE_LIST],
 			zcomp);

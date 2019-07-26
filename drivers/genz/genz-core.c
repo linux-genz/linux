@@ -122,6 +122,7 @@ static int genz_match_device(struct device *dev, struct device_driver *drv)
 	struct genz_core_structure *core;
 	int match;
 
+	pr_debug( "%s: entered\n", __func__);
 	core = genz_read_core(dev);
 	if (core == 0)
                 return 0;
@@ -138,11 +139,13 @@ static int genz_match_device(struct device *dev, struct device_driver *drv)
 static int genz_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
 	/* Revisit: use this for hot-add/delete */
+	pr_debug( "%s: entered\n", __func__);
 	return 0;
 }
 
 static void genz_shutdown(struct device *dev)
 {
+	pr_debug( "%s: entered\n", __func__);
 }
 
 struct bus_type genz_bus_type = {

@@ -54,6 +54,8 @@ typedef unsigned char uuid_str_t[37];	/* UUID string of format:
 #define GENZ_Z_UUID	0x4813ea5f074e4be2a355a354145c9927
 #define GENZ_CAST_UUID(u) *((uuid_t *)&(u))
 
+extern struct bus_type genz_bus_type;
+
 typedef loff_t genz_control_cookie;
 
 /* Revisit: does this belong in mod_devicetable.h? */
@@ -79,15 +81,16 @@ struct genz_resource {
 struct genz_fabric {
 	struct list_head node;  	/* node in list of fabrics */
 	uint32_t number;		/* fabric_number */
+	uuid_t mgr_uuid;
 	struct list_head devices;	/* List of devices on this fabric */
 	struct list_head components;	/* List of components on this fabric */
+	struct rw_semaphore subnet_sem; /* protects subnets list */
 	struct list_head subnets;	/* List of subnets on this fabric */
 	struct list_head bridges;	/* List of local bridges on fabric */
 	struct kref	kref;
-	struct kobject  kobj;
 	struct device   dev;		/* /sys/devices/genz<N> */
 };
-#define to_genz_fabric(x) container_of(x, struct genz_fabric, kobj)
+#define to_genz_fabric(x) container_of(x, struct genz_fabric, kref)
 
 struct genz_fabric_attribute {
 	struct attribute attr;
@@ -100,8 +103,9 @@ struct genz_fabric_attribute {
 #define to_genz_fabric_attr(x) container_of(x, struct genz_fabric_attribute, attr)
 
 struct genz_subnet {
-	struct genz_component	*comp;
-	struct list_head	fab_subnet_node; /* per-fabric list of subnets*/
+	uint32_t		sid;
+	struct genz_fabric 	*fabric;
+	struct list_head	node; /* per-fabric list of subnets*/
 	struct kobject		kobj; /* /sys/devices/genz<N>/SID */
 };
 #define to_genz_subnet(x) container_of(x, struct genz_subnet, kobj)
@@ -117,10 +121,10 @@ struct genz_subnet_attribute {
 #define to_genz_subnet_attr(x) container_of(x, struct genz_subnet_attribute, attr)
 
 struct genz_component {
-	uint32_t		gcid;
+	uint32_t		cid;
 	uint8_t			cclass;
 	uuid_t			fru_uuid;
-	uint32_t		fabric_num;
+	struct genz_subnet	*subnet;
 	struct list_head	fab_comp_node; /* Node in the per-fabric list */
 	struct list_head	control_zres_list; /* head of zres list */
 	struct list_head	data_zres_list;    /* head of zres list */
@@ -170,6 +174,7 @@ struct genz_bridge_driver {
 	int (*control_mmap)(struct genz_dev *zdev); /* Revisit: need flags? */
 	int (*control_read)(struct genz_dev *zdev, genz_control_cookie offset, size_t size, void *data, uint flags);
 	int (*control_write)(struct genz_dev *zdev, genz_control_cookie offset, size_t size, void *data, uint flags);
+	int (*control_write_msg)(struct genz_dev *zdev, genz_control_cookie offset, size_t size, void *data, uint flags);
 	int (*data_mmap)(struct genz_dev *zdev);
 	int (*data_read)(struct genz_dev *zdev, genz_control_cookie offset, size_t size, void *data);
 	int (*data_write)(struct genz_dev *zdev, genz_control_cookie offset, size_t size, void *data);
