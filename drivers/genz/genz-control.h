@@ -36,6 +36,11 @@
 
 #include "genz.h"
 
+int genz_create_gcid_file(struct kobject *kobj);
+int genz_create_cclass_file(struct kobject *kobj);
+int genz_create_fru_uuid_file(struct kobject *kobj);
+int genz_create_mgr_uuid_file(struct kobject *kobj);
+int genz_create_sid_file(struct genz_subnet *s);
 int  genz_map_core( struct genz_dev *zdev, struct genz_core_structure ** core);
 int genz_find_control_structure(struct genz_dev *zdev, int type, int version);
 int genz_request_control_structure(struct genz_dev *zdev, int index, int type,

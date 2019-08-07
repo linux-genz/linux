@@ -35,9 +35,183 @@
  */
 
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 #include "genz.h"
 #include "genz-types.h"
 #include "genz-control.h"
+#include "genz-probe.h"
+
+static ssize_t gcid_show(struct kobject *kobj,
+		struct kobj_attribute *attr,
+		char *buf)
+{
+	struct genz_component *comp;
+
+	printk(KERN_ERR "kobj is %px\n", kobj);
+	if (kobj == NULL) {
+		printk(KERN_ERR "kobj is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "NULL kobj\n"));
+	}
+	if (kobj->name == NULL) {
+		printk(KERN_ERR "kobj->name is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "NULL kobj->name\n"));
+	}
+	comp = kobj_to_genz_component(kobj);
+	printk(KERN_ERR "comp is %px\n", comp);
+
+	if (comp == NULL) {
+		printk(KERN_ERR "comp is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
+	}
+	if (comp->subnet == NULL) {
+		printk(KERN_ERR "comp->subnet is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad component subnet\n"));
+	}
+	return(snprintf(buf, PAGE_SIZE, "%04x:%03x\n", comp->subnet->sid, comp->cid));
+}
+
+#ifdef NOT_YET
+static ssize_t gcid_store(struct kobject *kobj,
+		struct kobj_attribute *attr,
+		const char *buf,
+		size_t count)
+{
+	struct genz_component *comp;
+	uint32_t gcid;
+
+	comp = kobj_to_genz_component(kobj);
+	sscanf(buf, "%du", &gcid);
+	comp->cid = genz_get_cid(gcid);
+	comp->subnet->sid = genz_get_sid(gcid);
+	
+	return count;	
+}
+#endif
+
+static struct kobj_attribute gcid_attribute =
+	__ATTR(gcid, (S_IWUSR | S_IRUGO), gcid_show, NULL);
+
+int genz_create_gcid_file(struct kobject *kobj)
+{
+	int ret = 0;
+
+	printk(KERN_ERR "%s: create_file for kobj %px\n", __func__, kobj);
+	ret = sysfs_create_file(kobj, &gcid_attribute.attr);
+	return ret;
+}
+
+static ssize_t fru_uuid_show(struct kobject *kobj,
+		struct kobj_attribute *attr,
+		char *buf)
+{
+	struct genz_component *comp;
+
+	printk(KERN_ERR "kobj is %px\n", kobj);
+	if (kobj == NULL) {
+		printk(KERN_ERR "kobj is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "NULL kobj\n"));
+	}
+	if (kobj->name == NULL) {
+		printk(KERN_ERR "kobj->name is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "NULL kobj->name\n"));
+	}
+	comp = kobj_to_genz_component(kobj);
+	printk(KERN_ERR "comp is %px\n", comp);
+
+	if (comp == NULL) {
+		printk(KERN_ERR "comp is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
+	}
+	return(snprintf(buf, PAGE_SIZE, "%pUL\n", &comp->fru_uuid));
+}
+
+static struct kobj_attribute fru_uuid_attribute =
+	__ATTR(fru_uuid, (S_IWUSR | S_IRUGO), fru_uuid_show, NULL);
+
+int genz_create_fru_uuid_file(struct kobject *kobj)
+{
+	int ret = 0;
+
+	printk(KERN_ERR "%s: create_file for kobj %px\n", __func__, kobj);
+	ret = sysfs_create_file(kobj, &fru_uuid_attribute.attr);
+	return ret;
+}
+
+static ssize_t mgr_uuid_show(struct kobject *kobj,
+		struct kobj_attribute *attr,
+		char *buf)
+{
+	struct genz_fabric *fab;
+	struct device *dev;
+
+	printk(KERN_ERR "kobj is %px\n", kobj);
+	if (kobj == NULL) {
+		printk(KERN_ERR "kobj is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "NULL kobj\n"));
+	}
+	if (kobj->name == NULL) {
+		printk(KERN_ERR "kobj->name is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "NULL kobj->name\n"));
+	}
+	dev = kobj_to_dev(kobj);
+	fab = genz_dev_to_fabric(dev);
+	printk(KERN_ERR "fab is %px\n", fab);
+
+	if (fab == NULL) {
+		printk(KERN_ERR "fab is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad fabric\n"));
+	}
+	return(snprintf(buf, PAGE_SIZE, "%pUL\n", &fab->mgr_uuid));
+}
+
+static struct kobj_attribute mgr_uuid_attribute =
+	__ATTR(mgr_uuid, (S_IWUSR | S_IRUGO), mgr_uuid_show, NULL);
+
+int genz_create_mgr_uuid_file(struct kobject *kobj)
+{
+	int ret = 0;
+
+	printk(KERN_ERR "%s: create_file for kobj %px\n", __func__, kobj);
+	ret = sysfs_create_file(kobj, &mgr_uuid_attribute.attr);
+	return ret;
+}
+
+static ssize_t sid_show(struct kobject *kobj,
+		struct kobj_attribute *attr,
+		char *buf)
+{
+	struct genz_subnet *s;
+
+	printk(KERN_ERR "kobj is 0x%px\n",  kobj);
+	if (kobj == NULL) {
+		printk(KERN_ERR "kobj is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "NULL kobj\n"));
+	}
+	if (kobj->name == NULL) {
+		printk(KERN_ERR "kobj->name is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "NULL kobj->name\n"));
+	}
+	s = to_genz_subnet(kobj);
+	printk(KERN_ERR "subnet is %px\n", s);
+
+	if (s == NULL) {
+		printk(KERN_ERR "s is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad subnet\n"));
+	}
+	return(snprintf(buf, PAGE_SIZE, "%04x\n", s->sid));
+}
+
+static struct kobj_attribute sid_attribute =
+	__ATTR(sid, (S_IWUSR | S_IRUGO), sid_show, NULL);
+
+int genz_create_sid_file(struct genz_subnet *s)
+{
+	int ret = 0;
+
+	printk(KERN_ERR "%s: create_file for kobj %px\n", __func__, &s->kobj);
+	ret = sysfs_create_file(&s->kobj, &sid_attribute.attr);
+	return ret;
+}
 
 static int traverse_control_pointers(struct genz_dev *zdev,
 	struct genz_control_info *parent,

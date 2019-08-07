@@ -220,6 +220,7 @@ struct genz_control_ptr_info {
     ssize_t struct_bytes;
     char *name;
     uint8_t vers;
+    bool chained; /* this structure/table contains chained pointers */
 };
 
 extern struct genz_control_ptr_info genz_control_structure_type_to_ptrs[];

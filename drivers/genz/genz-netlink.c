@@ -43,6 +43,7 @@
 #include "genz.h"
 #include "genz-netlink.h"
 #include "genz-probe.h"
+#include "genz-control.h"
 
 
 /* Netlink Generic Attribute Policy */
@@ -246,6 +247,11 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 	s = genz_find_subnet(genz_get_sid(gcid), f);
 	/* Revisit: alloc_component should be a find_component because
            it could already exist */
+	ret = genz_create_sid_file(s);
+	if (ret) {
+		printk(KERN_ERR "%s: genz_create_sid_file failed\n", __FUNCTION__);
+		return -EINVAL;
+	}
 	zcomp = genz_alloc_component();
 	if (zcomp == NULL) {
 		printk(KERN_ERR "%s: genz_alloc_component failed\n", __FUNCTION__);
@@ -255,6 +261,15 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 	if (ret) {
 		printk(KERN_ERR "%s: genz_init_component failed with %d\n", __FUNCTION__, ret);
 		return -ret;
+	}
+ 
+	printk(KERN_ERR "zcomp is %px comp->kobj is %px\n", zcomp, &(zcomp->kobj));
+	printk(KERN_ERR "zcomp->subnet is %px\n", zcomp->subnet);
+	printk(KERN_ERR "zcomp->cid is 0x%03d\n", zcomp->cid);
+	ret = genz_create_gcid_file(&(zcomp->kobj));
+	if (ret) {
+		printk(KERN_ERR "%s: genz_create_gcid_file failed\n", __FUNCTION__);
+		return -EINVAL;
 	}
 
 	if (info->attrs[GENZ_A_CCLASS]) {
@@ -266,6 +281,9 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 		ret = -EINVAL;
 		goto err;
 	}
+/*
+	ret = genz_create_cclass_file(&(zcomp->kobj));
+*/
 
 	if (info->attrs[GENZ_A_FRU_UUID]) {
 		byte_uuid = nla_data(info->attrs[GENZ_A_FRU_UUID]);
@@ -276,6 +294,7 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 		ret = -EINVAL;
 		goto err;
 	}
+	ret = genz_create_fru_uuid_file(&(zcomp->kobj));
 
 	if (info->attrs[GENZ_A_MGR_UUID]) {
 		byte_uuid = nla_data(info->attrs[GENZ_A_MGR_UUID]);
@@ -285,6 +304,11 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 		printk(KERN_ERR "%s: missing required MGR_UUID\n", __FUNCTION__);
 		ret = -EINVAL;
 		goto err;
+	}
+	ret = genz_create_mgr_uuid_file(&f->dev.kobj);
+	if (ret) {
+		printk(KERN_ERR "%s: genz_create_mgr_uuid_file failed\n", __FUNCTION__);
+		return -EINVAL;
 	}
 return 0;
 	if (info->attrs[GENZ_A_RESOURCE_LIST]) {

@@ -122,16 +122,21 @@ struct genz_subnet_attribute {
 
 struct genz_component {
 	uint32_t		cid;
+	struct kobject		kobj;  /* /sys/devices/genz<N>/SID/CID */
 	uint8_t			cclass;
 	uuid_t			fru_uuid;
 	struct genz_subnet	*subnet;
 	struct list_head	fab_comp_node; /* Node in the per-fabric list */
 	struct list_head	control_zres_list; /* head of zres list */
 	struct list_head	data_zres_list;    /* head of zres list */
-	struct kobject		kobj;  /* /sys/devices/genz<N>/SID/CID */
 	struct kref		kref;
 };
-#define to_genz_component(x) container_of(x, struct genz_component, kobj)
+
+static inline struct genz_component *kobj_to_genz_component(struct kobject *kobj)
+{
+        return container_of(kobj, struct genz_component, kobj);
+}
+
 
 struct genz_component_attribute {
 	struct attribute attr;
@@ -207,6 +212,11 @@ static inline int genz_get_sid(int gcid)
 static inline int genz_get_cid(int gcid)
 {
 	return(0xFFF & gcid);
+}
+
+static inline int genz_get_gcid(int sid, int cid)
+{
+	return((sid<<12) | cid);
 }
 
 /*

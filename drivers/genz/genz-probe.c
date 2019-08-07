@@ -168,6 +168,18 @@ out:
 
 }
 
+struct genz_fabric * genz_dev_to_fabric(struct device *dev)
+{
+	struct genz_fabric *fab;
+
+	list_for_each_entry(fab, &genz_fabrics, node) {
+		if (&fab->dev == dev) {
+			return fab;
+		}
+	}
+	return NULL;
+}
+
 static struct genz_subnet *genz_alloc_subnet(void)
 {
 	struct genz_subnet *s;
@@ -280,7 +292,7 @@ static ssize_t component_attr_show(struct kobject *kobj,
         struct genz_component *comp;
 
         attribute = to_genz_component_attr(attr);
-        comp = to_genz_component(kobj);
+        comp = kobj_to_genz_component(kobj);
 
         if (!attribute->show)
                 return -EIO;
@@ -292,7 +304,7 @@ static void component_release(struct kobject *kobj)
 {
 	struct genz_component *comp;
 
-	comp = to_genz_component(kobj);
+	comp = kobj_to_genz_component(kobj);
 	/* Revisit: remove from fabric list */
 	kfree(comp);
 }
@@ -327,13 +339,16 @@ int genz_init_component(struct genz_component *zcomp,
 
 	zcomp->subnet = s;
 	zcomp->cid = cid;
-        ret = kobject_init_and_add(&zcomp->kobj, &component_ktype, &s->kobj, "%03d", cid);
+        ret = kobject_init_and_add(&(zcomp->kobj), &component_ktype, &s->kobj, "%03d", cid);
 	if (ret) {
 		pr_debug( "%s: kobject_init_and_add failed for cid %d\n",
 			 __func__, cid);
+		kobject_put(&zcomp->kobj);
 		return ret;
 	}
 
+	printk(KERN_ERR "component kobj is %px\n", &(zcomp->kobj));
+	printk(KERN_ERR "subnet kobj is %px\n", &(s->kobj));
 	/* Revisit: add the fab_comp_node to the fabric component list */
 	kref_init(&zcomp->kref);
 	return(ret);
