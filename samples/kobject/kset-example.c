@@ -56,6 +56,7 @@ static ssize_t foo_attr_show(struct kobject *kobj,
 	struct foo_attribute *attribute;
 	struct foo_obj *foo;
 
+	printk(KERN_ERR "foo_attr_show kobj is %px\n", kobj);
 	attribute = to_foo_attr(attr);
 	foo = to_foo_obj(kobj);
 

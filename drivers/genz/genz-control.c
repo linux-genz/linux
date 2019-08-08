@@ -41,22 +41,10 @@
 #include "genz-control.h"
 #include "genz-probe.h"
 
-static ssize_t gcid_show(struct kobject *kobj,
-		struct kobj_attribute *attr,
+static ssize_t gcid_show(struct genz_component *comp,
+		struct genz_component_attribute *attr,
 		char *buf)
 {
-	struct genz_component *comp;
-
-	printk(KERN_ERR "kobj is %px\n", kobj);
-	if (kobj == NULL) {
-		printk(KERN_ERR "kobj is NULL\n");
-		return(snprintf(buf, PAGE_SIZE, "NULL kobj\n"));
-	}
-	if (kobj->name == NULL) {
-		printk(KERN_ERR "kobj->name is NULL\n");
-		return(snprintf(buf, PAGE_SIZE, "NULL kobj->name\n"));
-	}
-	comp = kobj_to_genz_component(kobj);
 	printk(KERN_ERR "comp is %px\n", comp);
 
 	if (comp == NULL) {
@@ -88,7 +76,7 @@ static ssize_t gcid_store(struct kobject *kobj,
 }
 #endif
 
-static struct kobj_attribute gcid_attribute =
+static struct genz_component_attribute gcid_attribute =
 	__ATTR(gcid, (S_IWUSR | S_IRUGO), gcid_show, NULL);
 
 int genz_create_gcid_file(struct kobject *kobj)
@@ -100,22 +88,10 @@ int genz_create_gcid_file(struct kobject *kobj)
 	return ret;
 }
 
-static ssize_t fru_uuid_show(struct kobject *kobj,
-		struct kobj_attribute *attr,
+static ssize_t fru_uuid_show(struct genz_component *comp,
+		struct genz_component_attribute *attr,
 		char *buf)
 {
-	struct genz_component *comp;
-
-	printk(KERN_ERR "kobj is %px\n", kobj);
-	if (kobj == NULL) {
-		printk(KERN_ERR "kobj is NULL\n");
-		return(snprintf(buf, PAGE_SIZE, "NULL kobj\n"));
-	}
-	if (kobj->name == NULL) {
-		printk(KERN_ERR "kobj->name is NULL\n");
-		return(snprintf(buf, PAGE_SIZE, "NULL kobj->name\n"));
-	}
-	comp = kobj_to_genz_component(kobj);
 	printk(KERN_ERR "comp is %px\n", comp);
 
 	if (comp == NULL) {
@@ -125,7 +101,7 @@ static ssize_t fru_uuid_show(struct kobject *kobj,
 	return(snprintf(buf, PAGE_SIZE, "%pUL\n", &comp->fru_uuid));
 }
 
-static struct kobj_attribute fru_uuid_attribute =
+static struct genz_component_attribute fru_uuid_attribute =
 	__ATTR(fru_uuid, (S_IWUSR | S_IRUGO), fru_uuid_show, NULL);
 
 int genz_create_fru_uuid_file(struct kobject *kobj)
@@ -137,24 +113,10 @@ int genz_create_fru_uuid_file(struct kobject *kobj)
 	return ret;
 }
 
-static ssize_t mgr_uuid_show(struct kobject *kobj,
-		struct kobj_attribute *attr,
+static ssize_t mgr_uuid_show(struct genz_fabric *fab,
+		struct genz_fabric_attribute *attr,
 		char *buf)
 {
-	struct genz_fabric *fab;
-	struct device *dev;
-
-	printk(KERN_ERR "kobj is %px\n", kobj);
-	if (kobj == NULL) {
-		printk(KERN_ERR "kobj is NULL\n");
-		return(snprintf(buf, PAGE_SIZE, "NULL kobj\n"));
-	}
-	if (kobj->name == NULL) {
-		printk(KERN_ERR "kobj->name is NULL\n");
-		return(snprintf(buf, PAGE_SIZE, "NULL kobj->name\n"));
-	}
-	dev = kobj_to_dev(kobj);
-	fab = genz_dev_to_fabric(dev);
 	printk(KERN_ERR "fab is %px\n", fab);
 
 	if (fab == NULL) {
@@ -164,7 +126,7 @@ static ssize_t mgr_uuid_show(struct kobject *kobj,
 	return(snprintf(buf, PAGE_SIZE, "%pUL\n", &fab->mgr_uuid));
 }
 
-static struct kobj_attribute mgr_uuid_attribute =
+static struct genz_fabric_attribute mgr_uuid_attribute =
 	__ATTR(mgr_uuid, (S_IWUSR | S_IRUGO), mgr_uuid_show, NULL);
 
 int genz_create_mgr_uuid_file(struct kobject *kobj)
@@ -176,22 +138,10 @@ int genz_create_mgr_uuid_file(struct kobject *kobj)
 	return ret;
 }
 
-static ssize_t sid_show(struct kobject *kobj,
-		struct kobj_attribute *attr,
+static ssize_t sid_show(struct genz_subnet *s,
+		struct genz_subnet_attribute *attr,
 		char *buf)
 {
-	struct genz_subnet *s;
-
-	printk(KERN_ERR "kobj is 0x%px\n",  kobj);
-	if (kobj == NULL) {
-		printk(KERN_ERR "kobj is NULL\n");
-		return(snprintf(buf, PAGE_SIZE, "NULL kobj\n"));
-	}
-	if (kobj->name == NULL) {
-		printk(KERN_ERR "kobj->name is NULL\n");
-		return(snprintf(buf, PAGE_SIZE, "NULL kobj->name\n"));
-	}
-	s = to_genz_subnet(kobj);
 	printk(KERN_ERR "subnet is %px\n", s);
 
 	if (s == NULL) {
@@ -201,7 +151,7 @@ static ssize_t sid_show(struct kobject *kobj,
 	return(snprintf(buf, PAGE_SIZE, "%04x\n", s->sid));
 }
 
-static struct kobj_attribute sid_attribute =
+static struct genz_subnet_attribute sid_attribute =
 	__ATTR(sid, (S_IWUSR | S_IRUGO), sid_show, NULL);
 
 int genz_create_sid_file(struct genz_subnet *s)

@@ -89,6 +89,7 @@ struct genz_fabric {
 	struct list_head bridges;	/* List of local bridges on fabric */
 	struct kref	kref;
 	struct device   dev;		/* /sys/devices/genz<N> */
+	struct kset	*zkset;
 };
 #define to_genz_fabric(x) container_of(x, struct genz_fabric, kref)
 
