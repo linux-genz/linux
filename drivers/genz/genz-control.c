@@ -58,26 +58,8 @@ static ssize_t gcid_show(struct genz_component *comp,
 	return(snprintf(buf, PAGE_SIZE, "%04x:%03x\n", comp->subnet->sid, comp->cid));
 }
 
-#ifdef NOT_YET
-static ssize_t gcid_store(struct kobject *kobj,
-		struct kobj_attribute *attr,
-		const char *buf,
-		size_t count)
-{
-	struct genz_component *comp;
-	uint32_t gcid;
-
-	comp = kobj_to_genz_component(kobj);
-	sscanf(buf, "%du", &gcid);
-	comp->cid = genz_get_cid(gcid);
-	comp->subnet->sid = genz_get_sid(gcid);
-	
-	return count;	
-}
-#endif
-
 static struct genz_component_attribute gcid_attribute =
-	__ATTR(gcid, (S_IWUSR | S_IRUGO), gcid_show, NULL);
+	__ATTR(gcid, (S_IRUGO), gcid_show, NULL);
 
 int genz_create_gcid_file(struct kobject *kobj)
 {
@@ -102,7 +84,7 @@ static ssize_t fru_uuid_show(struct genz_component *comp,
 }
 
 static struct genz_component_attribute fru_uuid_attribute =
-	__ATTR(fru_uuid, (S_IWUSR | S_IRUGO), fru_uuid_show, NULL);
+	__ATTR(fru_uuid, (S_IRUGO), fru_uuid_show, NULL);
 
 int genz_create_fru_uuid_file(struct kobject *kobj)
 {
@@ -127,7 +109,7 @@ static ssize_t mgr_uuid_show(struct genz_fabric *fab,
 }
 
 static struct genz_fabric_attribute mgr_uuid_attribute =
-	__ATTR(mgr_uuid, (S_IWUSR | S_IRUGO), mgr_uuid_show, NULL);
+	__ATTR(mgr_uuid, (S_IRUGO), mgr_uuid_show, NULL);
 
 int genz_create_mgr_uuid_file(struct kobject *kobj)
 {
@@ -152,7 +134,7 @@ static ssize_t sid_show(struct genz_subnet *s,
 }
 
 static struct genz_subnet_attribute sid_attribute =
-	__ATTR(sid, (S_IWUSR | S_IRUGO), sid_show, NULL);
+	__ATTR(sid, (S_IRUGO), sid_show, NULL);
 
 int genz_create_sid_file(struct genz_subnet *s)
 {
@@ -869,7 +851,7 @@ static int traverse_array(struct genz_dev *zdev,
 
 	/* Now initialize the binary attribute file. */
 	ci->battr.attr.name = genz_structure_name(hdr.type);
-	ci->battr.attr.mode = S_IRUSR | S_IWUSR;
+	ci->battr.attr.mode = S_IRUSR;
 	ci->battr.size = ci->size;
 	ci->battr.read =  read_control_structure;
 	ci->battr.write = write_control_structure;
@@ -1025,7 +1007,7 @@ static int traverse_chained_control_pointers(struct genz_dev *zdev,
 
 		/* Now initialize the binary attribute file. */
 		ci->battr.attr.name = genz_structure_name(hdr.type);
-		ci->battr.attr.mode = S_IRUSR | S_IWUSR;
+		ci->battr.attr.mode = S_IRUSR;
 		ci->battr.size = ci->size;
 		ci->battr.read =  read_control_structure;
 		ci->battr.write = write_control_structure;
@@ -1093,7 +1075,7 @@ static int traverse_structure(struct genz_dev *zdev,
 	
 	/* Now initialize the binary attribute file. */
 	ci->battr.attr.name = genz_structure_name(hdr.type);
-	ci->battr.attr.mode = S_IRUSR | S_IWUSR;
+	ci->battr.attr.mode = S_IRUSR;
 	ci->battr.size = ci->size;
 	ci->battr.read =  read_control_structure;
 	ci->battr.write = write_control_structure;
@@ -1273,7 +1255,7 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 
 	/* Now initialize the binary attribute file for the core structure. */
 	ci->battr.attr.name = genz_structure_name(hdr.type);
-	ci->battr.attr.mode = S_IRUSR | S_IWUSR;
+	ci->battr.attr.mode = S_IRUSR;
 	ci->battr.size = ci->size;
 	ci->battr.read =  read_control_structure;
 	ci->battr.write = write_control_structure;

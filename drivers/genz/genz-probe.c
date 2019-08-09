@@ -100,11 +100,6 @@ static int genz_init_fabric(struct genz_fabric *f,
 		return ret;
 	}
 	
-	/* Create a kset */
-	f->zkset = kset_create_and_add("genz_kset", NULL, &f->dev.kobj);
-	if (!f->zkset) {
-		return -ENOMEM;
-	}
 	return ret;
 }
 
@@ -240,8 +235,6 @@ static int genz_init_subnet(struct genz_subnet *s,
 
         s->sid = sid;
 	s->fabric = f;
-
-	s->kobj.kset = f->zkset;
 
         ret = kobject_init_and_add(&s->kobj, &subnet_ktype, &f->dev.kobj, "%04d", sid);
 	if (ret) {
