@@ -157,9 +157,9 @@ static int traverse_control_pointers(struct genz_dev *zdev,
 int genz_valid_struct_type(int type)
 {
 	
-	if (type < 0 || type > genz_control_structure_type_to_ptrs_nelems)
+	if (type < 0 || type > genz_struct_type_to_ptrs_nelems)
 		return 0;
-	if (genz_control_structure_type_to_ptrs[type].ptr != NULL)
+	if (genz_struct_type_to_ptrs[type].ptr != NULL)
 		return 1;
 	else
 		return 0;
@@ -170,12 +170,12 @@ int genz_valid_struct_type(int type)
  * int type - the control structure type
  * Returns the name of a structure type or NULL if the type is not vaild.
  */
-static char * genz_structure_name(int type)
+static const char * genz_structure_name(int type)
 {
 	if (!genz_valid_struct_type(type))
 		return "";
 		
-	return(genz_control_structure_type_to_ptrs[type].name);
+	return(genz_struct_type_to_ptrs[type].name);
 }
 
 static void control_info_release(struct kobject *kobj)
@@ -788,7 +788,7 @@ static int read_and_validate_header(struct genz_dev *zdev,
 		return -EINVAL;
 	}
 	/* Validate the version. */
-	expected_vers = genz_control_structure_type_to_ptrs[hdr->type].vers;
+	expected_vers = genz_struct_type_to_ptrs[hdr->type].vers;
 	if (hdr->vers != expected_vers) {
 		pr_debug("%s: structure version mismatch expected %d but found %d.\n", __func__, expected_vers, hdr->vers);
 		return -EINVAL;
@@ -966,7 +966,7 @@ static int traverse_chained_control_pointers(struct genz_dev *zdev,
 		return 0;
 
 	/* Find the offset for the chained field in this structure type. */
-	chain_offset = find_chain_offset(&genz_control_structure_type_to_ptrs[hdr.type]);
+	chain_offset = find_chain_offset(&genz_struct_type_to_ptrs[hdr.type]);
 	if (chain_offset < 0) {
 		pr_debug("%s: could not find the chain pointer\n", __func__);
 		return (int)chain_offset;
@@ -1020,7 +1020,7 @@ static int traverse_chained_control_pointers(struct genz_dev *zdev,
 		 * this while loop. 
 		 */
 		ret = traverse_control_pointers(zdev, ci,
-			&genz_control_structure_type_to_ptrs[hdr.type],
+			&genz_struct_type_to_ptrs[hdr.type],
 			&ci->kobj);
 		if (ret < 0) {
 			/* Handle error! */
@@ -1088,7 +1088,7 @@ static int traverse_structure(struct genz_dev *zdev,
 	}
 	/* Recursively traverse any pointers in this structure */
 	ret = traverse_control_pointers(zdev, ci,
-		&genz_control_structure_type_to_ptrs[hdr.type],
+		&genz_struct_type_to_ptrs[hdr.type],
 		&ci->kobj);
 	if (ret < 0) {
 		/* Revisit: handle error */
@@ -1116,16 +1116,9 @@ static int traverse_control_pointers(struct genz_dev *zdev,
 				ret = traverse_structure(zdev, parent, 
 					pi, dir, csp);
 				break;
-			case GENZ_CONTROL_POINTER_CHAIN_START:
+			case GENZ_CONTROL_POINTER_CHAINED:
 				ret = traverse_chained_control_pointers(zdev,
 					parent, pi, dir, csp);
-				break;
-			case GENZ_CONTROL_POINTER_CHAINED:
-				/*
-				 * Chains are followed from
-				 * traverse_chained_control_pointers()
-				 * when the type is a chained structure.
-				 */
 				break;
 			case GENZ_CONTROL_POINTER_ARRAY:
 				ret = traverse_array(zdev, parent,
@@ -1185,7 +1178,7 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 		return ret;
 	}
 
-	cpi = &genz_control_structure_type_to_ptrs[0];
+	cpi = &genz_struct_type_to_ptrs[0];
 
 	/* Validate this the expected structure type */
 	/* Revisit: Get Core type from enum instead of hardcoding 0 */
@@ -1266,7 +1259,7 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	
 	zdev->root_control_info = ci;
 	traverse_control_pointers(zdev, ci,
-			&genz_control_structure_type_to_ptrs[hdr.type], 
+			&genz_struct_type_to_ptrs[hdr.type], 
 			control_dir);
 	return 0;
 }

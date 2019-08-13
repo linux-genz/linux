@@ -44,8 +44,8 @@
 #include "genz-netlink.h"
 #include "genz-probe.h"
 
-static bool no_genz;
-module_param(no_genz, bool, 0444);
+static int no_genz;
+module_param(no_genz, int, 0444);
 MODULE_PARM_DESC(no_genz, "Disable genz (default 0)");
 
 /**
@@ -65,7 +65,7 @@ int genz_disabled(void)
 EXPORT_SYMBOL_GPL(genz_disabled);
 
 /**
- * genz_validate_control_space_structure_type - check structure type
+ * genz_validate_structure_type - check structure type
  * @int type: the structure type field
  *
  * The Gen-Z control space structures contains a 12 bit type field
@@ -76,18 +76,18 @@ EXPORT_SYMBOL_GPL(genz_disabled);
  * 0 - the given type is invalid
  * 1 - the given type is valid
  */
-int genz_validate_control_space_structure_type(int type)
+int genz_validate_structure_type(int type)
 {
-	/* Use the genz_control_structure_type_to_ptrs array to check type */
-	if (type < 0 || type > genz_control_structure_type_to_ptrs_nelems)
+	/* Use the genz_struct_type_to_ptrs array to check type */
+	if (type < 0 || type > genz_struct_type_to_ptrs_nelems)
 		return(0);
 	/*
 	 * If there is a hole in the array, then it has a NULL entry. Make
 	 * sure this type has a valid entry.
 	 */
-	return (genz_control_structure_type_to_ptrs[type].ptr != NULL);
+	return (genz_struct_type_to_ptrs[type].ptr != NULL);
 }
-EXPORT_SYMBOL_GPL(genz_validate_control_space_structure_type);
+EXPORT_SYMBOL_GPL(genz_validate_structure_type);
 
 static int is_genz_device(struct genz_core_structure *core)
 {

@@ -41,20 +41,23 @@
  *
  * Generator Script Meta:
  *     Version      : v0.2
- *     Generated On : 12, Jul 2019
+ *     Generated On : 12, Aug 2019
  *
  *
  * **************************************************************
  *
- * Struct        -----------------------------------  90
- * Struct entries(declared inside structs and enums)  2155
+ * Struct        -----------------------------------  91
+ * Struct entries(declared inside structs and enums)  2331
  * Unions        -----------------------------------  167
- * Enums         -----------------------------------  273
+ * Enums         -----------------------------------  274
  */
 #ifndef __GENZH__
 #define __GENZH__
 
+
 #ifndef __KERNEL__
+
+#include <stdbool.h>
 #include <stdint.h>
 #include <inttypes.h>
 
@@ -75,158 +78,140 @@ struct genz_control_structure_header {
     uint32_t size   : 16;
 };
 
-/* The field containing a pointer can either be 4 bytes or 6 bytes long in the Core Spec. */
+#define TABLE_ENUM_START_INDEX 0x1000 //int val: 4096
+
+enum genz_control_ptr_flags {
+    GENZ_CONTROL_POINTER_NONE = 0,
+    GENZ_CONTROL_POINTER_STRUCTURE = 1,
+    GENZ_CONTROL_POINTER_CHAINED = 2,
+    GENZ_CONTROL_POINTER_ARRAY = 3,
+    GENZ_CONTROL_POINTER_TABLE = 4,
+    GENZ_CONTROL_POINTER_TABLE_WITH_HEADER = 5
+};
+
 enum genz_pointer_size {
     GENZ_4_BYTE_POINTER = 4,
-    GENZ_6_BYTE_POINTER = 6,
+    GENZ_6_BYTE_POINTER = 6
 };
 
-enum genz_control_pointer_type {
-    GENZ_CONTROL_POINTER_NONE = 0,
-    GENZ_CONTROL_POINTER_STRUCTURE = 1, /* Points to a structure. Use ptr_type to see if it is generic or a particular type.  */
-    GENZ_CONTROL_POINTER_CHAINED = 2, /* e.g. Interface structures */
-    GENZ_CONTROL_POINTER_ARRAY = 3, /* Table of structures, e.g. C-Access R-Key table. */
-    GENZ_CONTROL_POINTER_TABLE = 4, /* Just a table, e.g. OEM Data Field */
-    GENZ_CONTROL_POINTER_TABLE_WITH_HEADER = 5, /* Header followed by table of structures, e.g. ELog Table */
-    GENZ_CONTROL_POINTER_CHAIN_START = 6,
+struct genz_control_ptr_info {
+    const struct genz_control_structure_ptr * const ptr;
+    const size_t num_ptrs;
+    const ssize_t struct_bytes;
+    const bool chained;
+    const uint8_t vers;
+    const char * const name;
 };
 
-/* Add all types in order like "GENZ_<structure name> = <type number> */
 enum genz_control_structure_type {
     GENZ_GENERIC_STRUCTURE = -1,
-    GENZ_COMPONENT_RKD_STRUCTURE_ARRAY = 0,
-    GENZ_COMPONENT_LPD_STRUCTURE_ARRAY = 1,
-    GENZ_COMPONENT_EVENT_STRUCTURE_ARRAY = 2,
-    GENZ_SERVICE_UUID_STRUCTURE_ARRAY = 3,
-    GENZ_VENDOR_DEFINED_WITH_UUID_STRUCTURE_ARRAY = 4,
-    GENZ_VENDOR_DEFINED_STRUCTURE_ARRAY = 5,
-    GENZ_INTERFACE_STATISTICS_STRUCTURE_ARRAY = 6,
-    GENZ_INTERFACE_PHY_STRUCTURE_ARRAY = 7,
-    GENZ_RE_TABLE_ARRAY = 8,
-    GENZ_MSOD_TABLE_ARRAY_ARRAY = 9,
-    GENZ_SSOD_TABLE_ARRAY_ARRAY = 10,
-    GENZ_OEM_DATA_TABLE_ARRAY = 11,
-    GENZ_MEDIA_LOG_TABLE_ARRAY = 12,
-    GENZ_SM_BACKUP_TABLE_ARRAY = 13,
-    GENZ_PM_BACKUP_TABLE_ARRAY = 14,
-    GENZ_C_ACCESS_L_P2P_TABLE_ARRAY_ARRAY = 15,
-    GENZ_C_ACCESS_R_KEY_TABLE_ARRAY = 16,
-    GENZ_SEC_TABLE_ARRAY = 17,
-    GENZ_PA_TABLE_ARRAY = 18,
-    GENZ_LPRT_MPRT_TABLE_ARRAY_ARRAY = 19,
-    GENZ_VCAT_TABLE_ARRAY_ARRAY = 20,
-    GENZ_MCPRT_MSMCPRT_TABLE_ARRAY_ARRAY = 21,
-    GENZ_MVCAT_TABLE_ARRAY = 22,
-    GENZ_LPRT_MPRT_ROWS_ARRAY_ARRAY = 23,
-    GENZ_RESPONDER_VCAT_TABLE_ARRAY_ARRAY = 24,
-    GENZ_REQUESTER_VCAT_TABLE_ARRAY_ARRAY = 25,
-    GENZ_SSDT_MSDT_TABLE_ARRAY_ARRAY = 26,
-    GENZ_RIT_TABLE_ARRAY = 27,
-    GENZ_ELOG_TABLE_ARRAY = 28,
-    GENZ_OPCODE_SET_UUID_TABLE_ARRAY = 29,
-    GENZ_OPCODE_SET_TABLE_ARRAY = 30,
-    GENZ_CORE_LPD_BDF_TABLE_ARRAY = 31,
-    GENZ_RELIABLE_MULTICAST_TABLE_ARRAY = 32,
-    GENZ_UNRELIABLE_MULTICAST_TABLE_ARRAY = 33,
-    GENZ_RELIABLE_MULTICAST_RESPONDER_TABLE_ARRAY = 34,
-    GENZ_TIK_TABLE_ARRAY = 35,
-    GENZ_CERTIFICATE_TABLE_ARRAY_ARRAY = 36,
-    GENZ_C_CERT_TABLE_ARRAY = 37,
-    GENZ_SERVICE_UUID_TABLE_ARRAY_ARRAY = 38,
-    GENZ_IMAGE_TABLE_ARRAY = 39,
-    GENZ_COMPONENT_TR_TABLE_ARRAY = 40,
-    GENZ_TYPE_1_INTERLEAVE_TABLE_ARRAY_ARRAY = 41,
-    GENZ_TYPE_1_INTERLEAVE_TABLE_ARRAY = 42,
-    GENZ_FIRMWARE_TABLE_ARRAY = 43,
-    GENZ_PG_RESTRICTED_PG_TABLE_ARRAY = 44,
-    GENZ_CORE_STRUCTURE = 45,
-    GENZ_OPCODE_SET_STRUCTURE = 46,
-    GENZ_INTERFACE_STRUCTURE = 47,
-    GENZ_INTERFACE_PHY_STRUCTURE = 48,
-    GENZ_INTERFACE_STATISTICS_STRUCTURE = 49,
-    GENZ_COMPONENT_ERROR_AND_SIGNAL_EVENT_STRUCTURE = 50,
-    GENZ_COMPONENT_MEDIA_STRUCTURE = 51,
-    GENZ_COMPONENT_SWITCH_STRUCTURE = 52,
-    GENZ_COMPONENT_STATISTICS_STRUCTURE = 53,
-    GENZ_COMPONENT_EXTENSION_STRUCTURE = 54,
-    GENZ_VENDOR_DEFINED_STRUCTURE = 55,
-    GENZ_VENDOR_DEFINED_WITH_UUID_STRUCTURE = 56,
-    GENZ_COMPONENT_MULTICAST_STRUCTURE = 57,
-    GENZ_COMPONENT_SECURITY_STRUCTURE = 58,
-    GENZ_COMPONENT_TR_STRUCTURE = 59,
-    GENZ_COMPONENT_IMAGE_STRUCTURE = 60,
-    GENZ_COMPONENT_PRECISION_TIME_STRUCTURE = 61,
-    GENZ_COMPONENT_MECHANICAL_STRUCTURE = 62,
-    GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE = 63,
-    GENZ_SERVICE_UUID_STRUCTURE = 64,
-    GENZ_COMPONENT_C_ACCESS_STRUCTURE = 65,
-    GENZ_REQUESTER_P2P_STRUCTURE = 66,
-    GENZ_COMPONENT_PA_STRUCTURE = 67,
-    GENZ_COMPONENT_EVENT_STRUCTURE = 68,
-    GENZ_COMPONENT_LPD_STRUCTURE = 69,
-    GENZ_COMPONENT_SOD_STRUCTURE = 70,
-    GENZ_CONGESTION_MANAGEMENT_STRUCTURE = 71,
-    GENZ_COMPONENT_RKD_STRUCTURE = 72,
-    GENZ_COMPONENT_PM_STRUCTURE = 73,
-    GENZ_COMPONENT_ATP_STRUCTURE = 74,
-    GENZ_COMPONENT_RE_TABLE_STRUCTURE = 75,
-    GENZ_COMPONENT_LPH_STRUCTURE = 76,
-    GENZ_COMPONENT_PAGE_GRID_STRUCTURE = 77,
-    GENZ_COMPONENT_PAGE_TABLE_STRUCTURE = 78,
-    GENZ_COMPONENT_INTERLEAVE_STRUCTURE = 79,
-    GENZ_COMPONENT_FIRMWARE_STRUCTURE = 80,
-    GENZ_COMPONENT_SW_MANAGEMENT_STRUCTURE = 81,
-    GENZ_PTE_RESTRICTED_PTE_TABLE = 82,
-    GENZ_EVENT_RECORD = 83,
-    GENZ_PERFORMANCE_LOG_RECORD_0 = 84,
-    GENZ_PERFORMANCE_LOG_RECORD_1 = 85,
-    GENZ_IMAGE_HEADER_0XC86ED8C24BED49BDA5143DD11950DE9D = 86,
-    GENZ_RESOURCE_ARRAY_TABLE = 87,
-    GENZ_UNRELIABLE_MULTICAST_TABLE_ENTRY_ROW = 88,
-    GENZ_RELIABLE_MULTICAST_TABLE_ENTRY_ROW = 89,
-    GENZ_OPCODE_SET_TABLE = 90,
-    GENZ_OPCODE_SET_UUID_TABLE = 91,
-    GENZ_COMPONENT_ERROR_ELOG_ENTRY = 92,
-    GENZ_INTERFACE_ERROR_ELOG_ENTRY = 93,
-    GENZ_ELOG_TABLE = 94,
-    GENZ_SSDT_MSDT_TABLE_ENTRY_ROW = 95,
-    GENZ_LPRT_ROUTE_ENTRY_ROW = 96,
-    GENZ_MCPRT_MSMCPTR_ROW = 97,
-    GENZ_ROUTE_CONTROL_TABLE = 98,
-    GENZ_SSAP_MCAP_MSAP_AND_MSMCAP_TABLE = 99,
-    GENZ_BACKUP_MGMT_TABLE = 100,
-    GENZ_PM_BACKUP_TABLE = 101,
-    GENZ_SM_BACKUP_TABLE = 102,
-    GENZ_OEM_DATA_TABLE = 103,
-    GENZ_LABEL_DATA_TABLE = 104,
+    HARDWARE_CLASSES_META = 0x0,
+    GENZ_CORE_STRUCTURE = 0x1,
+    GENZ_OPCODE_SET_STRUCTURE = 0x2,
+    GENZ_INTERFACE_STRUCTURE = 0x3,
+    GENZ_INTERFACE_PHY_STRUCTURE = 0x4,
+    GENZ_INTERFACE_STATISTICS_STRUCTURE = 0x5,
+    GENZ_COMPONENT_ERROR_AND_SIGNAL_EVENT_STRUCTURE = 0x6,
+    GENZ_COMPONENT_MEDIA_STRUCTURE = 0x7,
+    GENZ_COMPONENT_SWITCH_STRUCTURE = 0x8,
+    GENZ_COMPONENT_STATISTICS_STRUCTURE = 0x9,
+    GENZ_COMPONENT_EXTENSION_STRUCTURE = 0xa,
+    GENZ_VENDOR_DEFINED_STRUCTURE = 0xb,
+    GENZ_VENDOR_DEFINED_WITH_UUID_STRUCTURE = 0xc,
+    GENZ_COMPONENT_MULTICAST_STRUCTURE = 0xd,
+    GENZ_COMPONENT_SECURITY_STRUCTURE = 0xe,
+    GENZ_COMPONENT_TR_STRUCTURE = 0xf,
+    GENZ_COMPONENT_IMAGE_STRUCTURE = 0x10,
+    GENZ_COMPONENT_PRECISION_TIME_STRUCTURE = 0x11,
+    GENZ_COMPONENT_MECHANICAL_STRUCTURE = 0x12,
+    GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE = 0x13,
+    GENZ_SERVICE_UUID_STRUCTURE = 0x14,
+    GENZ_COMPONENT_C_ACCESS_STRUCTURE = 0x15,
+    GENZ_REQUESTER_P2P_STRUCTURE = 0x16,
+    GENZ_COMPONENT_PA_STRUCTURE = 0x17,
+    GENZ_COMPONENT_EVENT_STRUCTURE = 0x18,
+    GENZ_COMPONENT_LPD_STRUCTURE = 0x19,
+    GENZ_COMPONENT_SOD_STRUCTURE = 0x1a,
+    GENZ_CONGESTION_MANAGEMENT_STRUCTURE = 0x1b,
+    GENZ_COMPONENT_RKD_STRUCTURE = 0x1c,
+    GENZ_COMPONENT_PM_STRUCTURE = 0x1d,
+    GENZ_COMPONENT_ATP_STRUCTURE = 0x1e,
+    GENZ_COMPONENT_RE_TABLE_STRUCTURE = 0x1f,
+    GENZ_COMPONENT_LPH_STRUCTURE = 0x20,
+    GENZ_COMPONENT_PAGE_GRID_STRUCTURE = 0x21,
+    GENZ_COMPONENT_PAGE_TABLE_STRUCTURE = 0x22,
+    GENZ_COMPONENT_INTERLEAVE_STRUCTURE = 0x23,
+    GENZ_COMPONENT_FIRMWARE_STRUCTURE = 0x24,
+    GENZ_COMPONENT_SW_MANAGEMENT_STRUCTURE = 0x25,
+    GENZ_PG_RESTRICTED_PG_TABLE = TABLE_ENUM_START_INDEX,
+    GENZ_PTE_RESTRICTED_PTE_TABLE = TABLE_ENUM_START_INDEX + 1,
+    GENZ_EVENT_RECORD = TABLE_ENUM_START_INDEX + 2,
+    GENZ_PERFORMANCE_LOG_RECORD_0 = TABLE_ENUM_START_INDEX + 3,
+    GENZ_PERFORMANCE_LOG_RECORD_1 = TABLE_ENUM_START_INDEX + 4,
+    GENZ_FIRMWARE_TABLE = TABLE_ENUM_START_INDEX + 5,
+    GENZ_TYPE_1_INTERLEAVE_TABLE = TABLE_ENUM_START_INDEX + 6,
+    GENZ_COMPONENT_TR_TABLE = TABLE_ENUM_START_INDEX + 7,
+    GENZ_IMAGE_HEADER_0XC86ED8C24BED49BDA5143DD11950DE9D = TABLE_ENUM_START_INDEX + 8,
+    GENZ_IMAGE_TABLE = TABLE_ENUM_START_INDEX + 9,
+    GENZ_SERVICE_UUID_TABLE = TABLE_ENUM_START_INDEX + 10,
+    GENZ_RESOURCE_ARRAY_TABLE = TABLE_ENUM_START_INDEX + 11,
+    GENZ_C_CERT_TABLE = TABLE_ENUM_START_INDEX + 12,
+    GENZ_CERTIFICATE_TABLE = TABLE_ENUM_START_INDEX + 13,
+    GENZ_TIK_TABLE = TABLE_ENUM_START_INDEX + 14,
+    GENZ_UNRELIABLE_MULTICAST_TABLE_ENTRY_ROW = TABLE_ENUM_START_INDEX + 15,
+    GENZ_RELIABLE_MULTICAST_TABLE_ENTRY_ROW = TABLE_ENUM_START_INDEX + 16,
+    GENZ_RELIABLE_MULTICAST_RESPONDER_TABLE = TABLE_ENUM_START_INDEX + 17,
+    GENZ_UNRELIABLE_MULTICAST_TABLE = TABLE_ENUM_START_INDEX + 18,
+    GENZ_RELIABLE_MULTICAST_TABLE = TABLE_ENUM_START_INDEX + 19,
+    GENZ_CORE_LPD_BDF_TABLE = TABLE_ENUM_START_INDEX + 20,
+    GENZ_OPCODE_SET_TABLE = TABLE_ENUM_START_INDEX + 21,
+    GENZ_OPCODE_SET_UUID_TABLE = TABLE_ENUM_START_INDEX + 22,
+    GENZ_COMPONENT_ERROR_ELOG_ENTRY = TABLE_ENUM_START_INDEX + 23,
+    GENZ_INTERFACE_ERROR_ELOG_ENTRY = TABLE_ENUM_START_INDEX + 24,
+    GENZ_ELOG_TABLE = TABLE_ENUM_START_INDEX + 25,
+    GENZ_SSDT_MSDT_TABLE_ENTRY_ROW = TABLE_ENUM_START_INDEX + 26,
+    GENZ_RIT_TABLE = TABLE_ENUM_START_INDEX + 27,
+    GENZ_SSDT_MSDT_TABLE = TABLE_ENUM_START_INDEX + 28,
+    GENZ_REQUESTER_VCAT_TABLE = TABLE_ENUM_START_INDEX + 29,
+    GENZ_RESPONDER_VCAT_TABLE = TABLE_ENUM_START_INDEX + 30,
+    GENZ_LPRT_MPRT_ROWS = TABLE_ENUM_START_INDEX + 31,
+    GENZ_LPRT_ROUTE_ENTRY_ROW = TABLE_ENUM_START_INDEX + 32,
+    GENZ_MCPRT_MSMCPTR_ROW = TABLE_ENUM_START_INDEX + 33,
+    GENZ_MVCAT_TABLE = TABLE_ENUM_START_INDEX + 34,
+    GENZ_ROUTE_CONTROL_TABLE = TABLE_ENUM_START_INDEX + 35,
+    GENZ_MCPRT_MSMCPRT_TABLE = TABLE_ENUM_START_INDEX + 36,
+    GENZ_VCAT_TABLE = TABLE_ENUM_START_INDEX + 37,
+    GENZ_LPRT_MPRT_TABLE = TABLE_ENUM_START_INDEX + 38,
+    GENZ_PA_TABLE = TABLE_ENUM_START_INDEX + 39,
+    GENZ_SEC_TABLE = TABLE_ENUM_START_INDEX + 40,
+    GENZ_SSAP_MCAP_MSAP_AND_MSMCAP_TABLE = TABLE_ENUM_START_INDEX + 41,
+    GENZ_C_ACCESS_R_KEY_TABLE = TABLE_ENUM_START_INDEX + 42,
+    GENZ_C_ACCESS_L_P2P_TABLE = TABLE_ENUM_START_INDEX + 43,
+    GENZ_BACKUP_MGMT_TABLE = TABLE_ENUM_START_INDEX + 44,
+    GENZ_PM_BACKUP_TABLE = TABLE_ENUM_START_INDEX + 45,
+    GENZ_SM_BACKUP_TABLE = TABLE_ENUM_START_INDEX + 46,
+    GENZ_MEDIA_LOG_TABLE = TABLE_ENUM_START_INDEX + 47,
+    GENZ_OEM_DATA_TABLE = TABLE_ENUM_START_INDEX + 48,
+    GENZ_LABEL_DATA_TABLE = TABLE_ENUM_START_INDEX + 49,
+    GENZ_SSOD_TABLE = TABLE_ENUM_START_INDEX + 50,
+    GENZ_MSOD_TABLE = TABLE_ENUM_START_INDEX + 51,
+    GENZ_RE_TABLE = TABLE_ENUM_START_INDEX + 52
 };
 
 struct genz_control_structure_ptr {
-    enum genz_control_pointer_type ptr_type;
-    enum genz_pointer_size ptr_size;
-    uint32_t pointer_offset;
-    enum genz_control_structure_type struct_type; /* non-Generic structure validation of the pointer */
-    //ssize_t (*table_size)(union genz_control_structure *ctl_struct);
+    const enum genz_control_ptr_flags ptr_type;
+    const enum genz_pointer_size ptr_size;
+    const uint32_t pointer_offset;
+    const enum genz_control_structure_type struct_type;
 };
 
-/*
- * The overall control_structure_type_to_pointers is an array indexed by
- * the structure type enum (e.g. core is index 0) to access the appropriate
- * <name>_structure_pointers array.
-*/
-struct genz_control_ptr_info {
-    struct genz_control_structure_ptr *ptr;
-    size_t num_ptrs;
-    ssize_t struct_bytes;
-    char *name;
-    uint8_t vers;
-    bool chained; /* this structure/table contains chained pointers */
-};
+extern struct genz_control_ptr_info genz_struct_type_to_ptrs[];
 
-extern struct genz_control_ptr_info genz_control_structure_type_to_ptrs[];
-extern size_t genz_control_structure_type_to_ptrs_nelems;
+extern size_t genz_struct_type_to_ptrs_nelems;
 
-/* *************************************************************************** */
+extern struct genz_control_ptr_info genz_table_type_to_ptrs[];
+
+extern size_t genz_table_type_to_ptrs_nelems;
 
 
 union genz_c_status {
@@ -357,7 +342,7 @@ union genz_component_cap_1_control {
         uint64_t rsvdp                                  : 1;
         uint64_t mctp_over_gen_z_enable                 : 1;
         uint64_t meta_read_write_header_enable          : 1;
-        uuid_t mgr_uuid_enable;
+        uint64_t mgr_uuid_enable                        : 1;
         uint64_t component_loopback_enable              : 1;
         uint64_t software_defined_management_bit_0      : 1;
         uint64_t software_defined_management_bit_1      : 1;
@@ -2886,9 +2871,45 @@ enum genz_c_control_initiate_component_reset {
     C_CONTROL_INITIATE_COMPONENT_RESET_CONTENT_COMPONENT_RESET = 0x4
 };
 
+enum genz_c_control_halt_uert_unsolicited_event_ue_packet_retransmission_timer {
+    C_CONTROL_HALT_UERT_UNSOLICITED_EVENT_UE_PACKET_RETRANSMISSION_TIMER_HALTS_RETRANSMISSION_OF_THE_PRESENT_UNSOLICITED_EVENT_UE_PACKET_IF_THERE_ARE_NO_PENDING_UNSOLICITED_EVENTS_TO_GENERATE_THEN_THE_C_STATUS_UNSOLICITED_EVENT_STATUS_FIELD_SHALL_BE_SET_TO_0B_AND_THE_UERT_SHALL_BE_HALTED = 0x1
+};
+
+enum genz_c_control_transition_c_up {
+    C_CONTROL_TRANSITION_C_UP_TRANSITIONS_THE_COMPONENT_TO_C_UP_FROM_C_LP_OR_C_DLP_HAS_NO_IMPACT_IF_NOT_IN_C_LP_OR_C_DLP = 0x1
+};
+
+enum genz_c_control_transition_c_lp {
+    C_CONTROL_TRANSITION_C_LP_TRANSITIONS_THE_COMPONENT_TO_C_LP_FROM_C_UP_HAS_NO_IMPACT_IF_NOT_IN_C_UP_OR_IF_CORE_STRUCTURE_COMPONENT_CAP_1_MANAGEMENT_DIRECTED_C_LP_SUPPORT_0B = 0x1
+};
+
+enum genz_c_control_transition_c_dlp {
+    C_CONTROL_TRANSITION_C_DLP_TRANSITIONS_THE_COMPONENT_TO_C_DLP_FROM_C_LP_OR_C_UP_HAS_NO_IMPACT_IF_NOT_IN_C_LP_OR_C_UP_OR_IF_CORE_STRUCTURE_COMPONENT_CAP_1_MANAGEMENT_DIRECTED_C_LP_SUPPORT_0B = 0x1
+};
+
+enum genz_c_control_trigger_emergency_power_reduction {
+    C_CONTROL_TRIGGER_EMERGENCY_POWER_REDUCTION_TRIGGER_EMERGENCY_POWER_REDUCTION = 0x1
+};
+
+enum genz_c_control_exit_emergency_power_reduction {
+    C_CONTROL_EXIT_EMERGENCY_POWER_REDUCTION_EXIT_EMERGENCY_POWER_REDUCTION = 0x1
+};
+
+enum genz_c_control_transition_component_power_off {
+    C_CONTROL_TRANSITION_COMPONENT_POWER_OFF_INSTRUCTS_COMPONENT_TO_TAKE_ALL_STEPS_NECESSARY_FOR_POWER_REMOVAL_COMPONENT_REMOVAL = 0x1
+};
+
 enum genz_c_control_lpd_responder_zmmu_bypass_control {
     C_CONTROL_LPD_RESPONDER_ZMMU_BYPASS_CONTROL_DO_NOT_BYPASS_RESPONDER_ZMMU = 0x0,
     C_CONTROL_LPD_RESPONDER_ZMMU_BYPASS_CONTROL_BYPASS_RESPONDER_ZMMU = 0x1
+};
+
+enum genz_c_control_refresh_component_configuration_control {
+    C_CONTROL_REFRESH_COMPONENT_CONFIGURATION_CONTROL_REFRESH_ALL_CACHED_CONFIGURATION_STATE = 0x1
+};
+
+enum genz_component_cap_1_max_packet_payload {
+    COMPONENT_CAP_1_MAX_PACKET_PAYLOAD_BYTES_256 = 0x0
 };
 
 enum genz_component_cap_1_address_field_interpretation {
@@ -2991,6 +3012,10 @@ enum genz_component_cap_1_extended_timer_unit {
     COMPONENT_CAP_1_EXTENDED_TIMER_UNIT_S_1 = 0x6
 };
 
+enum genz_component_cap_1_control_max_packet_payload {
+    COMPONENT_CAP_1_CONTROL_MAX_PACKET_PAYLOAD_BYTES_DEFAULT_256 = 0x0
+};
+
 enum genz_component_cap_1_control_no_snoop_control {
     COMPONENT_CAP_1_CONTROL_NO_SNOOP_CONTROL__0B = 0x0,
     COMPONENT_CAP_1_CONTROL_NO_SNOOP_CONTROL__0B_OR_1B = 0x1
@@ -3055,6 +3080,14 @@ enum genz_component_cap_1_control_lowest_automatic_c_state_level {
     COMPONENT_CAP_1_CONTROL_LOWEST_AUTOMATIC_C_STATE_LEVEL_C_DLP = 0x2
 };
 
+enum genz_component_cap_1_control_initiate_all_statistics_snapshot {
+    COMPONENT_CAP_1_CONTROL_INITIATE_ALL_STATISTICS_SNAPSHOT_PERFORM_COMPONENT_WIDE_SNAPSHOT = 0x1
+};
+
+enum genz_component_cap_1_control_initiate_all_interface_statistics_snapshot {
+    COMPONENT_CAP_1_CONTROL_INITIATE_ALL_INTERFACE_STATISTICS_SNAPSHOT_PERFORM_ALL_INTERFACE_SNAPSHOT = 0x1
+};
+
 enum genz_component_cap_1_control_host_manager_mgr_uuid_enable {
     COMPONENT_CAP_1_CONTROL_HOST_MANAGER_MGR_UUID_ENABLE_ZERO = 0x0,
     COMPONENT_CAP_1_CONTROL_HOST_MANAGER_MGR_UUID_ENABLE_CORE = 0x1,
@@ -3092,6 +3125,10 @@ enum genz_component_cap_2_meta_read_write_support {
     COMPONENT_CAP_2_META_READ_WRITE_SUPPORT_C_UUID_SEE_CORE_STRUCTURE = 0x1,
     COMPONENT_CAP_2_META_READ_WRITE_SUPPORT_VENDOR_DEFINED_SEE_COMPONENT_MEDIA_STRUCTURE = 0x2,
     COMPONENT_CAP_2_META_READ_WRITE_SUPPORT_SERVICE_UUID_SEE_SERVICE_UUID_STRUCTURE = 0x3
+};
+
+enum genz_component_cap_2_control_clear_performance_marker_log {
+    COMPONENT_CAP_2_CONTROL_CLEAR_PERFORMANCE_MARKER_LOG_CLEAR_PERFORMANCE_LOG = 0x1
 };
 
 enum genz_component_cap_2_control_di_pi_block_size {
@@ -3142,6 +3179,10 @@ enum genz_opcode_set_cap_1_atomic_data_endian_type {
     OPCODE_SET_CAP_1_ATOMIC_DATA_ENDIAN_TYPE_LITTLE_AND_BIG = 0x3
 };
 
+enum genz_opcode_set_cap_1_protocol_version_associated_with_this_opcode_set {
+    OPCODE_SET_CAP_1_PROTOCOL_VERSION_ASSOCIATED_WITH_THIS_OPCODE_SET_VERSION_1 = 0x0
+};
+
 enum genz_opcode_set_cap_1_interrupt_role_if_interrupts_are_supported {
     OPCODE_SET_CAP_1_INTERRUPT_ROLE_IF_INTERRUPTS_ARE_SUPPORTED_UNSUPPORTED = 0x0,
     OPCODE_SET_CAP_1_INTERRUPT_ROLE_IF_INTERRUPTS_ARE_SUPPORTED_REQUESTER = 0x1,
@@ -3177,9 +3218,37 @@ enum genz_i_status_link_level_reliability_llr_status {
     I_STATUS_LINK_LEVEL_RELIABILITY_LLR_STATUS_SUCCESS = 0x1
 };
 
+enum genz_i_control_initiate_full_interface_reset {
+    I_CONTROL_INITIATE_FULL_INTERFACE_RESET_INITIATE_FULL_INTERFACE_RESET_AND_SET_INTERFACE_I_STATUS_FULL_INTERFACE_RESET_1B = 0x1
+};
+
+enum genz_i_control_initiate_warm_interface_reset {
+    I_CONTROL_INITIATE_WARM_INTERFACE_RESET_INITIATE_WARM_INTERFACE_RESET_AND_SET_INTERFACE_I_STATUS_WARM_INTERFACE_RESET_1B = 0x1
+};
+
+enum genz_i_control_initiate_peer_c_reset {
+    I_CONTROL_INITIATE_PEER_C_RESET_INITIATE_PEER_C_RESET_LINK_CTL = 0x1
+};
+
+enum genz_i_control_initiate_peer_c_up_transition {
+    I_CONTROL_INITIATE_PEER_C_UP_TRANSITION_INITIATE_PEER_C_UP_LINK_CTL = 0x1
+};
+
+enum genz_i_control_initiate_peer_attribute_request {
+    I_CONTROL_INITIATE_PEER_ATTRIBUTE_REQUEST_INITIATE_PEER_ATTRIBUTE_LINK_CTL = 0x1
+};
+
 enum genz_i_control_auto_stop {
     I_CONTROL_AUTO_STOP_DO_NOT_AUTO_STOP = 0x0,
     I_CONTROL_AUTO_STOP_AUTO_STOP = 0x1
+};
+
+enum genz_i_control_initiate_path_time_request {
+    I_CONTROL_INITIATE_PATH_TIME_REQUEST_TRANSMIT_PATH_TIME_LINK_CTL = 0x1
+};
+
+enum genz_i_control_force_physical_layer_abstraction_retraining {
+    I_CONTROL_FORCE_PHYSICAL_LAYER_ABSTRACTION_RETRAINING_INITIATE_PLA_RETRAINING = 0x1
 };
 
 enum genz_i_control_initiate_l_lp_transition {
@@ -3190,6 +3259,10 @@ enum genz_i_control_initiate_l_lp_transition {
 enum genz_i_control_initiate_l_up_lp_transition {
     I_CONTROL_INITIATE_L_UP_LP_TRANSITION_NO_IMPACT = 0x0,
     I_CONTROL_INITIATE_L_UP_LP_TRANSITION_INITIATE_ENTER_LINK_UP_LP_LINK_CTL_WITH_REQUESTED_PHY_UP_LP_1_4 = -1
+};
+
+enum genz_i_control_initiate_peer_set_attribute_request {
+    I_CONTROL_INITIATE_PEER_SET_ATTRIBUTE_REQUEST_INITIATE_PEER_SET_ATTRIBUTE_LINK_CTL = 0x1
 };
 
 enum genz_i_control_ingress_dr_enable {
@@ -3406,6 +3479,26 @@ enum genz_phy_status_phy_rx_error_detected {
     PHY_STATUS_PHY_RX_ERROR_DETECTED_RX_ERROR_DETECTED = 0x1
 };
 
+enum genz_phy_control_enable_physical_layer {
+    PHY_CONTROL_ENABLE_PHYSICAL_LAYER_ENABLE = 0x1
+};
+
+enum genz_phy_control_disable_physical_layer {
+    PHY_CONTROL_DISABLE_PHYSICAL_LAYER_DISABLE_AND_TRANSITION_TO_PHY_DOWN = 0x1
+};
+
+enum genz_phy_control_disable_physical_layer_auto_retraining {
+    PHY_CONTROL_DISABLE_PHYSICAL_LAYER_AUTO_RETRAINING_DISABLE_AUTONOMOUS_PHYSICAL_LAYER_RETRAINING = 0x1
+};
+
+enum genz_phy_control_exit_low_power_state {
+    PHY_CONTROL_EXIT_LOW_POWER_STATE_EXIT_LOW_POWER = 0x1
+};
+
+enum genz_phy_control_clear_phy_events {
+    PHY_CONTROL_CLEAR_PHY_EVENTS_RESET = 0x1
+};
+
 enum genz_phy_control_physical_layer_retraining_level {
     PHY_CONTROL_PHYSICAL_LAYER_RETRAINING_LEVEL_PHY_FULL_RETRAINING_LEVEL_1_DEFAULT = 0x0,
     PHY_CONTROL_PHYSICAL_LAYER_RETRAINING_LEVEL_PHY_RETRAINING_LEVEL_2 = 0x1,
@@ -3413,9 +3506,17 @@ enum genz_phy_control_physical_layer_retraining_level {
     PHY_CONTROL_PHYSICAL_LAYER_RETRAINING_LEVEL_PHY_RETRAINING_LEVEL_4 = 0x3
 };
 
+enum genz_phy_control_force_physical_layer_retraining {
+    PHY_CONTROL_FORCE_PHYSICAL_LAYER_RETRAINING_INITIATE_RETRAINING = 0x1
+};
+
 enum genz_phy_cap_1_default_phy {
     PHY_CAP_1_DEFAULT_PHY_NON_DEFAULT = 0x0,
     PHY_CAP_1_DEFAULT_PHY_DEFAULT = 0x1
+};
+
+enum genz_phy_cap_1_control_phit_encoding_enable {
+    PHY_CAP_1_CONTROL_PHIT_ENCODING_ENABLE_ENABLE_PHIT_CRC = 0x1
 };
 
 enum genz_phy_cap_1_control_interface_aggregation_type {
@@ -3519,6 +3620,14 @@ enum genz_i_stat_cap_1_maximum_snapshot_time {
     I_STAT_CAP_1_MAXIMUM_SNAPSHOT_TIME_SECOND_1 = 0x3
 };
 
+enum genz_i_stat_control_reset_all_statistics {
+    I_STAT_CONTROL_RESET_ALL_STATISTICS_RESET = 0x1
+};
+
+enum genz_i_stat_control_initiate_interface_statistics_snapshot {
+    I_STAT_CONTROL_INITIATE_INTERFACE_STATISTICS_SNAPSHOT_PERFORM_SNAPSHOT = 0x1
+};
+
 enum genz_i_stat_status_interface_statistics_reset_status {
     I_STAT_STATUS_INTERFACE_STATISTICS_RESET_STATUS_NO_RESET_EVENT = 0x0,
     I_STAT_STATUS_INTERFACE_STATISTICS_RESET_STATUS_RESET_EVENT = 0x1
@@ -3582,6 +3691,10 @@ enum genz_e_control_2_pwr_uep_target {
     E_CONTROL_2_PWR_UEP_TARGET_TARGET_MANAGER_PWR_MGR_CID_VALID_PWR_MGR_SID_VALID = 0x3
 };
 
+enum genz_component_media_control_terminate_primary_media_se_operation {
+    COMPONENT_MEDIA_CONTROL_TERMINATE_PRIMARY_MEDIA_SE_OPERATION_IMMEDIATELY_TERMINATE_ANY_IN_PROGRESS_PRIMARY_MEDIA_SE_OPERATION_UPON_TERMINATION_SHALL_SET_PRIMARY_MEDIA_STATUS_PRIMARY_MEDIA_SE_FAILED_1B = 0x1
+};
+
 enum genz_component_media_control_primary_media_maintenance_disable {
     COMPONENT_MEDIA_CONTROL_PRIMARY_MEDIA_MAINTENANCE_DISABLE_ENABLED = 0x0,
     COMPONENT_MEDIA_CONTROL_PRIMARY_MEDIA_MAINTENANCE_DISABLE_DISABLED = 0x1
@@ -3590,6 +3703,18 @@ enum genz_component_media_control_primary_media_maintenance_disable {
 enum genz_component_media_control_secondary_media_maintenance_disable {
     COMPONENT_MEDIA_CONTROL_SECONDARY_MEDIA_MAINTENANCE_DISABLE_ENABLED = 0x0,
     COMPONENT_MEDIA_CONTROL_SECONDARY_MEDIA_MAINTENANCE_DISABLE_DISABLED = 0x1
+};
+
+enum genz_component_media_control_initiate_primary_media_maintenance {
+    COMPONENT_MEDIA_CONTROL_INITIATE_PRIMARY_MEDIA_MAINTENANCE_INITIATE_PRIMARY_MEDIA_MAINTENANCE = 0x1
+};
+
+enum genz_component_media_control_initiate_secondary_media_maintenance {
+    COMPONENT_MEDIA_CONTROL_INITIATE_SECONDARY_MEDIA_MAINTENANCE_INITIATE_SECONDARY_MEDIA_MAINTENANCE = 0x1
+};
+
+enum genz_component_media_control_terminate_secondary_media_se_operation {
+    COMPONENT_MEDIA_CONTROL_TERMINATE_SECONDARY_MEDIA_SE_OPERATION_IMMEDIATELY_TERMINATE_ANY_IN_PROGRESS_SECONDARY_MEDIA_SE_OPERATION_UPON_TERMINATION_SHALL_SET_SECONDARY_MEDIA_STATUS_SECONDARY_MEDIA_SE_FAILED_1B = 0x1
 };
 
 enum genz_component_media_control_primary_se_initialization {
@@ -3616,6 +3741,14 @@ enum genz_component_media_control_secondary_se_initialization {
     COMPONENT_MEDIA_CONTROL_SECONDARY_SE_INITIALIZATION_SE_VENDOR_DEFINED_RANGE = 0x8
 };
 
+enum genz_primary_media_cap_1_63_0_primary_latency_scale_seconds {
+    PRIMARY_MEDIA_CAP_1_63_0_PRIMARY_LATENCY_SCALE_SECONDS__10 = 0x0
+};
+
+enum genz_primary_media_cap_1_63_0_primary_endurance_scale {
+    PRIMARY_MEDIA_CAP_1_63_0_PRIMARY_ENDURANCE_SCALE__10 = 0x0
+};
+
 enum genz_primary_media_cap_1_63_0_primary_media_power_scale_mpwrs {
     PRIMARY_MEDIA_CAP_1_63_0_PRIMARY_MEDIA_POWER_SCALE_MPWRS__1_0 = 0x0,
     PRIMARY_MEDIA_CAP_1_63_0_PRIMARY_MEDIA_POWER_SCALE_MPWRS__0_1 = 0x1,
@@ -3638,6 +3771,14 @@ enum genz_primary_media_cap_1_63_0_primary_error_detection_range {
     PRIMARY_MEDIA_CAP_1_63_0_PRIMARY_ERROR_DETECTION_RANGE__8192 = 0xB
 };
 
+enum genz_primary_media_cap_1_63_0_primary_correctable_error_threshold {
+    PRIMARY_MEDIA_CAP_1_63_0_PRIMARY_CORRECTABLE_ERROR_THRESHOLD__2 = 0x0
+};
+
+enum genz_primary_media_cap_1_63_0_primary_uncorrectable_error_threshold {
+    PRIMARY_MEDIA_CAP_1_63_0_PRIMARY_UNCORRECTABLE_ERROR_THRESHOLD__2 = 0x0
+};
+
 enum genz_primary_media_cap_1_63_0_primary_byte_block_addressing {
     PRIMARY_MEDIA_CAP_1_63_0_PRIMARY_BYTE_BLOCK_ADDRESSING_BYTE = 0x0,
     PRIMARY_MEDIA_CAP_1_63_0_PRIMARY_BYTE_BLOCK_ADDRESSING_BLOCK = 0x1
@@ -3656,6 +3797,14 @@ enum genz_primary_media_cap_1_127_64_primary_media_volatility {
     PRIMARY_MEDIA_CAP_1_127_64_PRIMARY_MEDIA_VOLATILITY_PERSISTENT_MEDIA_REQUEST_PU_1B_TO_ENSURE_PERSISTENCY = 0x1,
     PRIMARY_MEDIA_CAP_1_127_64_PRIMARY_MEDIA_VOLATILITY_PERSISTENT_MEDIA_PERSISTENT_FLUSH_TO_ENSURE_PERSISTENCY = 0x2,
     PRIMARY_MEDIA_CAP_1_127_64_PRIMARY_MEDIA_VOLATILITY_PERSISTENT_MEDIA_REQUEST_PU_1B_OR_PERSISTENT_FLUSH_TO_ENSURE_PERSISTENCY = 0x3
+};
+
+enum genz_secondary_media_cap_1_63_0_secondary_latency_scale_seconds {
+    SECONDARY_MEDIA_CAP_1_63_0_SECONDARY_LATENCY_SCALE_SECONDS__10 = 0x0
+};
+
+enum genz_secondary_media_cap_1_63_0_secondary_endurance_scale {
+    SECONDARY_MEDIA_CAP_1_63_0_SECONDARY_ENDURANCE_SCALE__10 = 0x0
 };
 
 enum genz_secondary_media_cap_1_63_0_secondary_media_power_scale_mpwrs {
@@ -3678,6 +3827,14 @@ enum genz_secondary_media_cap_1_63_0_secondary_error_detection_range {
     SECONDARY_MEDIA_CAP_1_63_0_SECONDARY_ERROR_DETECTION_RANGE__2048 = 0x9,
     SECONDARY_MEDIA_CAP_1_63_0_SECONDARY_ERROR_DETECTION_RANGE__4096 = 0xA,
     SECONDARY_MEDIA_CAP_1_63_0_SECONDARY_ERROR_DETECTION_RANGE__8192 = 0xB
+};
+
+enum genz_secondary_media_cap_1_63_0_secondary_correctable_error_threshold {
+    SECONDARY_MEDIA_CAP_1_63_0_SECONDARY_CORRECTABLE_ERROR_THRESHOLD__2 = 0x0
+};
+
+enum genz_secondary_media_cap_1_63_0_secondary_uncorrectable_error_threshold {
+    SECONDARY_MEDIA_CAP_1_63_0_SECONDARY_UNCORRECTABLE_ERROR_THRESHOLD__2 = 0x0
 };
 
 enum genz_secondary_media_cap_1_127_64_secondary_media_addressability {
@@ -3858,6 +4015,14 @@ enum genz_switch_cap_1_mlat_scale {
     SWITCH_CAP_1_MLAT_SCALE_PS = 0x1
 };
 
+enum genz_cstat_control_reset_all_statistics {
+    CSTAT_CONTROL_RESET_ALL_STATISTICS_RESET = 0x1
+};
+
+enum genz_cstat_control_initiate_component_statistics_snapshot {
+    CSTAT_CONTROL_INITIATE_COMPONENT_STATISTICS_SNAPSHOT_PERFORM_SNAPSHOT = 0x1
+};
+
 enum genz_cstat_status_statistics_reset {
     CSTAT_STATUS_STATISTICS_RESET_INCOMPLETE_NOT_INITIATED = 0x0,
     CSTAT_STATUS_STATISTICS_RESET_RESET_COMPLETED = 0x1
@@ -3958,6 +4123,10 @@ enum genz_pt_ctl_precision_time_gtc_enable {
     PT_CTL_PRECISION_TIME_GTC_ENABLE_GTC_COMPONENT = 0x1
 };
 
+enum genz_pt_ctl_migrate_pt_alt_responder {
+    PT_CTL_MIGRATE_PT_ALT_RESPONDER_RE_ESTABLISH_PRECISION_TIME_USING_ALT_PT_RSP_CID_ALT_PT_RSP_SID = 0x1
+};
+
 enum genz_pt_ctl_ptd_granularity_unit {
     PT_CTL_PTD_GRANULARITY_UNIT_NS_DEFAULT = 0x0,
     PT_CTL_PTD_GRANULARITY_UNIT_PS = 0x1
@@ -4009,6 +4178,10 @@ enum genz_mechanical_control_power_indicator_control {
     MECHANICAL_CONTROL_POWER_INDICATOR_CONTROL_OFF = 0x3
 };
 
+enum genz_mechanical_control_electromechanical_interlock_control {
+    MECHANICAL_CONTROL_ELECTROMECHANICAL_INTERLOCK_CONTROL_TOGGLE_THE_INTERLOCK_STATE = 0x1
+};
+
 enum genz_mechanical_control_activity_indicator_control {
     MECHANICAL_CONTROL_ACTIVITY_INDICATOR_CONTROL_MODULE_PRESENT = 0x0,
     MECHANICAL_CONTROL_ACTIVITY_INDICATOR_CONTROL_LOCATE = 0x1,
@@ -4034,6 +4207,14 @@ enum genz_destination_table_control_rit_ssdt_enable {
     DESTINATION_TABLE_CONTROL_RIT_SSDT_ENABLE_ENABLED_SHALL_USE_SSDT_MSDT_AND_RIT = 0x1
 };
 
+enum genz_c_page_size {
+    C_PAGE_SIZE___2 = 0x0
+};
+
+enum genz_c_access_ctl_reset_c_access_tables {
+    C_ACCESS_CTL_RESET_C_ACCESS_TABLES_RESET_C_ACCESS_TABLES = 0x1
+};
+
 enum genz_req_p2p_control_opclass_enable {
     REQ_P2P_CONTROL_OPCLASS_ENABLE_P2P_64 = 0x0,
     REQ_P2P_CONTROL_OPCLASS_ENABLE_P2P_VENDOR_DEFINED = 0x12
@@ -4057,6 +4238,10 @@ enum genz_pa_cap_1_pa_index_field_size {
     PA_CAP_1_PA_INDEX_FIELD_SIZE_BITS_0 = 0x0,
     PA_CAP_1_PA_INDEX_FIELD_SIZE_BITS_8 = 0x1,
     PA_CAP_1_PA_INDEX_FIELD_SIZE_BITS_16 = 0x2
+};
+
+enum genz_pa_cap_1_pa_entry_size {
+    PA_CAP_1_PA_ENTRY_SIZE_BITS_16 = 0x0
 };
 
 enum genz_pa_cap_1_sec_index_field_size {
@@ -4111,6 +4296,10 @@ enum genz_w_acrsp {
     W_ACRSP__FULL_ACCESS_TRUSTED_REQUESTER = 0x3
 };
 
+enum genz_c_event_cap_1_event_signal_size {
+    C_EVENT_CAP_1_EVENT_SIGNAL_SIZE_BITS_512 = 0x0
+};
+
 enum genz_event_signal_63_0 {
     EVENT_SIGNAL_63_0__NO_SIGNAL_ACTION_IS_TAKEN = 0x0,
     EVENT_SIGNAL_63_0__TRIGGER_COMPONENT_LOCAL_INTERRUPT_0 = 0x1,
@@ -4155,6 +4344,10 @@ enum genz_pm_cap_1_performance_marker_support {
     PM_CAP_1_PERFORMANCE_MARKER_SUPPORT_GENERATES_PERFORMANCE_LOG_RECORD_TYPES_1 = 0x2
 };
 
+enum genz_pm_control_clear_performance_marker_log {
+    PM_CONTROL_CLEAR_PERFORMANCE_MARKER_LOG_CLEAR_PERFORMANCE_LOG = 0x1
+};
+
 enum genz_atp_cap_1_pasid_support {
     ATP_CAP_1_PASID_SUPPORT_PASID_RESERVED = 0x0,
     ATP_CAP_1_PASID_SUPPORT_PASID_VALUE = 0x1
@@ -4168,6 +4361,10 @@ enum genz_atp_cap_1_prg_rspn_pasid_required {
 enum genz_atp_cap_1_control_address_translation_cache_enable {
     ATP_CAP_1_CONTROL_ADDRESS_TRANSLATION_CACHE_ENABLE_SHALL_NOT_CACHE = 0x0,
     ATP_CAP_1_CONTROL_ADDRESS_TRANSLATION_CACHE_ENABLE_MAY_CACHE = 0x1
+};
+
+enum genz_atp_cap_1_control_max_context_id {
+    ATP_CAP_1_CONTROL_MAX_CONTEXT_ID__2 = 0x0
 };
 
 enum genz_lph_ctl_interrupt_r_key_enable {
@@ -4250,6 +4447,14 @@ enum genz_m {
     M__INTRA_MODULE = 0x1
 };
 
+enum genz_tr_ctl_tr_zmmu_reset {
+    TR_CTL_TR_ZMMU_RESET_RESET_ZMMU = 0x1
+};
+
+enum genz_tr_ctl_tr_rtr_reset {
+    TR_CTL_TR_RTR_RESET_RESET_RTR = 0x1
+};
+
 enum genz_tik_size {
     TIK_SIZE__BYTES_28 = 0x0,
     TIK_SIZE__BYTES_32 = 0x1,
@@ -4261,6 +4466,10 @@ enum genz_scv {
     SCV__INVALID_CID_AND_INVALID_SID = 0x0,
     SCV__VALID_CID_AND_INVALID_SID = 0x1,
     SCV__VALID_CID_AND_VALID_SID = 0x2
+};
+
+enum genz_rc_cap_1_route_control_structure_size {
+    RC_CAP_1_ROUTE_CONTROL_STRUCTURE_SIZE_BYTES_16 = 0x0
 };
 
 enum genz_peer_attr_latency_domain {
@@ -4319,6 +4528,21 @@ enum genz_log_type {
     LOG_TYPE__MEDIA_DEVICE_ENTRY_RI_VALUE = 0x3,
     LOG_TYPE__OPERATION_ENTRY_RI_VALUE = 0x4,
     LOG_TYPE__VENDOR_DEFINED_ENTRY_A_VENDOR_DEFINED_ENTRY_SHALL_BE_IDENTIFIED_BY_THE_CORE_STRUCTURE_C_UUID = 0xF
+};
+
+enum hardware_types {
+    RESERVED_SHALL_NOT_BE_USED = 0,
+    MEMORY = 1,
+    SWITCH = 2,
+    PROCESSOR = 3,
+    ACCELERATOR = 4,
+    IO = 5,
+    BLOCK_STORAGE = 6,
+    TRANSPARENT_ROUTER = 7,
+    MULTICLASS_COMPONENT = 8,
+    BRIDGE = 9,
+    COMPLIANCE_TEST_BOARD = 10,
+    LOGICAL_PCIE_HIERARCHY = 11
 };
 
 struct genz_component_rkd_structure_array {
@@ -4591,6 +4815,12 @@ struct genz_pg_restricted_pg_table_array {
     uint64_t base_pte_index_0  : 32;
 };
 
+struct hardware_classes_meta {
+    const char * const raw_name;
+    const char * const condensed_name;
+    const enum hardware_types value;
+};
+
 struct genz_core_structure {
     uint64_t type                                 : 12;
     uint64_t vers                                 : 4;
@@ -4719,8 +4949,7 @@ struct genz_core_structure {
     uint64_t reqnirto                             : 16;
     uint64_t reqabnirto                           : 16;
     uint64_t component_nonce                      : 64;
-    uuid_t mgr_uuid_1;
-    uuid_t mgr_uuid_2;
+    uuid_t mgr_uuid;
     uint64_t serial_number                        : 64;
     uint64_t thermal_attributes                   : 16;
     uint64_t upper_thermal_limit                  : 10;
@@ -4728,12 +4957,9 @@ struct genz_core_structure {
     uint64_t lowest_thermal_limit                 : 11;
     uint64_t current_thermal                      : 11;
     uint64_t r16                                  : 6;
-    uuid_t z_uuid_1;
-    uuid_t z_uuid_2;
-    uuid_t c_uuid_1;
-    uuid_t c_uuid_2;
-    uuid_t fru_uuid_1;
-    uuid_t fru_uuid_2;
+    uuid_t z_uuid;
+    uuid_t c_uuid;
+    uuid_t fru_uuid;
 };
 
 struct genz_opcode_set_structure {
@@ -5848,8 +6074,7 @@ struct genz_opcode_set_uuid_table {
     uint64_t enabled_p2p_64_subop_response_set_127_0_2                    : 64; //NOTE: splitted bit
     uint64_t enabled_p2p_64_subop_response_set_255_128_1                  : 64; //NOTE: splitted bit
     uint64_t enabled_p2p_64_subop_response_set_255_128_2                  : 64; //NOTE: splitted bit
-    uuid_t pm_uuid_1;
-    uuid_t pm_uuid_2;
+    uuid_t pm_uuid;
     struct genz_opcode_set_uuid_table_array opcode_set_uuid_table_array[];
 };
 
@@ -6001,111 +6226,114 @@ struct genz_label_data_table {
 };
 
 
-union genz_control_structure { 
-    struct genz_component_rkd_structure_array genz_component_rkd_structure_array_ptr;
-    struct genz_component_lpd_structure_array genz_component_lpd_structure_array_ptr;
-    struct genz_component_event_structure_array genz_component_event_structure_array_ptr;
-    struct genz_service_uuid_structure_array genz_service_uuid_structure_array_ptr;
-    struct genz_vendor_defined_with_uuid_structure_array genz_vendor_defined_with_uuid_structure_array_ptr;
-    struct genz_vendor_defined_structure_array genz_vendor_defined_structure_array_ptr;
-    struct genz_interface_statistics_structure_array genz_interface_statistics_structure_array_ptr;
-    struct genz_interface_phy_structure_array genz_interface_phy_structure_array_ptr;
-    struct genz_re_table_array genz_re_table_array_ptr;
-    struct genz_msod_table_array_array genz_msod_table_array_array_ptr;
-    struct genz_ssod_table_array_array genz_ssod_table_array_array_ptr;
-    struct genz_oem_data_table_array genz_oem_data_table_array_ptr;
-    struct genz_media_log_table_array genz_media_log_table_array_ptr;
-    struct genz_sm_backup_table_array genz_sm_backup_table_array_ptr;
-    struct genz_pm_backup_table_array genz_pm_backup_table_array_ptr;
-    struct genz_c_access_l_p2p_table_array_array genz_c_access_l_p2p_table_array_array_ptr;
-    struct genz_c_access_r_key_table_array genz_c_access_r_key_table_array_ptr;
-    struct genz_sec_table_array genz_sec_table_array_ptr;
-    struct genz_pa_table_array genz_pa_table_array_ptr;
-    struct genz_lprt_mprt_table_array_array genz_lprt_mprt_table_array_array_ptr;
-    struct genz_vcat_table_array_array genz_vcat_table_array_array_ptr;
-    struct genz_mcprt_msmcprt_table_array_array genz_mcprt_msmcprt_table_array_array_ptr;
-    struct genz_mvcat_table_array genz_mvcat_table_array_ptr;
-    struct genz_lprt_mprt_rows_array_array genz_lprt_mprt_rows_array_array_ptr;
-    struct genz_responder_vcat_table_array_array genz_responder_vcat_table_array_array_ptr;
-    struct genz_requester_vcat_table_array_array genz_requester_vcat_table_array_array_ptr;
-    struct genz_ssdt_msdt_table_array_array genz_ssdt_msdt_table_array_array_ptr;
-    struct genz_rit_table_array genz_rit_table_array_ptr;
-    struct genz_elog_table_array genz_elog_table_array_ptr;
-    struct genz_opcode_set_uuid_table_array genz_opcode_set_uuid_table_array_ptr;
-    struct genz_opcode_set_table_array genz_opcode_set_table_array_ptr;
-    struct genz_core_lpd_bdf_table_array genz_core_lpd_bdf_table_array_ptr;
-    struct genz_reliable_multicast_table_array genz_reliable_multicast_table_array_ptr;
-    struct genz_unreliable_multicast_table_array genz_unreliable_multicast_table_array_ptr;
-    struct genz_reliable_multicast_responder_table_array genz_reliable_multicast_responder_table_array_ptr;
-    struct genz_tik_table_array genz_tik_table_array_ptr;
-    struct genz_certificate_table_array_array genz_certificate_table_array_array_ptr;
-    struct genz_c_cert_table_array genz_c_cert_table_array_ptr;
-    struct genz_service_uuid_table_array_array genz_service_uuid_table_array_array_ptr;
-    struct genz_image_table_array genz_image_table_array_ptr;
-    struct genz_component_tr_table_array genz_component_tr_table_array_ptr;
-    struct genz_type_1_interleave_table_array_array genz_type_1_interleave_table_array_array_ptr;
-    struct genz_type_1_interleave_table_array genz_type_1_interleave_table_array_ptr;
-    struct genz_firmware_table_array genz_firmware_table_array_ptr;
-    struct genz_pg_restricted_pg_table_array genz_pg_restricted_pg_table_array_ptr;
-    struct genz_core_structure genz_core_structure_ptr;
-    struct genz_opcode_set_structure genz_opcode_set_structure_ptr;
-    struct genz_interface_structure genz_interface_structure_ptr;
-    struct genz_interface_phy_structure genz_interface_phy_structure_ptr;
-    struct genz_interface_statistics_structure genz_interface_statistics_structure_ptr;
-    struct genz_component_error_and_signal_event_structure genz_component_error_and_signal_event_structure_ptr;
-    struct genz_component_media_structure genz_component_media_structure_ptr;
-    struct genz_component_switch_structure genz_component_switch_structure_ptr;
-    struct genz_component_statistics_structure genz_component_statistics_structure_ptr;
-    struct genz_component_extension_structure genz_component_extension_structure_ptr;
-    struct genz_vendor_defined_structure genz_vendor_defined_structure_ptr;
-    struct genz_vendor_defined_with_uuid_structure genz_vendor_defined_with_uuid_structure_ptr;
-    struct genz_component_multicast_structure genz_component_multicast_structure_ptr;
-    struct genz_component_security_structure genz_component_security_structure_ptr;
-    struct genz_component_tr_structure genz_component_tr_structure_ptr;
-    struct genz_component_image_structure genz_component_image_structure_ptr;
-    struct genz_component_precision_time_structure genz_component_precision_time_structure_ptr;
-    struct genz_component_mechanical_structure genz_component_mechanical_structure_ptr;
-    struct genz_component_destination_table_structure genz_component_destination_table_structure_ptr;
-    struct genz_service_uuid_structure genz_service_uuid_structure_ptr;
-    struct genz_component_c_access_structure genz_component_c_access_structure_ptr;
-    struct genz_requester_p2p_structure genz_requester_p2p_structure_ptr;
-    struct genz_component_pa_structure genz_component_pa_structure_ptr;
-    struct genz_component_event_structure genz_component_event_structure_ptr;
-    struct genz_component_lpd_structure genz_component_lpd_structure_ptr;
-    struct genz_component_sod_structure genz_component_sod_structure_ptr;
-    struct genz_congestion_management_structure genz_congestion_management_structure_ptr;
-    struct genz_component_rkd_structure genz_component_rkd_structure_ptr;
-    struct genz_component_pm_structure genz_component_pm_structure_ptr;
-    struct genz_component_atp_structure genz_component_atp_structure_ptr;
-    struct genz_component_re_table_structure genz_component_re_table_structure_ptr;
-    struct genz_component_lph_structure genz_component_lph_structure_ptr;
-    struct genz_component_page_grid_structure genz_component_page_grid_structure_ptr;
-    struct genz_component_page_table_structure genz_component_page_table_structure_ptr;
-    struct genz_component_interleave_structure genz_component_interleave_structure_ptr;
-    struct genz_component_firmware_structure genz_component_firmware_structure_ptr;
-    struct genz_component_sw_management_structure genz_component_sw_management_structure_ptr;
-    struct genz_pte_restricted_pte_table genz_pte_restricted_pte_table_ptr;
-    struct genz_event_record genz_event_record_ptr;
-    struct genz_performance_log_record_0 genz_performance_log_record_0_ptr;
-    struct genz_performance_log_record_1 genz_performance_log_record_1_ptr;
-    struct genz_image_header_0xc86ed8c24bed49bda5143dd11950de9d genz_image_header_0xc86ed8c24bed49bda5143dd11950de9d_ptr;
-    struct genz_resource_array_table genz_resource_array_table_ptr;
-    struct genz_unreliable_multicast_table_entry_row genz_unreliable_multicast_table_entry_row_ptr;
-    struct genz_reliable_multicast_table_entry_row genz_reliable_multicast_table_entry_row_ptr;
-    struct genz_opcode_set_table genz_opcode_set_table_ptr;
-    struct genz_opcode_set_uuid_table genz_opcode_set_uuid_table_ptr;
-    struct genz_component_error_elog_entry genz_component_error_elog_entry_ptr;
-    struct genz_interface_error_elog_entry genz_interface_error_elog_entry_ptr;
-    struct genz_elog_table genz_elog_table_ptr;
-    struct genz_ssdt_msdt_table_entry_row genz_ssdt_msdt_table_entry_row_ptr;
-    struct genz_lprt_route_entry_row genz_lprt_route_entry_row_ptr;
-    struct genz_mcprt_msmcptr_row genz_mcprt_msmcptr_row_ptr;
-    struct genz_route_control_table genz_route_control_table_ptr;
-    struct genz_ssap_mcap_msap_and_msmcap_table genz_ssap_mcap_msap_and_msmcap_table_ptr;
-    struct genz_backup_mgmt_table genz_backup_mgmt_table_ptr;
-    struct genz_pm_backup_table genz_pm_backup_table_ptr;
-    struct genz_sm_backup_table genz_sm_backup_table_ptr;
-    struct genz_oem_data_table genz_oem_data_table_ptr;
-    struct genz_label_data_table genz_label_data_table_ptr;
+union genz_control_structure {
+    struct genz_control_ptr_info control_ptr_info_ptr;
+    struct genz_control_structure_ptr control_structure_ptr_ptr;
+    struct genz_component_rkd_structure_array component_rkd_structure_array_ptr;
+    struct genz_component_lpd_structure_array component_lpd_structure_array_ptr;
+    struct genz_component_event_structure_array component_event_structure_array_ptr;
+    struct genz_service_uuid_structure_array service_uuid_structure_array_ptr;
+    struct genz_vendor_defined_with_uuid_structure_array vendor_defined_with_uuid_structure_array_ptr;
+    struct genz_vendor_defined_structure_array vendor_defined_structure_array_ptr;
+    struct genz_interface_statistics_structure_array interface_statistics_structure_array_ptr;
+    struct genz_interface_phy_structure_array interface_phy_structure_array_ptr;
+    struct genz_re_table_array re_table_array_ptr;
+    struct genz_msod_table_array_array msod_table_array_array_ptr;
+    struct genz_ssod_table_array_array ssod_table_array_array_ptr;
+    struct genz_oem_data_table_array oem_data_table_array_ptr;
+    struct genz_media_log_table_array media_log_table_array_ptr;
+    struct genz_sm_backup_table_array sm_backup_table_array_ptr;
+    struct genz_pm_backup_table_array pm_backup_table_array_ptr;
+    struct genz_c_access_l_p2p_table_array_array c_access_l_p2p_table_array_array_ptr;
+    struct genz_c_access_r_key_table_array c_access_r_key_table_array_ptr;
+    struct genz_sec_table_array sec_table_array_ptr;
+    struct genz_pa_table_array pa_table_array_ptr;
+    struct genz_lprt_mprt_table_array_array lprt_mprt_table_array_array_ptr;
+    struct genz_vcat_table_array_array vcat_table_array_array_ptr;
+    struct genz_mcprt_msmcprt_table_array_array mcprt_msmcprt_table_array_array_ptr;
+    struct genz_mvcat_table_array mvcat_table_array_ptr;
+    struct genz_lprt_mprt_rows_array_array lprt_mprt_rows_array_array_ptr;
+    struct genz_responder_vcat_table_array_array responder_vcat_table_array_array_ptr;
+    struct genz_requester_vcat_table_array_array requester_vcat_table_array_array_ptr;
+    struct genz_ssdt_msdt_table_array_array ssdt_msdt_table_array_array_ptr;
+    struct genz_rit_table_array rit_table_array_ptr;
+    struct genz_elog_table_array log_table_array_ptr;
+    struct genz_opcode_set_uuid_table_array opcode_set_uuid_table_array_ptr;
+    struct genz_opcode_set_table_array opcode_set_table_array_ptr;
+    struct genz_core_lpd_bdf_table_array core_lpd_bdf_table_array_ptr;
+    struct genz_reliable_multicast_table_array reliable_multicast_table_array_ptr;
+    struct genz_unreliable_multicast_table_array unreliable_multicast_table_array_ptr;
+    struct genz_reliable_multicast_responder_table_array reliable_multicast_responder_table_array_ptr;
+    struct genz_tik_table_array tik_table_array_ptr;
+    struct genz_certificate_table_array_array certificate_table_array_array_ptr;
+    struct genz_c_cert_table_array c_cert_table_array_ptr;
+    struct genz_service_uuid_table_array_array service_uuid_table_array_array_ptr;
+    struct genz_image_table_array image_table_array_ptr;
+    struct genz_component_tr_table_array component_tr_table_array_ptr;
+    struct genz_type_1_interleave_table_array_array type_1_interleave_table_array_array_ptr;
+    struct genz_type_1_interleave_table_array type_1_interleave_table_array_ptr;
+    struct genz_firmware_table_array firmware_table_array_ptr;
+    struct genz_pg_restricted_pg_table_array pg_restricted_pg_table_array_ptr;
+    struct hardware_classes_meta hardware_classes_meta_ptr;
+    struct genz_core_structure core_structure_ptr;
+    struct genz_opcode_set_structure opcode_set_structure_ptr;
+    struct genz_interface_structure interface_structure_ptr;
+    struct genz_interface_phy_structure interface_phy_structure_ptr;
+    struct genz_interface_statistics_structure interface_statistics_structure_ptr;
+    struct genz_component_error_and_signal_event_structure component_error_and_signal_event_structure_ptr;
+    struct genz_component_media_structure component_media_structure_ptr;
+    struct genz_component_switch_structure component_switch_structure_ptr;
+    struct genz_component_statistics_structure component_statistics_structure_ptr;
+    struct genz_component_extension_structure component_extension_structure_ptr;
+    struct genz_vendor_defined_structure vendor_defined_structure_ptr;
+    struct genz_vendor_defined_with_uuid_structure vendor_defined_with_uuid_structure_ptr;
+    struct genz_component_multicast_structure component_multicast_structure_ptr;
+    struct genz_component_security_structure component_security_structure_ptr;
+    struct genz_component_tr_structure component_tr_structure_ptr;
+    struct genz_component_image_structure component_image_structure_ptr;
+    struct genz_component_precision_time_structure component_precision_time_structure_ptr;
+    struct genz_component_mechanical_structure component_mechanical_structure_ptr;
+    struct genz_component_destination_table_structure component_destination_table_structure_ptr;
+    struct genz_service_uuid_structure service_uuid_structure_ptr;
+    struct genz_component_c_access_structure component_c_access_structure_ptr;
+    struct genz_requester_p2p_structure requester_p2p_structure_ptr;
+    struct genz_component_pa_structure component_pa_structure_ptr;
+    struct genz_component_event_structure component_event_structure_ptr;
+    struct genz_component_lpd_structure component_lpd_structure_ptr;
+    struct genz_component_sod_structure component_sod_structure_ptr;
+    struct genz_congestion_management_structure congestion_management_structure_ptr;
+    struct genz_component_rkd_structure component_rkd_structure_ptr;
+    struct genz_component_pm_structure component_pm_structure_ptr;
+    struct genz_component_atp_structure component_atp_structure_ptr;
+    struct genz_component_re_table_structure component_re_table_structure_ptr;
+    struct genz_component_lph_structure component_lph_structure_ptr;
+    struct genz_component_page_grid_structure component_page_grid_structure_ptr;
+    struct genz_component_page_table_structure component_page_table_structure_ptr;
+    struct genz_component_interleave_structure component_interleave_structure_ptr;
+    struct genz_component_firmware_structure component_firmware_structure_ptr;
+    struct genz_component_sw_management_structure component_sw_management_structure_ptr;
+    struct genz_pte_restricted_pte_table pte_restricted_pte_table_ptr;
+    struct genz_event_record vent_record_ptr;
+    struct genz_performance_log_record_0 performance_log_record_0_ptr;
+    struct genz_performance_log_record_1 performance_log_record_1_ptr;
+    struct genz_image_header_0xc86ed8c24bed49bda5143dd11950de9d image_header_0xc86ed8c24bed49bda5143dd11950de9d_ptr;
+    struct genz_resource_array_table resource_array_table_ptr;
+    struct genz_unreliable_multicast_table_entry_row unreliable_multicast_table_entry_row_ptr;
+    struct genz_reliable_multicast_table_entry_row reliable_multicast_table_entry_row_ptr;
+    struct genz_opcode_set_table opcode_set_table_ptr;
+    struct genz_opcode_set_uuid_table opcode_set_uuid_table_ptr;
+    struct genz_component_error_elog_entry component_error_elog_entry_ptr;
+    struct genz_interface_error_elog_entry interface_error_elog_entry_ptr;
+    struct genz_elog_table log_table_ptr;
+    struct genz_ssdt_msdt_table_entry_row ssdt_msdt_table_entry_row_ptr;
+    struct genz_lprt_route_entry_row lprt_route_entry_row_ptr;
+    struct genz_mcprt_msmcptr_row mcprt_msmcptr_row_ptr;
+    struct genz_route_control_table route_control_table_ptr;
+    struct genz_ssap_mcap_msap_and_msmcap_table ssap_mcap_msap_and_msmcap_table_ptr;
+    struct genz_backup_mgmt_table backup_mgmt_table_ptr;
+    struct genz_pm_backup_table pm_backup_table_ptr;
+    struct genz_sm_backup_table sm_backup_table_ptr;
+    struct genz_oem_data_table oem_data_table_ptr;
+    struct genz_label_data_table label_data_table_ptr;
 };
 #endif

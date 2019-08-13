@@ -107,6 +107,7 @@ struct genz_subnet {
 	uint32_t		sid;
 	struct genz_fabric 	*fabric;
 	struct list_head	node; /* per-fabric list of subnets*/
+	struct list_head	frus; /* list of frus in this subnet */
 	struct kobject		kobj; /* /sys/devices/genz<N>/SID */
 };
 #define to_genz_subnet(x) container_of(x, struct genz_subnet, kobj)
@@ -120,6 +121,24 @@ struct genz_subnet_attribute {
 		const char *buf, size_t count);
 };
 #define to_genz_subnet_attr(x) container_of(x, struct genz_subnet_attribute, attr)
+
+struct genz_fru {
+	uuid_t			fru_uuid;
+	struct genz_subnet	*subnet;
+	struct list_head	node; /* per-subnet list of frus*/
+	struct kobject		kobj; /* /sys/devices/genz<N>/<SID>/<FRU> */
+};
+#define to_genz_fru(x) container_of(x, struct genz_fru, kobj)
+
+struct genz_fru_attribute {
+	struct attribute attr;
+        ssize_t (*show)(struct genz_fru *f,
+		struct genz_fru_attribute *attr, char *buf);
+        ssize_t (*store)(struct genz_fru *f,
+		struct genz_fru_attribute *attr,
+		const char *buf, size_t count);
+};
+#define to_genz_fru_attr(x) container_of(x, struct genz_fru_attribute, attr)
 
 struct genz_component {
 	uint32_t		cid;

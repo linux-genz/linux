@@ -238,9 +238,11 @@ static int genz_init_subnet(struct genz_subnet *s,
 
         ret = kobject_init_and_add(&s->kobj, &subnet_ktype, &f->dev.kobj, "%04d", sid);
 	if (ret) {
+		kobject_put(&s->kobj);
 		pr_debug( "%s: sid %d is not in the subnets list yet\n", __func__, sid);
 		return ret;
 	}
+	kobject_uevent(&s->kobj, KOBJ_ADD);
 	/* Revisit: add the node to the fabric subnets list */
 	
 	return ret;
@@ -284,6 +286,117 @@ struct genz_subnet *genz_find_subnet(uint32_t sid, struct genz_fabric *f)
 	return found;
 }
 
+#ifdef NOT_YET
+static struct genz_fru *genz_alloc_fru(void)
+{
+	struct genz_fru *f;
+
+	f = kzalloc(sizeof(*f), GFP_KERNEL);
+	if (!f)
+		return NULL;
+
+        INIT_LIST_HEAD(&f->node);
+
+        return f;
+}
+
+static ssize_t fru_attr_show(struct kobject *kobj,
+                             struct attribute *attr,
+                             char *buf)
+{
+        struct genz_fru_attribute *attribute;
+        struct genz_fru *f;
+
+        attribute = to_genz_fru_attr(attr);
+        f = to_genz_fru(kobj);
+
+        if (!attribute->show)
+                return -EIO;
+
+        return attribute->show(f, attribute, buf);
+}
+
+static void fru_release(struct kobject *kobj)
+{
+	struct genz_fru *f;
+
+	f = to_genz_fru(kobj);
+//	down_write(&f->fabric->fru_sem);
+	list_del(&f->node);
+//	up_write(&f->fabric->fru_sem);
+	kfree(f);
+}
+
+void destroy_genz_fru(struct genz_fru *f)
+{
+	kobject_put(&f->kobj);
+}
+
+static const struct sysfs_ops fru_sysfs_ops = {
+	.show = fru_attr_show,
+};
+static struct kobj_type fru_ktype = {
+	.sysfs_ops = &fru_sysfs_ops,
+	.release = fru_release,
+};
+
+static int genz_init_fru(struct genz_fru *f,
+		uuid_t fru_uuid, struct genz_subnet *s)
+{
+	int ret = 0;
+
+        f->fru_uuid = fru_uuid;
+	f->subnet = s;
+
+        ret = kobject_init_and_add(&f->kobj, &fru_ktype, &s->kobj, "%pUb", &fru_uuid);
+	if (ret) {
+		kobject_put(&f->kobj);
+		pr_debug("%s: fru %pUb is not in the frus list yet\n", __func__, &fru_uuid);
+		return ret;
+	}
+	kobject_uevent(&f->kobj, KOBJ_ADD);
+	
+	/* Revisit: locking on this list? */
+	list_add_tail(&f->node, &s->frus);
+
+	return ret;
+}
+
+struct genz_fru *genz_find_fru(uuid_t fru_uuid, struct genz_subnet *s)
+{
+	struct genz_fru *f, *found = NULL;
+	int ret = 0;
+	
+	pr_debug( "entering %s", __func__);
+	list_for_each_entry(f, &s->frus, node) {
+		if (uuid_equal(&f->fru_uuid, &fru_uuid)) {
+			found = f;
+			kobject_get(&found->kobj);
+			break;
+		}
+	}
+	if (!found) {
+		/* Allocate a new genz_fru and add to list */
+		/* Revisit: add a flag that is it initialized. Set to UNINIT in the alloc call. take lock and add to list. do init_fru. Take lock, Set to INITED in init_fru, release lock.  */
+		found = genz_alloc_fru();
+		if (!found) {
+			pr_debug( "genz_alloc_fru returned %d\n", ret);
+			goto out;
+		}
+		ret = genz_init_fru(found, fru_uuid, s);
+		if (ret) {
+			pr_debug( "genz_init_fru returned %d\n", ret);
+			kfree(found);
+			found = NULL;
+			goto out;
+		}
+	}
+	return found;
+out:
+	return found;
+}
+#endif
+
 static ssize_t component_attr_show(struct kobject *kobj,
                              struct attribute *attr,
                              char *buf)
@@ -299,7 +412,6 @@ static ssize_t component_attr_show(struct kobject *kobj,
 
         return attribute->show(comp, attribute, buf);
 }
-
 static void component_release(struct kobject *kobj)
 {
 	struct genz_component *comp;
@@ -339,13 +451,15 @@ int genz_init_component(struct genz_component *zcomp,
 
 	zcomp->subnet = s;
 	zcomp->cid = cid;
-        ret = kobject_init_and_add(&(zcomp->kobj), &component_ktype, &s->kobj, "%03d", cid);
+        ret = kobject_init_and_add(&zcomp->kobj, &component_ktype, &s->kobj, "%03d", cid);
 	if (ret) {
 		pr_debug( "%s: kobject_init_and_add failed for cid %d\n",
 			 __func__, cid);
 		kobject_put(&zcomp->kobj);
 		return ret;
 	}
+
+	kobject_uevent(&zcomp->kobj, KOBJ_ADD);
 
 	printk(KERN_ERR "component kobj is %px\n", &(zcomp->kobj));
 	printk(KERN_ERR "subnet kobj is %px\n", &(s->kobj));
