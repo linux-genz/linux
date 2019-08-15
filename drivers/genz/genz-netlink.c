@@ -245,8 +245,6 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 	}
 	/* Revisit: add a find_component() */
 	s = genz_find_subnet(genz_get_sid(gcid), f);
-	/* Revisit: alloc_component should be a find_component because
-           it could already exist */
 	ret = genz_create_sid_file(s);
 	if (ret) {
 		printk(KERN_ERR "%s: genz_create_sid_file failed\n", __FUNCTION__);

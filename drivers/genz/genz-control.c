@@ -41,59 +41,6 @@
 #include "genz-control.h"
 #include "genz-probe.h"
 
-static ssize_t gcid_show(struct genz_component *comp,
-		struct genz_component_attribute *attr,
-		char *buf)
-{
-	printk(KERN_ERR "comp is %px\n", comp);
-
-	if (comp == NULL) {
-		printk(KERN_ERR "comp is NULL\n");
-		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
-	}
-	if (comp->subnet == NULL) {
-		printk(KERN_ERR "comp->subnet is NULL\n");
-		return(snprintf(buf, PAGE_SIZE, "bad component subnet\n"));
-	}
-	return(snprintf(buf, PAGE_SIZE, "%04x:%03x\n", comp->subnet->sid, comp->cid));
-}
-
-static struct genz_component_attribute gcid_attribute =
-	__ATTR(gcid, (S_IRUGO), gcid_show, NULL);
-
-int genz_create_gcid_file(struct kobject *kobj)
-{
-	int ret = 0;
-
-	printk(KERN_ERR "%s: create_file for kobj %px\n", __func__, kobj);
-	ret = sysfs_create_file(kobj, &gcid_attribute.attr);
-	return ret;
-}
-
-static ssize_t fru_uuid_show(struct genz_component *comp,
-		struct genz_component_attribute *attr,
-		char *buf)
-{
-	printk(KERN_ERR "comp is %px\n", comp);
-
-	if (comp == NULL) {
-		printk(KERN_ERR "comp is NULL\n");
-		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
-	}
-	return(snprintf(buf, PAGE_SIZE, "%pUL\n", &comp->fru_uuid));
-}
-
-static struct genz_component_attribute fru_uuid_attribute =
-	__ATTR(fru_uuid, (S_IRUGO), fru_uuid_show, NULL);
-
-int genz_create_fru_uuid_file(struct kobject *kobj)
-{
-	int ret = 0;
-
-	printk(KERN_ERR "%s: create_file for kobj %px\n", __func__, kobj);
-	ret = sysfs_create_file(kobj, &fru_uuid_attribute.attr);
-	return ret;
-}
 
 static ssize_t mgr_uuid_show(struct genz_fabric *fab,
 		struct genz_fabric_attribute *attr,

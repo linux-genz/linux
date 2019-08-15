@@ -397,6 +397,83 @@ out:
 }
 #endif
 
+/* Component Attributes */
+static ssize_t cclass_show(struct genz_component *comp,
+		struct genz_component_attribute *attr,
+		char *buf)
+{
+	if (comp == NULL) {
+		printk(KERN_ERR "comp is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
+	}
+	return(snprintf(buf, PAGE_SIZE, "%d\n", comp->cclass));
+}
+
+static struct genz_component_attribute cclass_attribute =
+	__ATTR(cclass, (S_IRUGO), cclass_show, NULL);
+
+static ssize_t gcid_show(struct genz_component *comp,
+		struct genz_component_attribute *attr,
+		char *buf)
+{
+	printk(KERN_ERR "comp is %px\n", comp);
+
+	if (comp == NULL) {
+		printk(KERN_ERR "comp is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
+	}
+	if (comp->subnet == NULL) {
+		printk(KERN_ERR "comp->subnet is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad component subnet\n"));
+	}
+	return(snprintf(buf, PAGE_SIZE, "%04x:%03x\n", comp->subnet->sid, comp->cid));
+}
+
+static struct genz_component_attribute gcid_attribute =
+	__ATTR(gcid, (S_IRUGO), gcid_show, NULL);
+
+int genz_create_gcid_file(struct kobject *kobj)
+{
+	int ret = 0;
+
+	printk(KERN_ERR "%s: create_file for kobj %px\n", __func__, kobj);
+	ret = sysfs_create_file(kobj, &gcid_attribute.attr);
+	return ret;
+}
+
+static ssize_t fru_uuid_show(struct genz_component *comp,
+		struct genz_component_attribute *attr,
+		char *buf)
+{
+	printk(KERN_ERR "comp is %px\n", comp);
+
+	if (comp == NULL) {
+		printk(KERN_ERR "comp is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
+	}
+	return(snprintf(buf, PAGE_SIZE, "%pUL\n", &comp->fru_uuid));
+}
+
+static struct genz_component_attribute fru_uuid_attribute =
+	__ATTR(fru_uuid, (S_IRUGO), fru_uuid_show, NULL);
+
+int genz_create_fru_uuid_file(struct kobject *kobj)
+{
+	int ret = 0;
+
+	printk(KERN_ERR "%s: create_file for kobj %px\n", __func__, kobj);
+	ret = sysfs_create_file(kobj, &fru_uuid_attribute.attr);
+	return ret;
+}
+
+static struct_attribute *component_attrs[] = {
+	&gcid.attr,
+	&cclass.attr,
+	&fru_uuid.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(component);
+
 static ssize_t component_attr_show(struct kobject *kobj,
                              struct attribute *attr,
                              char *buf)
@@ -427,6 +504,7 @@ static const struct sysfs_ops component_sysfs_ops = {
 static struct kobj_type component_ktype = {
 	.sysfs_ops = &component_sysfs_ops,
 	.release = component_release,
+	.default_groups = component_default_groups,
 };
 
 struct genz_component *genz_alloc_component(void)
