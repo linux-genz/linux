@@ -466,10 +466,10 @@ int genz_create_fru_uuid_file(struct kobject *kobj)
 	return ret;
 }
 
-static struct_attribute *component_attrs[] = {
-	&gcid.attr,
-	&cclass.attr,
-	&fru_uuid.attr,
+static struct attribute *component_attrs[] = {
+	&gcid_attribute.attr,
+	&cclass_attribute.attr,
+	&fru_uuid_attribute.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(component);
@@ -504,7 +504,7 @@ static const struct sysfs_ops component_sysfs_ops = {
 static struct kobj_type component_ktype = {
 	.sysfs_ops = &component_sysfs_ops,
 	.release = component_release,
-	.default_groups = component_default_groups,
+	.default_groups = component_groups,
 };
 
 struct genz_component *genz_alloc_component(void)
@@ -529,7 +529,7 @@ int genz_init_component(struct genz_component *zcomp,
 
 	zcomp->subnet = s;
 	zcomp->cid = cid;
-        ret = kobject_init_and_add(&zcomp->kobj, &component_ktype, &s->kobj, "%03d", cid);
+        ret = kobject_init_and_add(&zcomp->kobj, &component_ktype, &s->kobj, "%03x", cid);
 	if (ret) {
 		pr_debug( "%s: kobject_init_and_add failed for cid %d\n",
 			 __func__, cid);

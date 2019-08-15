@@ -264,7 +264,9 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 	printk(KERN_ERR "zcomp is %px comp->kobj is %px\n", zcomp, &(zcomp->kobj));
 	printk(KERN_ERR "zcomp->subnet is %px\n", zcomp->subnet);
 	printk(KERN_ERR "zcomp->cid is 0x%03d\n", zcomp->cid);
+/*
 	ret = genz_create_gcid_file(&(zcomp->kobj));
+*/
 	if (ret) {
 		printk(KERN_ERR "%s: genz_create_gcid_file failed\n", __FUNCTION__);
 		return -EINVAL;
@@ -292,7 +294,9 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 		ret = -EINVAL;
 		goto err;
 	}
+/*
 	ret = genz_create_fru_uuid_file(&(zcomp->kobj));
+*/
 
 	if (info->attrs[GENZ_A_MGR_UUID]) {
 		byte_uuid = nla_data(info->attrs[GENZ_A_MGR_UUID]);
