@@ -37,7 +37,6 @@
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include "genz.h"
-#include "genz-types.h"
 #include "genz-control.h"
 #include "genz-probe.h"
 
@@ -52,7 +51,7 @@ static ssize_t mgr_uuid_show(struct genz_fabric *fab,
 		printk(KERN_ERR "fab is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad fabric\n"));
 	}
-	return(snprintf(buf, PAGE_SIZE, "%pUL\n", &fab->mgr_uuid));
+	return(snprintf(buf, PAGE_SIZE, "%pUb\n", &fab->mgr_uuid));
 }
 
 static struct genz_fabric_attribute mgr_uuid_attribute =

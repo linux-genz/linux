@@ -192,7 +192,7 @@ static int parse_resource_list(const struct nlattr * resource_list,
 			uint8_t * uuid;
 			
 			uuid = nla_data(u_attrs[GENZ_A_U_UUID]);
-			printk(KERN_INFO "\t\tUUID: %pUL\n", (void *) uuid);
+			printk(KERN_INFO "\t\tUUID: %pUb\n", (void *) uuid);
 		} else {
 			if (u_attrs[GENZ_A_U_MRL]) {
 				ret = parse_mr_list(zdev, u_attrs[GENZ_A_U_MRL]);

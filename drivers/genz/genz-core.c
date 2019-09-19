@@ -39,14 +39,25 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include "genz.h"
-#include "genz-types.h"
 #include "genz-control.h"
 #include "genz-netlink.h"
 #include "genz-probe.h"
 
+/* Revisit: make these dynamic and per-bridge somehow */
+#define REQ_ZMMU_ENTRIES             (1024)
+#define RSP_ZMMU_ENTRIES             (1024)
+
 static int no_genz;
 module_param(no_genz, int, 0444);
 MODULE_PARM_DESC(no_genz, "Disable genz (default 0)");
+
+static char *req_page_grid = "4K:384,2M:256,1G:256,128T^128";
+module_param(req_page_grid, charp, 0444);
+MODULE_PARM_DESC(req_page_grid, "requester page grid allocations - page_sz{^*:}page_cnt[, ...]");
+
+static char *rsp_page_grid = "4K:448,128T^64,1G:256,2M:256";
+module_param(rsp_page_grid, charp, 0444);
+MODULE_PARM_DESC(rsp_page_grid, "responder page grid allocations - page_sz{^:}page_cnt[, ...]");
 
 /**
  * genz_disabled - determine if the Gen-Z sub-system is disabled
@@ -63,6 +74,16 @@ int genz_disabled(void)
 	return no_genz;
 }
 EXPORT_SYMBOL_GPL(genz_disabled);
+
+char *genz_gcid_str(const uint32_t gcid, char *str, const size_t len)
+{
+    snprintf(str, len, "%04x", gcid >> 12);
+    if (len > 4)
+        str[4] = ':';
+    snprintf(str+5, len-5, "%03x", gcid & 0xfff);
+    return str;
+}
+EXPORT_SYMBOL_GPL(genz_gcid_str);
 
 /**
  * genz_validate_structure_type - check structure type
@@ -232,6 +253,7 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	zbdev->zdev.zcomp = zcomp;
 	zbdev->zbdrv = zbdrv;
 	zbdev->zdev.zdrv = &zbdrv->zdrv;
+	zbdev->zdev.zbdev = zbdev;
 
 	/* Revisit: How do we get the bridge's fabric number here? */
 	zbdev->fabric = genz_find_fabric(0);
@@ -243,24 +265,23 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	return 0;
 }
 
+static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br);
+
 /**
  * genz_register_bridge - register a new Gen-Z bridge driver
  * @struct device *dev: the device structure to register
  * @struct genz_driver *driver: the Gen-Z driver structure to register
- * @struct module *module: owner module of the driver
- * @const char *mod_name: module name string
  *
  * A driver calls genz_register_bridge() during probe of a device that
  * is a bridge component. This marks the bridge component as a bridge
  * so that a fabric manager can discover it through sysfs files named
- * 'brigeN'. Typically a bridge device driver is a PCI device (for example)
+ * 'bridgeN'. Typically a bridge device driver is a PCI device (for example)
  * and the driver is both a PCI driver and a Gen-Z driver. 
  *
  * Return:
  * Returns 0 on success. Returns a negative value on error.
  */
 int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv)
-	
 {
 	int ret = 0;
 	struct genz_bridge_dev *zbdev;
@@ -277,6 +298,12 @@ int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv)
 		kfree (zbdev);
 		return ret;
 	}
+
+	ret = zbdrv->bridge_info(&zbdev->zdev, &zbdev->br_info);
+	/* Revisit: handle errors */
+
+	ret = genz_bridge_zmmu_setup(zbdev);
+	/* Revisit: handle errors */
 
 	ret = genz_bridge_create_control_files(zbdev);
 	return ret;
@@ -305,6 +332,52 @@ int genz_unregister_bridge(struct genz_driver *driver)
 }
 EXPORT_SYMBOL(genz_unregister_bridge);
 
+static struct genz_page_grid req_parse_pg[PAGE_GRID_ENTRIES];
+static struct genz_page_grid rsp_parse_pg[PAGE_GRID_ENTRIES];
+static uint req_pg_cnt, rsp_pg_cnt;
+
+static void __init genz_parse_page_grids(void)
+{
+	pr_debug("req calling parse_page_grid_opt(%s, %u, %px)\n",
+		 req_page_grid, REQ_ZMMU_ENTRIES, req_parse_pg);
+	req_pg_cnt = genz_parse_page_grid_opt(req_page_grid, REQ_ZMMU_ENTRIES,
+					      true, req_parse_pg);
+	pr_debug("rsp calling parse_page_grid_opt(%s, %u, %px)\n",
+		 rsp_page_grid, RSP_ZMMU_ENTRIES, rsp_parse_pg);
+	rsp_pg_cnt = genz_parse_page_grid_opt(rsp_page_grid, RSP_ZMMU_ENTRIES,
+					      false, rsp_parse_pg);
+}
+
+static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br)
+{
+	uint pg;
+	int pg_index, err = 0;
+
+	if (br->br_info.req_zmmu) {
+		if (br->br_info.nr_req_page_grids) {
+			for (pg = 0; pg < req_pg_cnt; pg++) {
+				pg_index = genz_req_page_grid_alloc(
+					br, &req_parse_pg[pg]);
+				/* Revisit: error handling */
+			}
+		}
+		/* Revisit: add page table support */
+	}
+
+	if (br->br_info.rsp_zmmu) {
+		if (br->br_info.nr_rsp_page_grids) {
+			for (pg = 0; pg < rsp_pg_cnt; pg++) {
+				pg_index = genz_rsp_page_grid_alloc(
+					br, &rsp_parse_pg[pg]);
+				/* Revisit: error handling */
+			}
+		}
+		/* Revisit: add page table support */
+	}
+
+	return err;
+}
+
 static int __init genz_init(void) {
 	int ret = 0;
 
@@ -322,6 +395,8 @@ static int __init genz_init(void) {
 		pr_err("genz_nl_init failed (%d)\n", ret);
 		goto error_nl;
 	}
+
+	genz_parse_page_grids();
 
 	return ret;
 error_nl:

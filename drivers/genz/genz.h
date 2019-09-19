@@ -34,36 +34,19 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef LINUX_GENZ_H
-#define LINUX_GENZ_H
+#ifndef DRIVERS_GENZ_H
+#define DRIVERS_GENZ_H
 
-#include <linux/device.h>
-#include <linux/uuid.h>
-
-#ifdef __KERNEL__
-#include <linux/types.h>
-#include <linux/uuid.h>
-typedef unsigned long kernel_ulong_t;
-#endif
-
-typedef unsigned char uuid_str_t[37];	/* UUID string of format:
-                                           1b4e28ba-2fa1-11d2-883f-b9a761bde3fb
-                                           including a trailing NULL */
+#include <linux/bitmap.h>
+#include <linux/radix-tree.h>
+#include <linux/rbtree.h>
+#include <linux/genz.h>
 
 /* Value of Z-UUID in control space that indicates a Gen-Z device */
 #define GENZ_Z_UUID	0x4813ea5f074e4be2a355a354145c9927
 #define GENZ_CAST_UUID(u) *((uuid_t *)&(u))
 
 extern struct bus_type genz_bus_type;
-
-typedef loff_t genz_control_cookie;
-
-/* Revisit: does this belong in mod_devicetable.h? */
-struct genz_device_id {
-	uuid_str_t	uuid_str;	/* Vendor assigned component or
-					   service UUID */
-	kernel_ulong_t	driver_data;	/* Data private to the driver */
-};
 
 /*
  * Gen-Z resources can be control or data space in the struct resources 
@@ -168,60 +151,6 @@ struct genz_component_attribute {
 };
 #define to_genz_component_attr(x) container_of(x, struct genz_component_attribute, attr)
 
-struct genz_dev {
-	struct list_head	fab_dev_node; /* Node in the per-fabric list */
-	uuid_t 			uuid;      /* component/service/virtual UUID */
-	int                     zres_count;
-	struct list_head	zres_list;
-	struct genz_resource 	*zres;	      /* array of device's resources */
-	struct genz_control_info *root_control_info;
-	struct kobject		*root_kobj; /* kobj for /sys/devices/genz<N> */
-	struct genz_driver	*zdrv;
-	struct genz_bridge_dev	*zbdev;
-	struct genz_component	*zcomp;     /* parent component */
-	struct device		dev;	    /* Generic device interface */
-};
-#define to_genz_dev(n) container_of(n, struct genz_dev, dev)
-
-struct genz_driver {
-	const char			*name;
-	struct genz_device_id		*id_table; /* Null terminated array */
-	int (*probe)(struct genz_dev *zdev, const struct genz_device_id *id);
-	int (*remove)(struct genz_dev *zdev);
-	int (*suspend)(struct genz_dev *zdev);
-	int (*resume)(struct genz_dev *zdev);
-	struct device_driver		driver;
-};
-#define to_genz_driver(d) container_of(d, struct genz_driver, driver)
-
-struct genz_bridge_driver {
-	struct genz_driver	zdrv; /* Revisit: need this or is it all in native driver? */
-	int (*control_mmap)(struct genz_dev *zdev); /* Revisit: need flags? */
-	int (*control_read)(struct genz_dev *zdev, genz_control_cookie offset, size_t size, void *data, uint flags);
-	int (*control_write)(struct genz_dev *zdev, genz_control_cookie offset, size_t size, void *data, uint flags);
-	int (*control_write_msg)(struct genz_dev *zdev, genz_control_cookie offset, size_t size, void *data, uint flags);
-	int (*data_mmap)(struct genz_dev *zdev);
-	int (*data_read)(struct genz_dev *zdev, genz_control_cookie offset, size_t size, void *data);
-	int (*data_write)(struct genz_dev *zdev, genz_control_cookie offset, size_t size, void *data);
-};
-#define to_genz_bridge_driver(d) container_of(d, struct genz_bridge_driver, driver)
-
-struct genz_bridge_dev {
-	struct list_head	fab_bridge_node;	/* node in list of bridges on fabric */
-	struct genz_dev		zdev;
-	struct genz_bridge_driver *zbdrv;
-	struct device		*bridge_dev; /* native device pointer */
-	struct genz_fabric	*fabric;
-	void 			*private;    /* for bridge driver */
-	/* Revisit: add address space */
-};
-
-static inline bool zdev_is_local_bridge(struct genz_dev *zdev)
-{
-	return ((zdev != NULL && zdev->zbdev != NULL) ?
-			(&zdev->dev == zdev->zbdev->bridge_dev) : 0);
-}
-
 /* SID is 16 bits starting at bit 13 of a GCID */
 static inline int genz_get_sid(int gcid)
 {
@@ -291,11 +220,27 @@ struct genz_control_info_attribute {
 };
 #define to_genz_control_info_attr(x) container_of(x, struct genz_control_info_attribute, attr)
 
+#define GENZ_NUM_PASIDS  BIT(16)
+#define NO_PASID         0
+
+#define arithcmp(_a, _b)        ((_a) < (_b) ? -1 : ((_a) > (_b) ? 1 : 0))
+
 /* Global Variables */
 extern struct list_head genz_fabrics;
 
 /* Function Prototypes */
 void genz_lock_rescan_remove(void);
 void genz_unlock_rescan_remove(void);
+void genz_pasid_init(void);
+void genz_pasid_exit(void);
+int genz_pasid_alloc(unsigned int *pasid);
+void genz_pasid_free(unsigned int pasid);
+uint genz_parse_page_grid_opt(char *str, uint64_t max_page_count,
+			      bool allow_cpu_visible,
+			      struct genz_page_grid pg[]);
 
-#endif /* LINUX_GENZ_H */
+int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
+			     struct genz_page_grid *grid);
+int genz_rsp_page_grid_alloc(struct genz_bridge_dev *br,
+			     struct genz_page_grid *grid);
+#endif /* DRIVERS_GENZ_H */

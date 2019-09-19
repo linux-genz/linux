@@ -38,7 +38,6 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include "genz.h"
-#include "genz-types.h"
 #include "genz-probe.h"
 #include "genz-sysfs.h"
 
@@ -451,7 +450,7 @@ static ssize_t fru_uuid_show(struct genz_component *comp,
 		printk(KERN_ERR "comp is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
 	}
-	return(snprintf(buf, PAGE_SIZE, "%pUL\n", &comp->fru_uuid));
+	return(snprintf(buf, PAGE_SIZE, "%pUb\n", &comp->fru_uuid));
 }
 
 static struct genz_component_attribute fru_uuid_attribute =

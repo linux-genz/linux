@@ -34,7 +34,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <linux/kernel.h>
-#include "genz-types.h"
+#include <linux/genz-types.h>
 
 struct hardware_classes_meta hardware_classes[] = {
      { "Reserved—shall not be used",                           "reserved_shall_not_be_used", RESERVED_SHALL_NOT_BE_USED },
@@ -133,8 +133,8 @@ struct genz_control_structure_ptr component_media_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x8c, GENZ_MEDIA_LOG_TABLE },
     { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x90, GENZ_OEM_DATA_TABLE },
     { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x94, GENZ_VENDOR_DEFINED_WITH_UUID_STRUCTURE },
-    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x98, GENZ_LABEL_DATA_TABLE },
-    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x9c, GENZ_LABEL_DATA_TABLE },
+    { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x98, GENZ_LABEL_DATA_TABLE },
+    { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x9c, GENZ_LABEL_DATA_TABLE },
 };
 
 struct genz_control_structure_ptr component_switch_structure_ptrs[] = {
@@ -200,7 +200,7 @@ struct genz_control_structure_ptr component_destination_table_structure_ptrs[] =
     { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x20, GENZ_SSDT_MSDT_TABLE },
     { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x24, GENZ_SSDT_MSDT_TABLE },
     { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x28, GENZ_REQUESTER_VCAT_TABLE },
-    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x2c, GENZ_RIT_TABLE },
+    { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x2c, GENZ_RIT_TABLE },
     { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x30, GENZ_RESPONDER_VCAT_TABLE },
 };
 
@@ -295,6 +295,8 @@ struct genz_control_structure_ptr component_sw_management_structure_ptrs[] = {
 struct genz_control_structure_ptr component_tr_table_array_ptrs[] = {
     { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x0, GENZ_GENERIC_STRUCTURE },
     { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x4, GENZ_GENERIC_STRUCTURE },
+    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x8, GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE },
+    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0xc, GENZ_COMPONENT_PA_STRUCTURE },
     { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x10, GENZ_OPCODE_SET_STRUCTURE },
 };
 
@@ -385,9 +387,6 @@ struct genz_control_ptr_info genz_table_type_to_ptrs[] = {
     {},
     {},
      { elog_table_ptrs, sizeof(elog_table_ptrs)/sizeof(elog_table_ptrs[0]), sizeof(struct genz_elog_table), true, 0x0, "log_table_ptrs" },
-    {},
-    {},
-    {},
     {},
     {},
     {},

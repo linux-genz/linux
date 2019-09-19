@@ -34,7 +34,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <linux/module.h>
-#include "genz-types.h"
 #include "genz.h"
 
 ssize_t genz_control_structure_size(struct genz_control_info *ci)
