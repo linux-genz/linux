@@ -600,11 +600,16 @@ EXPORT_SYMBOL(genz_alloc_dev);
 int genz_device_add(struct genz_dev *zdev)
 {
 	int ret;
+	struct device * dev;
 	
-	device_initialize(&zdev->dev);
+        zdev->dev.bus = &genz_bus_type;
+	zdev->dev.parent = &zdev->zcomp->subnet->fabric->dev;
 	zdev->dev.release = genz_release_dev;
+	device_initialize(&zdev->dev);
 
 	ret = device_add(&zdev->dev);
+	if (ret)
+		printk(KERN_ERR "device_add failed with %d\n", ret);
 	return ret;
 }
 EXPORT_SYMBOL(genz_device_add);

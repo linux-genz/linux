@@ -170,8 +170,10 @@ static int parse_resource_list(const struct nlattr * resource_list,
 	struct genz_dev *zdev;
 
 	fabric = genz_find_fabric(zcomp->subnet->fabric->number);
-	if (!fabric) 
+	if (!fabric)  {
+		printk(KERN_ERR "genz_find_fabric failed\n");
 		return -ENOMEM;
+	}
 	printk(KERN_INFO "\tRESOURCE_LIST:\n");
 	/* Go through the nested list of UUID structures */
 	nla_for_each_nested(nested_attr, resource_list, rem) {
@@ -190,32 +192,42 @@ static int parse_resource_list(const struct nlattr * resource_list,
 		}
 		if (u_attrs[GENZ_A_U_UUID]) {
 			uint8_t * uuid;
-			
+			char *	uuid_name;
+
 			uuid = nla_data(u_attrs[GENZ_A_U_UUID]);
+			/* use the UUID as the device name */
+			/* Revisit: when to free this name??? */
+			uuid_name = kmalloc(UUID_STRING_LEN+1, GFP_KERNEL);
+			if (!uuid_name) {
+				printk(KERN_ERR "kmalloc of uuid_name failed\n");
+				goto error;
+			}
+				
+			snprintf(uuid_name, UUID_STRING_LEN + 1, "%pUb", uuid);
+			zdev->dev.init_name = uuid_name;
 			printk(KERN_INFO "\t\tUUID: %pUb\n", (void *) uuid);
-		} else {
-			if (u_attrs[GENZ_A_U_MRL]) {
-				ret = parse_mr_list(zdev, u_attrs[GENZ_A_U_MRL]);
-				if (ret) {
-					printk(KERN_ERR "\tparse of MRL failed\n");
-				}
-			} else {
+			
+		}
+		if (u_attrs[GENZ_A_U_MRL]) {
+			ret = parse_mr_list(zdev, u_attrs[GENZ_A_U_MRL]);
+			if (ret) {
+				printk(KERN_ERR "\tparse of MRL failed\n");
 			}
 		}
 		ret = genz_device_add(zdev);
 		if (ret) {
-			printk(KERN_ERR "\tgenz_device_add failed\n");
+			printk(KERN_ERR "\tgenz_device_add failed with %d\n", ret);
 			/* Revisit: more clean up here */
 		}
 	}
 	printk(KERN_INFO "\tend of RESOURCE_LIST\n");
+error:
 	return ret;
 }
 
 /* Netlink Generic Handler */
 static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 {
-	uint8_t *byte_uuid;
 	struct genz_component *zcomp = NULL;
 	uint32_t fabric_num, gcid;
 	int ret = 0;
@@ -273,7 +285,7 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (info->attrs[GENZ_A_CCLASS]) {
-		zcomp->cclass = nla_get_u32(info->attrs[GENZ_A_CCLASS]);
+		zcomp->cclass = nla_get_u16(info->attrs[GENZ_A_CCLASS]);
 		printk(KERN_DEBUG "\tC-Class = %d\n",
 			(uint32_t) zcomp->cclass);
 	} else {
@@ -286,9 +298,16 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 */
 
 	if (info->attrs[GENZ_A_FRU_UUID]) {
-		byte_uuid = nla_data(info->attrs[GENZ_A_FRU_UUID]);
-		zcomp->fru_uuid = GENZ_CAST_UUID(byte_uuid);
-		printk(KERN_DEBUG "\tFRU_UUID: %pUb\n", &zcomp->fru_uuid);
+		char uuid_str[UUID_STRING_LEN+1];
+		int u;
+	
+		snprintf(uuid_str, UUID_STRING_LEN + 1, "%pUb", 
+				 nla_data(info->attrs[GENZ_A_FRU_UUID]));
+		u = uuid_parse(uuid_str, &zcomp->fru_uuid);
+		if (u)
+			printk(KERN_ERR "invalid fru uuid\n");
+		else
+			printk(KERN_DEBUG "\tFRU_UUID: %pUb\n", &zcomp->fru_uuid);
 	} else {
 		printk(KERN_ERR "%s: missing required FRU_UUID\n", __FUNCTION__);
 		ret = -EINVAL;
@@ -299,9 +318,16 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 */
 
 	if (info->attrs[GENZ_A_MGR_UUID]) {
-		byte_uuid = nla_data(info->attrs[GENZ_A_MGR_UUID]);
-		f->mgr_uuid = GENZ_CAST_UUID(byte_uuid);
-		printk(KERN_DEBUG "\tMGR_UUID: %pUb\n", &f->mgr_uuid);
+		char uuid_str[UUID_STRING_LEN+1];
+		int u;
+	
+		snprintf(uuid_str, UUID_STRING_LEN + 1, "%pUb", 
+				 nla_data(info->attrs[GENZ_A_MGR_UUID]));
+		u = uuid_parse(uuid_str, &f->mgr_uuid);
+		if (u)
+			printk(KERN_ERR "invalid mgr uuid\n");
+		else
+			printk(KERN_DEBUG "\tMGR_UUID: %pUb\n", &f->mgr_uuid);
 	} else {
 		printk(KERN_ERR "%s: missing required MGR_UUID\n", __FUNCTION__);
 		ret = -EINVAL;
@@ -312,7 +338,6 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 		printk(KERN_ERR "%s: genz_create_mgr_uuid_file failed\n", __FUNCTION__);
 		return -EINVAL;
 	}
-return 0;
 	if (info->attrs[GENZ_A_RESOURCE_LIST]) {
 		ret = parse_resource_list(info->attrs[GENZ_A_RESOURCE_LIST],
 			zcomp);
