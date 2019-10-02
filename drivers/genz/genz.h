@@ -75,6 +75,7 @@ struct genz_fabric {
 	struct kset	*zkset;
 };
 #define to_genz_fabric(x) container_of(x, struct genz_fabric, kref)
+#define dev_to_genz_fabric(x) container_of(x, struct genz_fabric, dev)
 
 struct genz_fabric_attribute {
 	struct attribute attr;
@@ -91,7 +92,7 @@ struct genz_subnet {
 	struct genz_fabric 	*fabric;
 	struct list_head	node; /* per-fabric list of subnets*/
 	struct list_head	frus; /* list of frus in this subnet */
-	struct kobject		kobj; /* /sys/devices/genz<N>/SID */
+	struct device		dev; /* /sys/devices/genz<N>/SID */
 };
 #define to_genz_subnet(x) container_of(x, struct genz_subnet, kobj)
 
@@ -125,7 +126,7 @@ struct genz_fru_attribute {
 
 struct genz_component {
 	uint32_t		cid;
-	struct kobject		kobj;  /* /sys/devices/genz<N>/SID/CID */
+	struct device		dev;  /* /sys/devices/genz<N>/SID/CID */
 	uint8_t			cclass;
 	uuid_t			fru_uuid;
 	struct genz_subnet	*subnet;
@@ -133,13 +134,17 @@ struct genz_component {
 	struct list_head	control_zres_list; /* head of zres list */
 	struct list_head	data_zres_list;    /* head of zres list */
 	struct kref		kref;
+	int resource_count[HARDWARE_TYPES_MAX];
 };
+#define dev_to_genz_component(x) container_of(x, struct genz_component, dev)
 
+#ifdef NOT_YET
 static inline struct genz_component *kobj_to_genz_component(struct kobject *kobj)
 {
         return container_of(kobj, struct genz_component, kobj);
 }
 
+#endif
 
 struct genz_component_attribute {
 	struct attribute attr;
@@ -150,6 +155,16 @@ struct genz_component_attribute {
 		const char *buf, size_t count);
 };
 #define to_genz_component_attr(x) container_of(x, struct genz_component_attribute, attr)
+
+struct genz_dev_attribute {
+	struct attribute attr;
+        ssize_t (*show)(struct genz_dev *zdev,
+		struct genz_dev_attribute *attr, char *buf);
+        ssize_t (*store)(struct genz_dev *zdev,
+		struct genz_dev_attribute *attr,
+		const char *buf, size_t count);
+};
+#define to_genz_dev_attr(x) container_of(x, struct genz_dev_attribute, attr)
 
 /* SID is 16 bits starting at bit 13 of a GCID */
 static inline int genz_get_sid(int gcid)

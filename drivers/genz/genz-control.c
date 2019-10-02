@@ -36,58 +36,59 @@
 
 #include <linux/slab.h>
 #include <linux/sysfs.h>
+#include <linux/genz.h>
 #include "genz.h"
 #include "genz-control.h"
 #include "genz-probe.h"
 
-
-static ssize_t mgr_uuid_show(struct genz_fabric *fab,
-		struct genz_fabric_attribute *attr,
+static ssize_t uuid_show(struct kobject *kobj,
+		struct kobj_attribute *attr,
 		char *buf)
 {
-	printk(KERN_ERR "fab is %px\n", fab);
+	struct device *dev;
+	struct genz_dev *zdev;
 
+	dev = kobj_to_dev(kobj);
+	zdev = to_genz_dev(dev);
+	if (zdev == NULL) {
+		printk(KERN_ERR "zdev is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad zdev\n"));
+	}
+	return(snprintf(buf, PAGE_SIZE, "%pUb\n", &zdev->uuid));
+}
+
+static struct kobj_attribute uuid_attribute =
+	__ATTR(uuid, (S_IRUGO), uuid_show, NULL);
+
+int genz_create_uuid_file(struct genz_dev *zdev) {
+	int ret = 0;
+
+	ret = sysfs_create_file(&zdev->dev.kobj, &uuid_attribute.attr);
+	return ret;
+}
+
+static ssize_t mgr_uuid_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct genz_fabric *fab;
+	
+	fab = dev_to_genz_fabric(dev);
+	printk(KERN_ERR "fab is %px\n", fab);
 	if (fab == NULL) {
 		printk(KERN_ERR "fab is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad fabric\n"));
 	}
 	return(snprintf(buf, PAGE_SIZE, "%pUb\n", &fab->mgr_uuid));
 }
+static DEVICE_ATTR(mgr_uuid, (S_IRUGO), mgr_uuid_show, NULL);
 
-static struct genz_fabric_attribute mgr_uuid_attribute =
-	__ATTR(mgr_uuid, (S_IRUGO), mgr_uuid_show, NULL);
-
-int genz_create_mgr_uuid_file(struct kobject *kobj)
+int genz_create_mgr_uuid_file(struct device *dev)
 {
 	int ret = 0;
 
-	printk(KERN_ERR "%s: create_file for kobj %px\n", __func__, kobj);
-	ret = sysfs_create_file(kobj, &mgr_uuid_attribute.attr);
-	return ret;
-}
-
-static ssize_t sid_show(struct genz_subnet *s,
-		struct genz_subnet_attribute *attr,
-		char *buf)
-{
-	printk(KERN_ERR "subnet is %px\n", s);
-
-	if (s == NULL) {
-		printk(KERN_ERR "s is NULL\n");
-		return(snprintf(buf, PAGE_SIZE, "bad subnet\n"));
-	}
-	return(snprintf(buf, PAGE_SIZE, "%04x\n", s->sid));
-}
-
-static struct genz_subnet_attribute sid_attribute =
-	__ATTR(sid, (S_IRUGO), sid_show, NULL);
-
-int genz_create_sid_file(struct genz_subnet *s)
-{
-	int ret = 0;
-
-	printk(KERN_ERR "%s: create_file for kobj %px\n", __func__, &s->kobj);
-	ret = sysfs_create_file(&s->kobj, &sid_attribute.attr);
+	printk(KERN_ERR "%s: create_file for dev %px\n", __func__, dev);
+	ret = device_create_file(dev, &dev_attr_mgr_uuid);
 	return ret;
 }
 

@@ -53,6 +53,7 @@ struct genz_component;
 struct genz_dev {
 	struct list_head	fab_dev_node; /* Node in the per-fabric list */
 	uuid_t 			uuid;      /* component/service/virtual UUID */
+	uint16_t		class;
 	int                     zres_count;
 	struct list_head	zres_list;
 	struct genz_resource 	*zres;	      /* array of device's resources */
@@ -62,6 +63,7 @@ struct genz_dev {
 	struct genz_bridge_dev	*zbdev;
 	struct genz_component	*zcomp;     /* parent component */
 	struct device		dev;	    /* Generic device interface */
+	uint16_t 		resource_count[2]; /* control 0; data 1 */
 };
 #define to_genz_dev(n) container_of(n, struct genz_dev, dev)
 

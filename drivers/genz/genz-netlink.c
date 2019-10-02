@@ -44,6 +44,7 @@
 #include "genz-netlink.h"
 #include "genz-probe.h"
 #include "genz-control.h"
+#include "genz-sysfs.h"
 
 
 /* Netlink Generic Attribute Policy */
@@ -62,6 +63,7 @@ const static struct nla_policy genz_genl_uuid_list_policy[GENZ_A_UL_MAX + 1] = {
 
 const static struct nla_policy genz_genl_resource_policy[GENZ_A_U_MAX + 1] = {
 	[GENZ_A_U_UUID] = { .len = UUID_LEN },
+	[GENZ_A_U_CLASS] = { .type = NLA_U16 },
 	[GENZ_A_U_MRL] = { .type = NLA_NESTED },
 };
 
@@ -87,7 +89,6 @@ static struct genz_resource * alloc_and_add_zres(struct genz_dev *zdev)
 	list_add_tail(&zr->dev_list, &zdev->zres_list);
 	return(zr);
 }
-
 
 static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 {
@@ -131,26 +132,46 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 		}
 		zres = alloc_and_add_zres(zdev);
 		if (zres != NULL) {
-			/* Revisit: use the uuid string for the name? */
-			zres->res.name = "zdev->uuid";
 			zres->res.start = mem_start;
 			zres->res.end = mem_start + mem_len -1;
 			zres->res.desc = IORES_DESC_NONE;
 			zres->ro_rkey = ro_rkey;
 			zres->rw_rkey = rw_rkey;
-			if (mem_type == GENZ_CONTROL)
+			if (mem_type == GENZ_CONTROL) {
+				zres->res.name = kzalloc(GENZ_CONTROL_STR_LEN,
+							GFP_KERNEL);
+				if (zres->res.name == NULL) {
+					printk(KERN_ERR "Failed to kmalloc res->name\n");
+				}
+				snprintf(zres->res.name, GENZ_CONTROL_STR_LEN,
+					"control%d",
+					zdev->resource_count[GENZ_CONTROL]++);
+	
 				list_add_tail(&zres->component_list,
 					&zdev->zcomp->control_zres_list);
-			else if (mem_type == GENZ_DATA)
+			}
+			else if (mem_type == GENZ_DATA) {
+				zres->res.name = kzalloc(GENZ_DATA_STR_LEN,
+							GFP_KERNEL);
+				if (zres->res.name == NULL) {
+					printk(KERN_ERR "Failed to kmalloc res->name\n");
+				}
+				snprintf(zres->res.name, GENZ_DATA_STR_LEN,
+					"data%d",
+					zdev->resource_count[GENZ_DATA]++);
 				list_add_tail(&zres->component_list,
 					&zdev->zcomp->data_zres_list);
+			}
+			ret = genz_create_attr(zdev, zres);
+			if (ret) {
+				printk(KERN_INFO "%s: genz_create_attr failed with %d\n", __FUNCTION__, ret);
+			}
 			/* Revisit: how to get the parent resource?
 			ret = insert_resource(&zres->res, &zdev->parent_res);
-			*/
 			if (ret < 0) {
-				/* Revisit: undo everything! */
 				printk(KERN_INFO "%s: insert_resource failed with %d\n", __FUNCTION__, ret);
 			}
+			*/
 		}	
 		printk(KERN_INFO "\t\t\tMR_START: 0x%llx\n\t\t\t\tMR_LENGTH: %lld\n\t\t\t\tMR_TYPE: %s\n\t\t\t\tRO_RKEY: 0x%x\n\t\t\t\tRW_KREY 0x%x\n", mem_start, mem_len, (mem_type == GENZ_DATA ? "DATA":"CONTROL"), ro_rkey, rw_rkey);
 	}
@@ -193,6 +214,7 @@ static int parse_resource_list(const struct nlattr * resource_list,
 		if (u_attrs[GENZ_A_U_UUID]) {
 			uint8_t * uuid;
 			char *	uuid_name;
+			int	u;
 
 			uuid = nla_data(u_attrs[GENZ_A_U_UUID]);
 			/* use the UUID as the device name */
@@ -204,9 +226,45 @@ static int parse_resource_list(const struct nlattr * resource_list,
 			}
 				
 			snprintf(uuid_name, UUID_STRING_LEN + 1, "%pUb", uuid);
-			zdev->dev.init_name = uuid_name;
+			/* convert to uuid_t */
+			u = uuid_parse(uuid_name, &zdev->uuid);
+			if (u) {
+				printk(KERN_ERR "uuid_parse failed for resource uuid %pUb\n", (void *) uuid);
+			}
 			printk(KERN_INFO "\t\tUUID: %pUb\n", (void *) uuid);
 			
+		}
+		if (u_attrs[GENZ_A_U_CLASS]) {
+			int condensed_class;
+
+			zdev->class = nla_get_u16(u_attrs[GENZ_A_U_CLASS]);
+			printk(KERN_DEBUG "\t\tClass = %d\n",
+				(uint32_t) zdev->class);
+			if (zdev->class > HARDWARE_TYPES_MAX) {
+				printk(KERN_ERR "%s: hardware CLASS invalid %d\n", __FUNCTION__, zdev->class);
+				ret = -EINVAL;
+				goto error;
+			}
+			/*
+			 * The class is used as the device name along with 
+			 * the count of that type of class. e.g. "memory0"
+			 */
+			condensed_class = hardware_classes[zdev->class].value;
+			dev_set_name(&zdev->dev, "%s%d",
+				hardware_classes[zdev->class].condensed_name,
+				zdev->zcomp->resource_count[condensed_class]++);
+		} else {
+			printk(KERN_ERR "%s: missing required CLASS\n", __FUNCTION__);
+			ret = -EINVAL;
+			goto error;
+		}
+		ret = genz_device_add(zdev);
+		if (ret) {
+			printk(KERN_ERR "\tgenz_device_add failed with %d\n", ret);
+		}
+		ret = genz_create_uuid_file(zdev);
+		if (ret) {
+			printk(KERN_ERR "\tgenz_create_uuid_file failed with %d\n", ret);
 		}
 		if (u_attrs[GENZ_A_U_MRL]) {
 			ret = parse_mr_list(zdev, u_attrs[GENZ_A_U_MRL]);
@@ -214,7 +272,6 @@ static int parse_resource_list(const struct nlattr * resource_list,
 				printk(KERN_ERR "\tparse of MRL failed\n");
 			}
 		}
-		ret = genz_device_add(zdev);
 		if (ret) {
 			printk(KERN_ERR "\tgenz_device_add failed with %d\n", ret);
 			/* Revisit: more clean up here */
@@ -226,7 +283,7 @@ error:
 }
 
 /* Netlink Generic Handler */
-static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
+static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 {
 	struct genz_component *zcomp = NULL;
 	uint32_t fabric_num, gcid;
@@ -257,11 +314,6 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 	}
 	/* Revisit: add a find_component() */
 	s = genz_find_subnet(genz_get_sid(gcid), f);
-	ret = genz_create_sid_file(s);
-	if (ret) {
-		printk(KERN_ERR "%s: genz_create_sid_file failed\n", __FUNCTION__);
-		return -EINVAL;
-	}
 	zcomp = genz_alloc_component();
 	if (zcomp == NULL) {
 		printk(KERN_ERR "%s: genz_alloc_component failed\n", __FUNCTION__);
@@ -273,9 +325,6 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 		return -ret;
 	}
  
-	printk(KERN_ERR "zcomp is %px comp->kobj is %px\n", zcomp, &(zcomp->kobj));
-	printk(KERN_ERR "zcomp->subnet is %px\n", zcomp->subnet);
-	printk(KERN_ERR "zcomp->cid is 0x%03d\n", zcomp->cid);
 /*
 	ret = genz_create_gcid_file(&(zcomp->kobj));
 */
@@ -333,7 +382,7 @@ static int genz_add_component(struct sk_buff *skb, struct genl_info *info)
 		ret = -EINVAL;
 		goto err;
 	}
-	ret = genz_create_mgr_uuid_file(&f->dev.kobj);
+	ret = genz_create_mgr_uuid_file(&f->dev);
 	if (ret) {
 		printk(KERN_ERR "%s: genz_create_mgr_uuid_file failed\n", __FUNCTION__);
 		return -EINVAL;
@@ -356,7 +405,7 @@ err:
 	return ret;
 }
 
-static int genz_remove_component(struct sk_buff *skb, struct genl_info *info)
+static int genz_remove_os_component(struct sk_buff *skb, struct genl_info *info)
 {
 	/*
 	 * message handling code goes here; return 0 on success,
@@ -365,7 +414,7 @@ static int genz_remove_component(struct sk_buff *skb, struct genl_info *info)
 	return 0;
 }
 
-static int genz_symlink_component(struct sk_buff *skb, struct genl_info *info)
+static int genz_symlink_os_component(struct sk_buff *skb, struct genl_info *info)
 {
 	/*
 	 * message handling code goes here; return 0 on success,
@@ -378,16 +427,16 @@ static int genz_symlink_component(struct sk_buff *skb, struct genl_info *info)
 /* Netlink Generic Operations */
 static struct genl_ops genz_gnl_ops[] = {
 	{
-	.cmd = GENZ_C_ADD_COMPONENT,
-	.doit = genz_add_component,
+	.cmd = GENZ_C_ADD_OS_COMPONENT,
+	.doit = genz_add_os_component,
 	},
 	{
-	.cmd = GENZ_C_REMOVE_COMPONENT,
-	.doit = genz_remove_component,
+	.cmd = GENZ_C_REMOVE_OS_COMPONENT,
+	.doit = genz_remove_os_component,
 	},
 	{
-	.cmd = GENZ_C_SYMLINK_COMPONENT,
-	.doit = genz_symlink_component,
+	.cmd = GENZ_C_SYMLINK_OS_COMPONENT,
+	.doit = genz_symlink_os_component,
 	},
 };
 

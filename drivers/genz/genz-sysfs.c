@@ -36,10 +36,10 @@
 
 #include <linux/sysfs.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 #include "genz.h"
 
 MODULE_LICENSE("GPL v2");
-static int sysfs_initialized; /* = 0 */
 
 static ssize_t genz_read_control(struct file * file,
 		struct kobject *kobj,
@@ -61,93 +61,32 @@ static ssize_t genz_write_control(struct file * file,
 	return 0;
 }
 
-static struct bin_attribute genz_config_attr = {
-	.attr = {
-		.name = "core",
-		.mode = S_IRUGO | S_IWUSR,
-	},
-	.read = genz_read_control,
-	.write = genz_write_control,
-};
-
-static int genz_create_structure_files(struct kobject *kobj,
-		struct bin_attribute *battr)
+int genz_create_attr(struct genz_dev *zdev, struct genz_resource *zres)
 {
-	return 0;
+	struct bin_attribute *res_attr;
+	int ret;
+
+	res_attr = kzalloc(sizeof(*res_attr), GFP_ATOMIC);
+	if (!res_attr)
+		return -ENOMEM;
+
+	sysfs_bin_attr_init(res_attr);
+
+	res_attr->attr.name = zres->res.name;
+	res_attr->attr.mode = (S_IRUSR | S_IWUSR);
+	res_attr->size = zres->res.end - zres->res.start + 1;
+	res_attr->private = zres;
+	res_attr->read = genz_read_control;
+	res_attr->write = genz_write_control;
+	res_attr->mmap = NULL;
+	ret = sysfs_create_bin_file(&zdev->dev.kobj, res_attr);
+	if (ret) {
+		printk(KERN_ERR "sysfs_create_bin_file failed with %d\n", ret);
+		kfree(res_attr);
+	}
+	return ret;
 }
 
-static int genz_remove_structure_files(struct kobject *kobj,
-		struct bin_attribute *battr)
-{
-	return 0;
-}
-
-static int genz_create_vendor_defined_files(struct genz_dev *zdev)
-{
-	return 0;
-}
-
-static int genz_remove_vendor_defined_files(struct genz_dev *zdev)
-{
-	return 0;
-}
-
-static int genz_create_capabilities_sysfs(struct genz_dev *zdev)
-{
-	return 0;
-}
-
-#ifdef NOT_YET
-int __must_check genz_create_sysfs_dev_files(struct genz_dev *zdev)
-{
-	int retval;
-
-	if (!sysfs_initialized)
-		return -EACCES;
-
-	retval = genz_create_structure_files(&zdev->dev.kobj, &genz_config_attr);
-	if (retval)
-		goto err;
-
-	retval = genz_create_vendor_defined_files(zdev);
-	if (retval)
-		goto err_create_structure_files;
-
-	/* add sysfs entries for various capabilities */
-	retval = genz_create_capabilities_sysfs(zdev);
-	if (retval)
-		goto err_vendor_defined_files;
-
-	return 0;
-
-err_vendor_defined_files:
-	genz_remove_vendor_defined_files(zdev);
-err_create_structure_files:
-	genz_remove_structure_files(&zdev->dev.kobj, &genz_config_attr);
-err:
-	return retval;
-}
-#endif
-
-/* Revisit: look at pci-sysfs.c for all the rest of the attr stuff */
 const struct device_type genz_dev_type = {
 //	.groups = genz_dev_attr_groups,
 };
-
-/* not for modules. We will add sysfs as the drivers are loaded. 
-static int __init genz_sysfs_init(void)
-{
-	struct genz_dev *zdev = NULL;
-	int retval = 0;
-
-	sysfs_initialized = 1;
-	for_each_genz_dev(zdev) {
-		retval = genz_create_sysfs_dev_files(zdev);
-		if (retval) {
-			genz_dev_put(zdev);
-			return retval;
-		}
-	}
-	return retval;
-}
-*/

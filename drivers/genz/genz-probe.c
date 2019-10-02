@@ -192,6 +192,17 @@ static struct genz_subnet *genz_alloc_subnet(void)
         return s;
 }
 
+void genz_free_subnet(struct device *dev)
+{
+	struct genz_subnet *s;
+
+	s = container_of(dev, struct genz_subnet, dev);
+
+	list_del(&s->node);
+	kfree(s);
+}
+
+#ifdef NOT_YET
 static ssize_t subnet_attr_show(struct kobject *kobj,
                              struct attribute *attr,
                              char *buf)
@@ -226,6 +237,7 @@ static struct kobj_type subnet_ktype = {
 	.sysfs_ops = &subnet_sysfs_ops,
 	.release = subnet_release,
 };
+#endif
 
 static int genz_init_subnet(struct genz_subnet *s,
 		uint32_t sid, struct genz_fabric *f)
@@ -235,6 +247,7 @@ static int genz_init_subnet(struct genz_subnet *s,
         s->sid = sid;
 	s->fabric = f;
 
+#ifdef NOT_YET
         ret = kobject_init_and_add(&s->kobj, &subnet_ktype, &f->dev.kobj, "%04d", sid);
 	if (ret) {
 		kobject_put(&s->kobj);
@@ -243,7 +256,20 @@ static int genz_init_subnet(struct genz_subnet *s,
 	}
 	kobject_uevent(&s->kobj, KOBJ_ADD);
 	/* Revisit: add the node to the fabric subnets list */
+#endif
 	
+        s->dev.bus = &genz_bus_type;
+        s->dev.id = sid;
+	s->dev.release = genz_free_subnet;
+	s->dev.parent = &f->dev;
+	dev_set_name(&s->dev, "%04x", sid);
+
+        ret = device_register(&s->dev);
+	if (ret) {
+		pr_debug( "device_register failed with %d\n", ret);
+		put_device(&s->dev);
+		return ret;
+	}
 	return ret;
 }
 
@@ -347,7 +373,7 @@ static int genz_init_fru(struct genz_fru *f,
         f->fru_uuid = fru_uuid;
 	f->subnet = s;
 
-        ret = kobject_init_and_add(&f->kobj, &fru_ktype, &s->kobj, "%pUb", &fru_uuid);
+        ret = kobject_init_and_add(&f->kobj, &fru_ktype, &s->dev.kobj, "%pUb", &fru_uuid);
 	if (ret) {
 		kobject_put(&f->kobj);
 		pr_debug("%s: fru %pUb is not in the frus list yet\n", __func__, &fru_uuid);
@@ -397,24 +423,28 @@ out:
 #endif
 
 /* Component Attributes */
-static ssize_t cclass_show(struct genz_component *comp,
-		struct genz_component_attribute *attr,
+static ssize_t cclass_show(struct device *dev,
+		struct device_attribute *attr,
 		char *buf)
 {
+	struct genz_component *comp;
+
+	comp = dev_to_genz_component(dev);
 	if (comp == NULL) {
 		printk(KERN_ERR "comp is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
 	}
 	return(snprintf(buf, PAGE_SIZE, "%d\n", comp->cclass));
 }
+static DEVICE_ATTR(cclass, (S_IRUGO), cclass_show, NULL);
 
-static struct genz_component_attribute cclass_attribute =
-	__ATTR(cclass, (S_IRUGO), cclass_show, NULL);
-
-static ssize_t gcid_show(struct genz_component *comp,
-		struct genz_component_attribute *attr,
+static ssize_t gcid_show(struct device *dev,
+		struct device_attribute *attr,
 		char *buf)
 {
+	struct genz_component *comp;
+
+	comp = dev_to_genz_component(dev);
 	printk(KERN_ERR "comp is %px\n", comp);
 
 	if (comp == NULL) {
@@ -427,23 +457,15 @@ static ssize_t gcid_show(struct genz_component *comp,
 	}
 	return(snprintf(buf, PAGE_SIZE, "%04x:%03x\n", comp->subnet->sid, comp->cid));
 }
+static DEVICE_ATTR(gcid, (S_IRUGO), gcid_show, NULL);
 
-static struct genz_component_attribute gcid_attribute =
-	__ATTR(gcid, (S_IRUGO), gcid_show, NULL);
-
-int genz_create_gcid_file(struct kobject *kobj)
-{
-	int ret = 0;
-
-	printk(KERN_ERR "%s: create_file for kobj %px\n", __func__, kobj);
-	ret = sysfs_create_file(kobj, &gcid_attribute.attr);
-	return ret;
-}
-
-static ssize_t fru_uuid_show(struct genz_component *comp,
-		struct genz_component_attribute *attr,
+static ssize_t fru_uuid_show(struct device *dev,
+		struct device_attribute *attr,
 		char *buf)
 {
+	struct genz_component *comp;
+
+	comp = dev_to_genz_component(dev);
 	printk(KERN_ERR "comp is %px\n", comp);
 
 	if (comp == NULL) {
@@ -452,19 +474,20 @@ static ssize_t fru_uuid_show(struct genz_component *comp,
 	}
 	return(snprintf(buf, PAGE_SIZE, "%pUb\n", &comp->fru_uuid));
 }
+static DEVICE_ATTR(fru_uuid, (S_IRUGO), fru_uuid_show, NULL);
 
-static struct genz_component_attribute fru_uuid_attribute =
-	__ATTR(fru_uuid, (S_IRUGO), fru_uuid_show, NULL);
-
-int genz_create_fru_uuid_file(struct kobject *kobj)
+static int genz_create_component_files(struct device *dev)
 {
 	int ret = 0;
 
-	printk(KERN_ERR "%s: create_file for kobj %px\n", __func__, kobj);
-	ret = sysfs_create_file(kobj, &fru_uuid_attribute.attr);
+	printk(KERN_ERR "%s: create_file for device %px\n", __func__, dev);
+	ret = device_create_file(dev, &dev_attr_gcid);
+	ret = device_create_file(dev, &dev_attr_cclass);
+	ret = device_create_file(dev, &dev_attr_fru_uuid);
 	return ret;
 }
 
+#ifdef NOT_YET
 static struct attribute *component_attrs[] = {
 	&gcid_attribute.attr,
 	&cclass_attribute.attr,
@@ -506,6 +529,7 @@ static struct kobj_type component_ktype = {
 	.default_groups = component_groups,
 };
 
+#endif
 struct genz_component *genz_alloc_component(void)
 {
 	struct genz_component *zcomp;
@@ -520,6 +544,17 @@ struct genz_component *genz_alloc_component(void)
 	return(zcomp);
 }
 
+void genz_free_comp(struct device *dev)
+{
+	struct genz_component *c;
+
+	c = container_of(dev, struct genz_component, dev);
+
+	list_del(&c->fab_comp_node);
+	kfree(c);
+}
+
+
 int genz_init_component(struct genz_component *zcomp,
 		struct genz_subnet *s,
 		uint32_t cid)
@@ -528,7 +563,8 @@ int genz_init_component(struct genz_component *zcomp,
 
 	zcomp->subnet = s;
 	zcomp->cid = cid;
-        ret = kobject_init_and_add(&zcomp->kobj, &component_ktype, &s->kobj, "%03x", cid);
+#ifdef NOT_YET
+        ret = kobject_init_and_add(&zcomp->kobj, &component_ktype, &s->dev.kobj, "%03x", cid);
 	if (ret) {
 		pr_debug( "%s: kobject_init_and_add failed for cid %d\n",
 			 __func__, cid);
@@ -537,11 +573,26 @@ int genz_init_component(struct genz_component *zcomp,
 	}
 
 	kobject_uevent(&zcomp->kobj, KOBJ_ADD);
+#endif
 
-	printk(KERN_ERR "component kobj is %px\n", &(zcomp->kobj));
-	printk(KERN_ERR "subnet kobj is %px\n", &(s->kobj));
+        zcomp->dev.bus = &genz_bus_type;
+        zcomp->dev.id = cid;
+	zcomp->dev.release = genz_free_comp;
+	zcomp->dev.parent = &s->dev;
+	dev_set_name(&zcomp->dev, "%03x", cid);
+
+        ret = device_register(&zcomp->dev);
+	if (ret) {
+		pr_debug( "device_register failed with %d\n", ret);
+		put_device(&zcomp->dev);
+		return ret;
+	}
+	printk(KERN_ERR "component kobj is %px\n", &(zcomp->dev.kobj));
+	printk(KERN_ERR "subnet kobj is %px\n", &(s->dev.kobj));
+
 	/* Revisit: add the fab_comp_node to the fabric component list */
 	kref_init(&zcomp->kref);
+	genz_create_component_files(&zcomp->dev);
 	return(ret);
 }
 
@@ -600,10 +651,9 @@ EXPORT_SYMBOL(genz_alloc_dev);
 int genz_device_add(struct genz_dev *zdev)
 {
 	int ret;
-	struct device * dev;
 	
         zdev->dev.bus = &genz_bus_type;
-	zdev->dev.parent = &zdev->zcomp->subnet->fabric->dev;
+	zdev->dev.parent = &zdev->zcomp->dev;
 	zdev->dev.release = genz_release_dev;
 	device_initialize(&zdev->dev);
 

@@ -62,6 +62,7 @@ struct hardware_classes_meta hardware_classes[] = {
      { "Compliance Test Board",                                "compliance_test_board", COMPLIANCE_TEST_BOARD },
      { "Logical PCIe Hierarchy (LPH)",                         "logical_pcie_hierarchy", LOGICAL_PCIE_HIERARCHY },
 };
+EXPORT_SYMBOL(hardware_classes);
 
 struct genz_control_structure_ptr core_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x48, GENZ_GENERIC_STRUCTURE },

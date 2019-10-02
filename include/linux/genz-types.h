@@ -203,6 +203,7 @@ struct genz_control_structure_ptr {
     const enum genz_control_structure_type struct_type;
 };
 
+
 extern struct genz_control_ptr_info genz_struct_type_to_ptrs[];
 
 extern size_t genz_struct_type_to_ptrs_nelems;
@@ -4457,8 +4458,10 @@ enum hardware_types {
     MULTICLASS_COMPONENT = 8,
     BRIDGE = 9,
     COMPLIANCE_TEST_BOARD = 10,
-    LOGICAL_PCIE_HIERARCHY = 11
+    LOGICAL_PCIE_HIERARCHY = 11,
+    __HARDWARE_TYPES_MAX,
 };
+#define HARDWARE_TYPES_MAX (__HARDWARE_TYPES_MAX - 1)
 
 struct genz_component_rkd_structure_array {
     uint64_t rkd_authorization_63_0 : 64;
@@ -4769,6 +4772,8 @@ struct hardware_classes_meta {
     const char * const condensed_name;
     const enum hardware_types value;
 };
+
+extern struct hardware_classes_meta hardware_classes[];
 
 struct genz_core_structure {
     uint64_t type                                 : 12;
