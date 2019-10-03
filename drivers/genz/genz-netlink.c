@@ -86,8 +86,17 @@ static struct genz_resource * alloc_and_add_zres(struct genz_dev *zdev)
 	zr = kzalloc(sizeof(*zr), GFP_KERNEL);
 	if (!zr)
 		return NULL;
-	list_add_tail(&zr->dev_list, &zdev->zres_list);
+	list_add_tail(&zr->zres_list, &zdev->zres_list);
 	return(zr);
+}
+
+static int genz_free_zres(struct genz_dev *zdev, struct genz_resource *zres)
+{
+	/* free the name */
+	kfree(zres->res.name);
+	/* remove the zres from the zdev res_list */
+	/* remove the zres from the appropriate component list */
+	/* free the zres */
 }
 
 static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
@@ -172,6 +181,8 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 				printk(KERN_INFO "%s: insert_resource failed with %d\n", __FUNCTION__, ret);
 			}
 			*/
+			/* Add this resource to the genz_dev's list */
+			list_add_tail(&zres->zres_list, &zdev->zres_list);
 		}	
 		printk(KERN_INFO "\t\t\tMR_START: 0x%llx\n\t\t\t\tMR_LENGTH: %lld\n\t\t\t\tMR_TYPE: %s\n\t\t\t\tRO_RKEY: 0x%x\n\t\t\t\tRW_KREY 0x%x\n", mem_start, mem_len, (mem_type == GENZ_DATA ? "DATA":"CONTROL"), ro_rkey, rw_rkey);
 	}

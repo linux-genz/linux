@@ -84,7 +84,20 @@ int genz_create_attr(struct genz_dev *zdev, struct genz_resource *zres)
 		printk(KERN_ERR "sysfs_create_bin_file failed with %d\n", ret);
 		kfree(res_attr);
 	}
+	/* Add res_attr to list in zdev so it can be cleaned up later */
 	return ret;
+}
+
+int genz_remove_attr(struct genz_dev *zdev)
+{
+	struct bin_attribute *res_attr;
+
+	/* for each res_attr in zdev res_list */
+	/* Remove from res_list*/
+	if (res_attr) {
+		sysfs_remove_bin_file(&zdev->dev.kobj, res_attr);
+		kfree(res_attr);
+	}
 }
 
 const struct device_type genz_dev_type = {

@@ -54,9 +54,7 @@ struct genz_dev {
 	struct list_head	fab_dev_node; /* Node in the per-fabric list */
 	uuid_t 			uuid;      /* component/service/virtual UUID */
 	uint16_t		class;
-	int                     zres_count;
 	struct list_head	zres_list;
-	struct genz_resource 	*zres;	      /* array of device's resources */
 	struct genz_control_info *root_control_info;
 	struct kobject		*root_kobj; /* kobj for /sys/devices/genz<N> */
 	struct genz_driver	*zdrv;

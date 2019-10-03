@@ -67,6 +67,14 @@ int genz_create_uuid_file(struct genz_dev *zdev) {
 	return ret;
 }
 
+int genz_remove_uuid_file(struct genz_dev *zdev) {
+	int ret = 0;
+
+	sysfs_remove_file(&zdev->dev.kobj, &uuid_attribute.attr);
+	return ret;
+}
+
+
 static ssize_t mgr_uuid_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)

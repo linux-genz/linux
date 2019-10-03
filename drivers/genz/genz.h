@@ -54,7 +54,7 @@ extern struct bus_type genz_bus_type;
  */
 struct genz_resource {
 	struct list_head component_list;
-	struct list_head dev_list;
+	struct list_head zres_list; 	/* per genz_dev */
 	struct resource res;
 	uint32_t ro_rkey;
 	uint32_t rw_rkey;
