@@ -59,3 +59,4 @@ int genz_map_control_table(struct genz_dev *zdev,
 	genz_control_cookie cookie, size_t *size,
 	void **control_table);
 int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev);
+void genz_remove_uuid_file(struct genz_dev *zdev);

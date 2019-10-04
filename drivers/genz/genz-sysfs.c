@@ -66,9 +66,7 @@ int genz_create_attr(struct genz_dev *zdev, struct genz_resource *zres)
 	struct bin_attribute *res_attr;
 	int ret;
 
-	res_attr = kzalloc(sizeof(*res_attr), GFP_ATOMIC);
-	if (!res_attr)
-		return -ENOMEM;
+	res_attr = &zres->res_attr;
 
 	sysfs_bin_attr_init(res_attr);
 
@@ -82,22 +80,13 @@ int genz_create_attr(struct genz_dev *zdev, struct genz_resource *zres)
 	ret = sysfs_create_bin_file(&zdev->dev.kobj, res_attr);
 	if (ret) {
 		printk(KERN_ERR "sysfs_create_bin_file failed with %d\n", ret);
-		kfree(res_attr);
 	}
-	/* Add res_attr to list in zdev so it can be cleaned up later */
 	return ret;
 }
 
-int genz_remove_attr(struct genz_dev *zdev)
+void genz_remove_attr(struct genz_dev *zdev, struct genz_resource *zres)
 {
-	struct bin_attribute *res_attr;
-
-	/* for each res_attr in zdev res_list */
-	/* Remove from res_list*/
-	if (res_attr) {
-		sysfs_remove_bin_file(&zdev->dev.kobj, res_attr);
-		kfree(res_attr);
-	}
+	sysfs_remove_bin_file(&zdev->dev.kobj, &zres->res_attr);
 }
 
 const struct device_type genz_dev_type = {

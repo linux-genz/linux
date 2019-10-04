@@ -40,6 +40,8 @@
 #include "genz.h"
 #include "genz-probe.h"
 #include "genz-sysfs.h"
+#include "genz-netlink.h"
+#include "genz-control.h"
 
 /* Global list of struct genz_fabric. Protected by semaphore genz_fabrics_sem */
 LIST_HEAD(genz_fabrics);
@@ -109,6 +111,7 @@ void genz_free_fabric(struct device *dev)
 
 	f = container_of(dev, struct genz_fabric, dev);
 
+	printk(KERN_INFO "genz_free_fabric %s\n", dev_name(dev));
 // Revisit:	down_write(&genz_fabrics_sem);
 	list_del(&f->node);
 // Revisit:	up_write(&genz_fabrics_sem);
@@ -196,6 +199,7 @@ void genz_free_subnet(struct device *dev)
 {
 	struct genz_subnet *s;
 
+	printk(KERN_INFO "genz_free_subnet %s\n", dev_name(dev));
 	s = container_of(dev, struct genz_subnet, dev);
 
 	list_del(&s->node);
@@ -223,6 +227,7 @@ static void subnet_release(struct kobject *kobj)
 {
 	struct genz_subnet *s;
 
+	printk(KERN_INFO "subnet_release %s\n", kobj->name);
 	s = to_genz_subnet(kobj);
 //	down_write(&s->fabric->subnet_sem);
 	list_del(&s->node);
@@ -345,6 +350,7 @@ static void fru_release(struct kobject *kobj)
 {
 	struct genz_fru *f;
 
+	printk(KERN_INFO "fru_release %s\n", kobj->name);
 	f = to_genz_fru(kobj);
 //	down_write(&f->fabric->fru_sem);
 	list_del(&f->node);
@@ -515,6 +521,7 @@ static void component_release(struct kobject *kobj)
 {
 	struct genz_component *comp;
 
+	printk(KERN_INFO "component_release %s\n", kobj->name);
 	comp = kobj_to_genz_component(kobj);
 	/* Revisit: remove from fabric list */
 	kfree(comp);
@@ -547,6 +554,8 @@ struct genz_component *genz_alloc_component(void)
 void genz_free_comp(struct device *dev)
 {
 	struct genz_component *c;
+
+	printk(KERN_INFO "genz_free_comp %s\n", dev_name(dev));
 
 	c = container_of(dev, struct genz_component, dev);
 
@@ -615,12 +624,25 @@ void genz_free_component(struct kref *kref)
 static void genz_release_dev(struct device *dev)
 {
         struct genz_dev *zdev;
+	struct genz_resource *pos, *next;
 
+	printk(KERN_INFO "genz_release_dev %s\n", dev_name(dev));
         zdev = to_genz_dev(dev);
 	if (zdev == NULL)
 		return;
 	if (zdev->zcomp)
 		kref_put(&zdev->zcomp->kref, genz_free_component);
+	/* free the resources */
+	list_for_each_entry_safe(pos, next, &zdev->zres_list, zres_list) {
+		genz_free_zres(zdev, pos);
+	}
+
+	/* remove uuid sysfs file */
+	genz_remove_uuid_file(zdev); 
+
+	/* remove from the list of devices in the genz_fabric */
+        list_del(&zdev->fab_dev_node);
+
         kfree(zdev);
 }
 
@@ -663,3 +685,4 @@ int genz_device_add(struct genz_dev *zdev)
 	return ret;
 }
 EXPORT_SYMBOL(genz_device_add);
+

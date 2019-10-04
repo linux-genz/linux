@@ -378,7 +378,41 @@ static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br)
 	return err;
 }
 
-static int __init genz_init(void) {
+static void force_dev_cleanup(void)
+{
+	struct genz_fabric *f, *f_tmp;
+
+	/* go through each fabric */
+        list_for_each_entry_safe(f, f_tmp, &genz_fabrics, node) {
+		struct genz_dev *zdev, *zdev_tmp;
+		struct genz_component *zcomp, *zcomp_tmp;
+		struct genz_subnet *zsub, *zsub_tmp;
+
+#ifdef NOT_YET
+		/* remove each genz_dev */
+        	list_for_each_entry_safe(zdev, zdev_tmp, &f->devices,
+				fab_dev_node) {
+			device_unregister(&zdev->dev);
+		}
+		/* remove each component */
+        	list_for_each_entry_safe(zcomp, zcomp_tmp, &f->components,
+				fab_comp_node) {
+			device_unregister(&zcomp->dev);
+		}
+
+		/* remove each subnet */
+        	list_for_each_entry_safe(zsub, zsub_tmp, &f->subnets, node) {
+			device_unregister(&zsub->dev);
+		}
+
+#endif
+		/* finally remove the fabric device */
+		device_unregister(&f->dev);
+        }
+}
+
+static int __init genz_init(void)
+{
 	int ret = 0;
 
 	if (genz_disabled())
@@ -406,7 +440,9 @@ error_bus:
 }
 module_init(genz_init);
 
-static void __exit genz_exit(void) {
+static void __exit genz_exit(void)
+{
+	force_dev_cleanup();
 	bus_unregister(&genz_bus_type);
 	genz_nl_exit();
 }

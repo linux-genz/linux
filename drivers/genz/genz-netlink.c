@@ -90,13 +90,13 @@ static struct genz_resource * alloc_and_add_zres(struct genz_dev *zdev)
 	return(zr);
 }
 
-static int genz_free_zres(struct genz_dev *zdev, struct genz_resource *zres)
+void genz_free_zres(struct genz_dev *zdev, struct genz_resource *zres)
 {
-	/* free the name */
+	genz_remove_attr(zdev, zres);
+	list_del(&zres->zres_list);
+	list_del(&zres->component_list);
 	kfree(zres->res.name);
-	/* remove the zres from the zdev res_list */
-	/* remove the zres from the appropriate component list */
-	/* free the zres */
+	kfree(zres);
 }
 
 static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
@@ -147,6 +147,7 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 			zres->ro_rkey = ro_rkey;
 			zres->rw_rkey = rw_rkey;
 			if (mem_type == GENZ_CONTROL) {
+				zres->res.flags |= IORESOURCE_GENZ_CONTROL;
 				zres->res.name = kzalloc(GENZ_CONTROL_STR_LEN,
 							GFP_KERNEL);
 				if (zres->res.name == NULL) {
@@ -160,6 +161,7 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 					&zdev->zcomp->control_zres_list);
 			}
 			else if (mem_type == GENZ_DATA) {
+				zres->res.flags &= ~IORESOURCE_GENZ_CONTROL;
 				zres->res.name = kzalloc(GENZ_DATA_STR_LEN,
 							GFP_KERNEL);
 				if (zres->res.name == NULL) {

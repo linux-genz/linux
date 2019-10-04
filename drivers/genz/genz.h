@@ -58,6 +58,7 @@ struct genz_resource {
 	struct resource res;
 	uint32_t ro_rkey;
 	uint32_t rw_rkey;
+	struct bin_attribute res_attr;
 };
 #define to_genz_res(n) container_of(n, struct genz_resource, res)
 
@@ -72,7 +73,6 @@ struct genz_fabric {
 	struct list_head bridges;	/* List of local bridges on fabric */
 	struct kref	kref;
 	struct device   dev;		/* /sys/devices/genz<N> */
-	struct kset	*zkset;
 };
 #define to_genz_fabric(x) container_of(x, struct genz_fabric, kref)
 #define dev_to_genz_fabric(x) container_of(x, struct genz_fabric, dev)

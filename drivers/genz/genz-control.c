@@ -60,18 +60,19 @@ static ssize_t uuid_show(struct kobject *kobj,
 static struct kobj_attribute uuid_attribute =
 	__ATTR(uuid, (S_IRUGO), uuid_show, NULL);
 
-int genz_create_uuid_file(struct genz_dev *zdev) {
+int genz_create_uuid_file(struct genz_dev *zdev)
+{
 	int ret = 0;
 
 	ret = sysfs_create_file(&zdev->dev.kobj, &uuid_attribute.attr);
 	return ret;
 }
 
-int genz_remove_uuid_file(struct genz_dev *zdev) {
+void genz_remove_uuid_file(struct genz_dev *zdev)
+{
 	int ret = 0;
 
 	sysfs_remove_file(&zdev->dev.kobj, &uuid_attribute.attr);
-	return ret;
 }
 
 
