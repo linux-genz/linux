@@ -312,6 +312,10 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		printk(KERN_ERR "%s: missing required fabric number\n", __FUNCTION__);
 		return -EINVAL;
 	}
+	if (fabric_num > MAX_FABRIC_NUM) {
+		printk(KERN_ERR "%s: fabric number is invalid\n", __FUNCTION__);
+		return -EINVAL;
+	}
 	f = genz_find_fabric(fabric_num);
 	if (f == NULL) {
 		printk(KERN_ERR "%s: failed to find fabric %d\n", __FUNCTION__, fabric_num);
@@ -323,6 +327,11 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		printk(KERN_DEBUG "\tGCID: %d ", gcid);
 	} else {
 		printk(KERN_ERR "%s: missing required GCID\n", __FUNCTION__);
+		return -EINVAL;
+	}
+	/* validate the GCID */
+	if (gcid > MAX_GCID) {
+		printk(KERN_ERR "%s: GCID is invalid.\n", __FUNCTION__);
 		return -EINVAL;
 	}
 	/* Revisit: add a find_component() */
@@ -352,6 +361,11 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 			(uint32_t) zcomp->cclass);
 	} else {
 		printk(KERN_ERR "%s: missing required CCLASS\n", __FUNCTION__);
+		ret = -EINVAL;
+		goto err;
+	}
+	if (zcomp->cclass > HARDWARE_TYPES_MAX) {
+		printk(KERN_ERR "%s: CCLASS invalid\n", __FUNCTION__);
 		ret = -EINVAL;
 		goto err;
 	}
