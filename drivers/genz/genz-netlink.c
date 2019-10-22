@@ -99,6 +99,34 @@ void genz_free_zres(struct genz_dev *zdev, struct genz_resource *zres)
 	kfree(zres);
 }
 
+static int setup_zres(struct genz_resource *zres,
+		struct genz_dev *zdev,
+		int cdtype, int iores_flags,
+		int str_len,
+		char * fmt,
+		struct list_head *cd_zres_list)
+{
+	int ret = 0;
+	char *name;
+
+	zres->res.flags = iores_flags;
+	name = kzalloc(str_len, GFP_KERNEL);
+	if (name == NULL) {
+		/* Revisit: clean up and exit */
+		pr_debug("Failed to kmalloc res->name\n");
+		ret = -ENOMEM;
+		goto error;
+	}
+	snprintf(name, GENZ_CONTROL_STR_LEN, fmt,
+		zdev->resource_count[cdtype]++);
+	zres->res.name = name;
+
+	list_add_tail(&zres->component_list, cd_zres_list);
+
+error:
+	return(ret);
+}
+
 static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 {
 	struct nlattr *nested_attr;
@@ -147,35 +175,28 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 			zres->ro_rkey = ro_rkey;
 			zres->rw_rkey = rw_rkey;
 			if (mem_type == GENZ_CONTROL) {
-				zres->res.flags |= IORESOURCE_GENZ_CONTROL;
-				zres->res.name = kzalloc(GENZ_CONTROL_STR_LEN,
-							GFP_KERNEL);
-				if (zres->res.name == NULL) {
-					pr_debug("Failed to kmalloc res->name\n");
-				}
-				snprintf(zres->res.name, GENZ_CONTROL_STR_LEN,
+				ret = setup_zres(zres, zdev, GENZ_CONTROL,
+					(zres->res.flags | IORESOURCE_GENZ_CONTROL),
+					GENZ_CONTROL_STR_LEN,
 					"control%d",
-					zdev->resource_count[GENZ_CONTROL]++);
-	
-				list_add_tail(&zres->component_list,
 					&zdev->zcomp->control_zres_list);
+				if (ret)
+					goto error;
+
 			}
 			else if (mem_type == GENZ_DATA) {
-				zres->res.flags &= ~IORESOURCE_GENZ_CONTROL;
-				zres->res.name = kzalloc(GENZ_DATA_STR_LEN,
-							GFP_KERNEL);
-				if (zres->res.name == NULL) {
-					pr_debug("Failed to kmalloc res->name\n");
-				}
-				snprintf(zres->res.name, GENZ_DATA_STR_LEN,
+				ret = setup_zres(zres, zdev, GENZ_DATA,
+					(zres->res.flags & ~IORESOURCE_GENZ_CONTROL),
+					GENZ_DATA_STR_LEN,
 					"data%d",
-					zdev->resource_count[GENZ_DATA]++);
-				list_add_tail(&zres->component_list,
 					&zdev->zcomp->data_zres_list);
+				if (ret)
+					goto error;
 			}
 			ret = genz_create_attr(zdev, zres);
 			if (ret) {
 				pr_debug("%s: genz_create_attr failed with %d\n", __FUNCTION__, ret);
+				goto error;
 			}
 			/* Revisit: how to get the parent resource?
 			ret = insert_resource(&zres->res, &zdev->parent_res);
@@ -189,6 +210,7 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 		pr_debug("\t\t\tMR_START: 0x%llx\n\t\t\t\tMR_LENGTH: %lld\n\t\t\t\tMR_TYPE: %s\n\t\t\t\tRO_RKEY: 0x%x\n\t\t\t\tRW_KREY 0x%x\n", mem_start, mem_len, (mem_type == GENZ_DATA ? "DATA":"CONTROL"), ro_rkey, rw_rkey);
 	}
 	pr_debug("\t\tend of Memory Region List\n");
+error:
 	return ret;
 }
 
