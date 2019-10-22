@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2018-2019 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -34,79 +34,28 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Gen-Z Component Structure */
-enum {
-	GENZ_A_UNSPEC,
-	GENZ_A_FABRIC_NUM,
-	GENZ_A_GCID,
-	GENZ_A_CCLASS,
-	GENZ_A_FRU_UUID,
-	GENZ_A_MGR_UUID,
-	GENZ_A_RESOURCE_LIST,
-	__GENZ_A_MAX,
-};
-#define GENZ_A_MAX (__GENZ_A_MAX - 1)
+#ifndef _WILDCAT_INTR_H_
+#define _WILDCAT_INTR_H_
 
-/* Resource List Structure */
-enum {
-	GENZ_A_UL_UNSPEC,
-	GENZ_A_UL,
-	__GENZ_A_UL_MAX,
-};
-#define GENZ_A_UL_MAX (__GENZ_A_UL_MAX - 1)
+/* Function Prototypes */
+int wildcat_register_interrupts(struct pci_dev *pdev, struct slice *sl);
+void wildcat_free_interrupts(struct pci_dev *pdev);
+int wildcat_get_irq_index(struct slice *sl, int queue);
+irqreturn_t wildcat_rdm_interrupt_handler(int irq_index, void *data);
+int wildcat_register_rdm_interrupt(struct slice *sl, int queue,
+	irqreturn_t (*intr_handler)(int, void *), void *data);
+void wildcat_unregister_rdm_interrupt(struct slice *sl, int queue);
+#ifdef OLD_ZHPE
+/* Revisit: fix these */
+int zhpe_setup_poll_devs(void);
+void zhpe_cleanup_poll_devs(void);
+int zhpe_poll_device_create(struct slice *sl, int num_vectors);
+void zhpe_poll_device_destroy(struct slice *sl);
+wait_queue_head_t * zhpe_poll_get_wq(int irq_index);
+int zhpe_trigger(int irq_index, int * triggered);
+int zhpe_read_handled(struct file_data *fdata, struct slice *sl, int queue,
+    int *handled);
+void zhpe_poll_init_waitqueues(struct bridge *br);
+#endif
 
-/* Resource Structure */
-enum {
-	GENZ_A_U_UNSPEC,
-	GENZ_A_U_UUID,
-	GENZ_A_U_CLASS,
-	GENZ_A_U_MRL,
-	__GENZ_A_U_MAX,
-};
-#define GENZ_A_U_MAX (__GENZ_A_U_MAX - 1)
-
-/* Memory Region List Structure */
-enum {
-	GENZ_A_MRL_UNSPEC,
-	GENZ_A_MRL,
-	__GENZ_A_MRL_MAX,
-};
-#define GENZ_A_MRL_MAX (__GENZ_A_MRL_MAX - 1)
-
-/* Memory Region Structure */
-enum {
-	GENZ_A_MR_UNSPEC,
-	GENZ_A_MR_START,
-	GENZ_A_MR_LENGTH,
-	GENZ_A_MR_TYPE,
-	GENZ_A_MR_RO_RKEY,
-	GENZ_A_MR_RW_RKEY,
-	__GENZ_A_MR_MAX,
-};
-#define GENZ_A_MR_MAX (__GENZ_A_MR_MAX - 1)
-
-#define GENZ_CONTROL_STR_LEN	12
-#define GENZ_DATA_STR_LEN	9
-
-/* Netlink Generic Commands */
-
-/* Netlink Generic Commands */
-enum {
-	GENZ_C_ADD_OS_COMPONENT,
-	GENZ_C_REMOVE_OS_COMPONENT,
-	GENZ_C_SYMLINK_OS_COMPONENT,
-	GENZ_C_FAB_MGR_CTL_WR_MSG,
-	GENZ_C_ADD_FABRIC_COMPONENT,
-	GENZ_C_REMOVE_FABRIC_COMPONENT,
-	__GENZ_C_MAX,
-};
-#define GENZ_C_MAX (__GENZ_C_MAX - 1)
-
-#define UUID_LEN	16	/* 16 uint8_t's */
-
-#define NLINK_MSG_LEN 1024
-#define GENZ_FAMILY_NAME "genz_cmd"
-
-int genz_nl_init(void);
-void genz_nl_exit(void);
-void genz_free_zres(struct genz_dev *zdev, struct genz_resource *zres);
+#endif /* _WILDCAT_INTR_H_ */

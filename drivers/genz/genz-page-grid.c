@@ -35,16 +35,29 @@
  */
 
 #include <linux/slab.h>
+#include <linux/bitops.h>
 #include "genz.h"
-
-#define ROUND_DOWN_PAGE(_addr, _sz) ((_addr) & -(_sz))
-#define ROUND_UP_PAGE(_addr, _sz)   (((_addr) + ((_sz) - 1)) & -(_sz))
 
 /* Revisit: genz_pg_restricted_pg_table_array field names */
 #define page_size page_size_0
 #define page_count page_count_0
 #define pg_base_address pg_base_address_0
 #define base_pte_index base_pte_index_0
+
+uint64_t genz_zmmu_pte_addr(const struct genz_pte_info *info, uint64_t addr)
+{
+	uint64_t base_addr, ps, pte_off;
+	struct genz_page_grid *pg = info->pg;
+
+	if (!pg)
+		return GENZ_BASE_ADDR_ERROR;
+
+	base_addr = pg->page_grid.pg_base_address;
+	ps = BIT_ULL(pg->page_grid.page_size);
+	pte_off = info->pte_index - pg->page_grid.base_pte_index;
+	return base_addr + (pte_off * ps) + (addr - info->addr_aligned);
+}
+EXPORT_SYMBOL(genz_zmmu_pte_addr);
 
 static void zmmu_clear_pg_info(struct genz_page_grid_info *pgi, uint entries,
                                bool free_radix_tree)
@@ -609,3 +622,254 @@ unlock:
 out:
 	return err;
 }
+
+static struct genz_page_grid *zmmu_pg_page_size(struct genz_pte_info *info,
+						struct genz_page_grid_info *pgi)
+{
+	uint64_t addr_aligned, length_adjusted;
+	struct genz_page_grid *gz_pg;
+	int ps;
+	unsigned long key;
+	bool cpu_visible = !!(info->access & GENZ_MR_REQ_CPU);
+
+	/* Revisit: make this more general */
+	if (info->humongous) {
+		gz_pg = pgi->humongous_pg;
+		ps = gz_pg->page_grid.page_size;
+		info->length = BIT_ULL(ps);
+		info->addr &= ~(BIT_ULL(ps) - 1ull);
+	} else {
+		length_adjusted = roundup_pow_of_two(info->length);
+		ps = clamp(ilog2(length_adjusted),
+			   GENZ_PAGE_GRID_MIN_PAGESIZE,
+			   GENZ_PAGE_GRID_MAX_PAGESIZE);
+		ps = find_next_bit(
+			(cpu_visible) ? pgi->pg_cpu_visible_ps_bitmap :
+			pgi->pg_non_visible_ps_bitmap, 64, ps);
+		key = ps + ((cpu_visible) ? GENZ_PAGE_GRID_MAX_PAGESIZE : 0);
+		gz_pg = radix_tree_lookup(&pgi->pg_pagesize_tree, key);
+	}
+
+	if (gz_pg) {
+		addr_aligned = ROUND_DOWN_PAGE(info->addr, BIT_ULL(ps));
+		info->addr_aligned = addr_aligned;
+		info->zmmu_pages = ROUND_UP_PAGE(
+			info->length + (info->addr - addr_aligned),
+			BIT_ULL(ps)) >> ps;
+		info->length_adjusted = info->zmmu_pages * BIT_ULL(ps);
+		if (info->humongous)
+			info->length = info->length_adjusted;
+	} else {
+		ps = -ENOSPC;
+	}
+
+	pr_debug("addr_aligned=0x%llx, length_adjusted=0x%llx, page_size=%d, gz_pg=%px\n",
+	       info->addr_aligned, info->length_adjusted, ps, gz_pg);
+	return (ps < 0) ? ERR_PTR(ps) : gz_pg;
+}
+
+static int zmmu_pte_insert(struct genz_pte_info *info,
+			   struct genz_page_grid *pg)
+{
+	struct rb_root *root = &pg->pte_tree;
+	struct rb_node **new = &root->rb_node, *parent = NULL;
+
+	/* caller must hold bridge zmmu lock */
+
+	/* figure out where to put new node */
+	while (*new) {
+		struct genz_pte_info *this =
+			container_of(*new, struct genz_pte_info, node);
+		int result = arithcmp(info->pte_index, this->pte_index);
+
+		parent = *new;
+		if (result < 0)
+			new = &((*new)->rb_left);
+		else if (result > 0)
+			new = &((*new)->rb_right);
+		else  /* already there */
+			return -EEXIST;
+	}
+
+	/* add new node and rebalance tree */
+	rb_link_node(&info->node, parent, new);
+	rb_insert_color(&info->node, root);
+	info->pg = pg;
+	return 0;
+}
+
+static void zmmu_pte_erase(struct genz_pte_info *info)
+{
+	/* caller must hold bridge zmmu lock */
+	if (info->pg != NULL) {
+		rb_erase(&info->node, &info->pg->pte_tree);
+		info->pg = NULL;
+	}
+}
+
+static int zmmu_find_pte_range(struct genz_pte_info *info,
+                               struct genz_page_grid *pg)
+{
+	struct rb_node *rb;
+	struct genz_pte_info *this;
+	uint page_count = info->zmmu_pages;
+	uint min_pte = pg->page_grid.base_pte_index;
+	uint max_pte = min_pte + pg->page_grid.page_count - 1;
+	uint end_pte;
+	int ret = -ENOSPC;
+
+	/* caller must hold bridge zmmu lock */
+
+	for (rb = rb_last(&pg->pte_tree); rb; rb = rb_prev(rb)) {
+		this = container_of(rb, struct genz_pte_info, node);
+		end_pte = this->pte_index + this->zmmu_pages - 1;
+		if ((max_pte - end_pte) >= page_count) {  /* range above this works */
+			min_pte = end_pte + 1;
+			break;
+		} else {
+			max_pte = this->pte_index - 1;
+		}
+	}
+
+	if ((max_pte - min_pte + 1) >= page_count) {  /* found a range */
+		/* set pte_index */
+		info->pte_index = min_pte;
+		/* add info to rbtree */
+		ret = zmmu_pte_insert(info, pg);
+		if (ret == 0)
+			ret = min_pte;
+	}
+
+	pr_debug("ret=%d, addr=0x%llx\n", ret, info->addr);
+	return ret;
+}
+
+int genz_zmmu_req_pte_alloc(struct genz_pte_info *info, uint64_t *req_addr,
+                            uint32_t *pg_ps)
+{
+	struct genz_bridge_dev      *br = info->bridge;
+	struct genz_page_grid_info  *pgi = &br->zmmu_info.req_zmmu_pg;
+	struct genz_page_grid       *gz_pg;
+	int                         ret;
+	ulong                       flags;
+
+	spin_lock_irqsave(&br->zmmu_lock, flags);
+	gz_pg = zmmu_pg_page_size(info, pgi);
+	if (IS_ERR(gz_pg)) {
+		ret = PTR_ERR(gz_pg);
+		goto unlock;
+	}
+
+	ret = zmmu_find_pte_range(info, gz_pg);
+	if (ret < 0)
+		goto unlock;
+
+	*req_addr = genz_zmmu_pte_addr(info, info->addr);
+	*pg_ps = gz_pg->page_grid.page_size;
+	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+	pr_debug("pte_index=%u, zmmu_pages=%u, pg_ps=%u\n",
+		 info->pte_index, info->zmmu_pages, *pg_ps);
+
+	if (br->zbdrv->req_pte_write) { /* call bridge driver to write HW PTE */
+		ret = br->zbdrv->req_pte_write(br, info);
+	} else {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (ret < 0) {
+		/* Revisit: deallocate PTE? */
+	}
+
+out:
+	pr_debug("ret=%d, addr=0x%llx\n", ret, info->addr);
+	return ret;
+
+unlock:
+	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+	goto out;
+}
+EXPORT_SYMBOL(genz_zmmu_req_pte_alloc);
+
+void genz_zmmu_req_pte_free(struct genz_pte_info *info)
+{
+	struct genz_bridge_dev *br = info->bridge;
+	ulong                  flags;
+
+	pr_debug("pte_index=%u, zmmu_pages=%u\n",
+		 info->pte_index, info->zmmu_pages);
+
+	if (br->zbdrv->req_pte_clear) { /* call bridge driver to clear HW PTE */
+		br->zbdrv->req_pte_clear(br, info);
+	}
+
+	spin_lock_irqsave(&br->zmmu_lock, flags);
+	zmmu_pte_erase(info);
+	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+}
+EXPORT_SYMBOL(genz_zmmu_req_pte_free);
+
+int genz_zmmu_rsp_pte_alloc(struct genz_pte_info *info, uint64_t *rsp_zaddr,
+                            uint32_t *pg_ps)
+{
+	struct genz_bridge_dev      *br = info->bridge;
+	struct genz_page_grid_info  *pgi = &br->zmmu_info.rsp_zmmu_pg;
+	struct genz_page_grid       *gz_pg;
+	int                         ret;
+	ulong                       flags;
+
+	spin_lock_irqsave(&br->zmmu_lock, flags);
+	gz_pg = zmmu_pg_page_size(info, pgi);
+	if (IS_ERR(gz_pg)) {
+		ret = PTR_ERR(gz_pg);
+		goto unlock;
+	}
+
+	ret = zmmu_find_pte_range(info, gz_pg);
+	if (ret < 0)
+		goto unlock;
+
+	*rsp_zaddr = genz_zmmu_pte_addr(info, info->addr);
+	*pg_ps = gz_pg->page_grid.page_size;
+	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+	pr_debug("pte_index=%u, zmmu_pages=%u, pg_ps=%u\n",
+		 info->pte_index, info->zmmu_pages, *pg_ps);
+
+	if (br->zbdrv->rsp_pte_write) { /* call bridge driver to write HW PTE */
+		ret = br->zbdrv->rsp_pte_write(br, info);
+	} else {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (ret < 0) {
+		/* Revisit: deallocate PTE? */
+	}
+
+out:
+	pr_debug("ret=%d, addr=0x%llx\n", ret, info->addr);
+	return ret;
+
+unlock:
+	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+	goto out;
+}
+EXPORT_SYMBOL(genz_zmmu_rsp_pte_alloc);
+
+void genz_zmmu_rsp_pte_free(struct genz_pte_info *info)
+{
+	struct genz_bridge_dev *br = info->bridge;
+	ulong                  flags;
+
+	pr_debug("pte_index=%u, zmmu_pages=%u\n",
+		 info->pte_index, info->zmmu_pages);
+
+	if (br->zbdrv->rsp_pte_clear) { /* call bridge driver to clear HW PTE */
+		br->zbdrv->rsp_pte_clear(br, info);
+	}
+
+	spin_lock_irqsave(&br->zmmu_lock, flags);
+	zmmu_pte_erase(info);
+	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+}
+EXPORT_SYMBOL(genz_zmmu_rsp_pte_free);

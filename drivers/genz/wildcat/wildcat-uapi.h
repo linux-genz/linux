@@ -63,26 +63,27 @@ _EXTERN_C_BEG
 #define WILDCAT_IMM_MAX            (32)
 #define WILDCAT_ENQA_MAX           (52)
 
-#define WILDCAT_MR_GET             ((uint32_t)1 << 0)
-#define WILDCAT_MR_PUT             ((uint32_t)1 << 1)
-#define WILDCAT_MR_SEND            WILDCAT_MR_PUT
-#define WILDCAT_MR_RECV            WILDCAT_MR_GET
-#define WILDCAT_MR_GET_REMOTE      ((uint32_t)1 << 2)
-#define WILDCAT_MR_PUT_REMOTE      ((uint32_t)1 << 3)
-#define WILDCAT_MR_FLAG0           ((uint32_t)1 << 4) /* Usable by user-space */
-#define WILDCAT_MR_FLAG1           ((uint32_t)1 << 5)
-#define WILDCAT_MR_FLAG2           ((uint32_t)1 << 6)
-#define WILDCAT_MR_FLAG3           ((uint32_t)1 << 7)
-#define WILDCAT_MR_REQ             ((uint32_t)1 << 16) /* driver internal */
-#define WILDCAT_MR_RSP             ((uint32_t)1 << 17) /* driver internal */
-#define WILDCAT_MR_REQ_CPU         ((uint32_t)1 << 27) /* CPU visible mapping */
-#define WILDCAT_MR_REQ_CPU_CACHE   ((uint32_t)3 << 28) /* CPU cache mode */
-#define WILDCAT_MR_REQ_CPU_WB      ((uint32_t)0 << 28)
-#define WILDCAT_MR_REQ_CPU_WC      ((uint32_t)1 << 28)
-#define WILDCAT_MR_REQ_CPU_WT      ((uint32_t)2 << 28)
-#define WILDCAT_MR_REQ_CPU_UC      ((uint32_t)3 << 28)
-#define WILDCAT_MR_INDIVIDUAL      ((uint32_t)1 << 30) /* individual rsp ZMMU */
-#define WILDCAT_MR_INDIV_RKEYS     ((uint32_t)1 << 31) /* per mrreg rkeys */
+/* Revisit: get rid of these WILDCAT versions */
+#define WILDCAT_MR_GET            GENZ_MR_GET
+#define WILDCAT_MR_PUT            GENZ_MR_PUT
+#define WILDCAT_MR_SEND           WILDCAT_MR_PUT
+#define WILDCAT_MR_RECV           WILDCAT_MR_GET
+#define WILDCAT_MR_GET_REMOTE     GENZ_MR_GET_REMOTE
+#define WILDCAT_MR_PUT_REMOTE     GENZ_MR_PUT_REMOTE
+#define WILDCAT_MR_FLAG0          GENZ_MR_FLAG0 /* Usable by user-space */
+#define WILDCAT_MR_FLAG1          GENZ_MR_FLAG1
+#define WILDCAT_MR_FLAG2          GENZ_MR_FLAG2
+#define WILDCAT_MR_FLAG3          GENZ_MR_FLAG3
+#define WILDCAT_MR_REQ            GENZ_MR_REQ
+#define WILDCAT_MR_RSP            GENZ_MR_RSP
+#define WILDCAT_MR_REQ_CPU        GENZ_MR_REQ_CPU
+#define WILDCAT_MR_REQ_CPU_CACHE  GENZ_MR_REQ_CPU_CACHE
+#define WILDCAT_MR_REQ_CPU_WB     GENZ_MR_REQ_CPU_WB
+#define WILDCAT_MR_REQ_CPU_WC     GENZ_MR_REQ_CPU_WC
+#define WILDCAT_MR_REQ_CPU_WT     GENZ_MR_REQ_CPU_WT
+#define WILDCAT_MR_REQ_CPU_UC     GENZ_MR_REQ_CPU_UC
+#define WILDCAT_MR_INDIVIDUAL     GENZ_MR_INDIVIDUAL  /* individual rsp ZMMU */
+#define WILDCAT_MR_INDIV_RKEYS    GENZ_MR_INDIV_RKEYS /* per mrreg rkeys */
 
 enum wildcat_hw_atomic {
 	WILDCAT_HW_ATOMIC_RETURN       = 0x01,

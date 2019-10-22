@@ -115,6 +115,16 @@ struct wildcat_info {
 	uint64_t            cq_off;
 };
 
+struct wildcat_rdma_state {
+	struct genz_dev         *zdev;
+	struct miscdevice       miscdev;
+	spinlock_t              fdata_lock;  /* protects fdata_list */
+	struct list_head        fdata_list;
+	wait_queue_head_t       rdma_poll_wq[MAX_IRQ_VECTORS];
+};
+#define to_wildcat_rdma_state(n) container_of(n, struct wildcat_rdma_state, \
+					      miscdev)
+
 struct wildcat_rdma_hdr {
 	uint8_t             version;
 	uint8_t             opcode;
@@ -199,27 +209,6 @@ struct wildcat_rdma_rsp_NOP {
 	uint64_t                seq;
 };
 
-struct wildcat_rdma_req_ZMMU_REG {
-	struct wildcat_rdma_hdr hdr;
-};
-
-struct wildcat_rdma_rsp_ZMMU_REG {
-	struct wildcat_rdma_hdr hdr;
-};
-
-struct wildcat_rdma_req_ZMMU_FREE {
-	struct wildcat_rdma_hdr hdr;
-};
-
-struct wildcat_rdma_rsp_ZMMU_FREE {
-	struct wildcat_rdma_hdr hdr;
-};
-
-enum {
-	UUID_IS_FAM  = 0x1,
-	UUID_IS_ENIC = 0x2,
-};
-
 struct wildcat_rdma_req_UUID_IMPORT {
 	struct wildcat_rdma_hdr hdr;
 	uuid_t                  uuid;
@@ -239,10 +228,6 @@ struct wildcat_rdma_req_UUID_FREE {
 struct wildcat_rdma_rsp_UUID_FREE {
 	struct wildcat_rdma_hdr hdr;
 };
-
-/* Defines for the XQALLOC/RQALLOC slice_mask */
-#define SLICE_DEMAND 0x80
-#define ALL_SLICES   0x0f
 
 struct wildcat_qcm {
 	uint32_t           size;   /* Bytes allocated for the QCM */
@@ -365,8 +350,6 @@ union wildcat_rdma_req {
 	struct wildcat_rdma_req_RMR_IMPORT  rmr_import;
 	struct wildcat_rdma_req_RMR_FREE    rmr_free;
 	struct wildcat_rdma_req_NOP         nop;
-	struct wildcat_rdma_req_ZMMU_REG    zmmu_reg;
-	struct wildcat_rdma_req_ZMMU_FREE   zmmu_free;
 	struct wildcat_rdma_req_UUID_IMPORT uuid_import;
 	struct wildcat_rdma_req_UUID_FREE   uuid_free;
 	struct wildcat_rdma_req_XQALLOC     xqalloc;
@@ -393,8 +376,6 @@ union wildcat_rdma_rsp {
 	struct wildcat_rdma_rsp_RMR_IMPORT  rmr_import;
 	struct wildcat_rdma_rsp_RMR_FREE    rmr_free;
 	struct wildcat_rdma_rsp_NOP         nop;
-	struct wildcat_rdma_rsp_ZMMU_REG    zmmu_reg;
-	struct wildcat_rdma_rsp_ZMMU_FREE   zmmu_free;
 	struct wildcat_rdma_rsp_UUID_IMPORT uuid_import;
 	struct wildcat_rdma_rsp_UUID_FREE   uuid_free;
 	struct wildcat_rdma_rsp_XQALLOC     xqalloc;
@@ -431,41 +412,6 @@ struct wildcat_local_shared_data {
 	uint32_t            handled_counter[MAX_IRQ_VECTORS];
 };
 
-/* XDM QCM access macros and structures. Reads and writes must be 64 bits */
-
-struct wildcat_xdm_active_status_error {
-	uint64_t active_cmd_cnt   : 11;
-	uint64_t rv1              : 4;
-	uint64_t active           : 1;
-	uint64_t status           : 3;
-	uint64_t rv2              : 12;
-	uint64_t error            : 1;
-	uint64_t rv3              : 32;
-};
-#define WILDCAT_XDM_QCM_ACTIVE_STATUS_ERROR_OFFSET	0x28
-#define WILDCAT_XDM_QCM_STOP_OFFSET		0x40
-#define WILDCAT_XDM_QCM_CMD_QUEUE_TAIL_OFFSET	0x80
-#define WILDCAT_XDM_QCM_CMD_QUEUE_HEAD_OFFSET	0xc0
-struct wildcat_xdm_cmpl_queue_tail_toggle {
-	uint64_t cmpl_q_tail_idx  : 16;
-	uint64_t rv1              : 15;
-	uint64_t toggle_valid     : 1;
-	uint64_t rv2              : 32;
-};
-#define WILDCAT_XDM_QCM_CMPL_QUEUE_TAIL_TOGGLE_OFFSET	0x100
-
-/* RDM QCM access macros and structures. Reads and writes must be 64 bits */
-#define WILDCAT_RDM_QCM_ACTIVE				0x18
-#define WILDCAT_RDM_QCM_STOP_OFFSET			0x40
-struct wildcat_rdm_rcv_queue_tail_toggle {
-	uint64_t rcv_q_tail_idx   : 20;
-	uint64_t rv1              : 11;
-	uint64_t toggle_valid     : 1;
-	uint64_t rv2              : 32;
-};
-#define WILDCAT_RDM_QCM_RCV_QUEUE_TAIL_TOGGLE_OFFSET	0x80
-#define WILDCAT_RDM_QCM_RCV_QUEUE_HEAD_OFFSET		0xc0
-
 struct zmap {
     struct list_head    list;
     struct file_data    *owner;
@@ -492,19 +438,6 @@ bool _free_zmap_list(const char *callf, uint line, struct file_data *fdata);
 #define free_zmap_list(...) \
     _free_zmap_list(__func__, __LINE__, __VA_ARGS__)
 
-/* Revisit: make this generic, not wildcat-specific */
-struct mem_data {
-	struct bridge       *bridge;
-	spinlock_t          uuid_lock;  /* protects local_uuid, remote_uuid_tree */
-	struct uuid_tracker *local_uuid;
-	struct rb_root      md_remote_uuid_tree;  /* UUIDs imported by this mdata */
-	spinlock_t          md_lock;    /* protects md_mr_tree, md_rmr_tree */
-	struct rb_root      md_mr_tree;
-	struct rb_root      md_rmr_tree;
-	uint32_t            ro_rkey;
-	uint32_t            rw_rkey;
-};
-
 struct file_data {
 	void                 (*free)(const char *callf, uint line, void *ptr);
 	atomic_t             count;
@@ -514,7 +447,7 @@ struct file_data {
 	wait_queue_head_t    io_wqh;
 	struct list_head     fdata_list;
 	struct list_head     rd_list;
-	struct mem_data      md;
+	struct genz_mem_data md;
 	spinlock_t           zmap_lock;  /* protects zmap_list */
 	struct list_head     zmap_list;
 	struct zmap          *shared_zmap;
@@ -527,6 +460,7 @@ struct file_data {
 	spinlock_t           rdm_queue_lock;
 	DECLARE_BITMAP(rdm_queues, RDM_QUEUES_PER_SLICE*SLICES);
 	pid_t                pid;        /* pid that allocated this file_data */
+	struct wildcat_rdma_state *rstate;
 };
 
 struct io_entry {
@@ -549,6 +483,24 @@ enum {
     STATE_INIT          = 0x4,
 };
 
+/* Function Prototypes */
+int wildcat_user_req_XQFREE(struct io_entry *entry);
+int wildcat_user_req_XQALLOC(struct io_entry *entry);
+int wildcat_user_req_RQFREE(struct io_entry *entry);
+int wildcat_user_req_RQALLOC(struct io_entry *entry);
+int wildcat_req_XQALLOC(struct wildcat_rdma_req_XQALLOC *req,
+			struct wildcat_rdma_rsp_XQALLOC	*rsp,
+			struct file_data *fdata);
+int wildcat_req_XQFREE(union wildcat_rdma_req *req, 
+			union wildcat_rdma_rsp *rsp, struct file_data *fdata);
+int wildcat_req_RQALLOC(struct wildcat_rdma_req_RQALLOC *req,
+			struct wildcat_rdma_rsp_RQALLOC *rsp,
+			struct file_data *fdata);
+int wildcat_req_RQFREE(struct wildcat_rdma_req_RQFREE *req,
+		       struct wildcat_rdma_rsp_RQFREE *rsp,
+			struct file_data *fdata);
+/* Revisit: delete this when vma_set_page_prot is exported */
+void wildcat_vma_set_page_prot(struct vm_area_struct *vma);
 _EXTERN_C_END
 
 #ifdef _EXTERN_C_SET

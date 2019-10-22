@@ -33,36 +33,50 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+ /*
+ * This file is machine generated in conjunction with the .h file based of XML
+ * GenZ Specs.
+ *
+ * XML file meta based of which this file was generated:
+ *     Version   : N/A
+ *     Date      : 2019-10-09 10:17:48.988273
+ *     ctl_file  : gen-z-spec-control-20191009.vsdx
+ *     pkt_file  : gen-z-spec-protocol-20191009.vsdx
+ *     word_file : gen-z-core-specification-v1.1-20191009.docx
+ *
+ * Generator Script Meta:
+ *     Version      : v0.8
+ *     Generated On : 2019-10-11 10:18:05.559404
+ */
 #include <linux/kernel.h>
 #include <linux/genz-types.h>
 
-struct hardware_classes_meta hardware_classes[] = {
-     { "Reserved—shall not be used",                           "reserved_shall_not_be_used", RESERVED_SHALL_NOT_BE_USED },
-     { "Memory ( P2P 64 )",                                    "memory", MEMORY },
-     { "Memory (Explicit OpClass)",                            "memory", MEMORY },
-     { "Integrated Switch",                                    "switch", SWITCH },
-     { "Enclosure / Expansion Switch",                         "switch", SWITCH },
-     { "Fabric Switch",                                        "switch", SWITCH },
-     { "Processor (Bootable)",                                 "processor", PROCESSOR },
-     { "Processor (Non-boot)",                                 "processor", PROCESSOR },
-     { "Accelerator (Non-coherent, non-boot)",                 "accelerator", ACCELERATOR },
-     { "Accelerator (Coherent, non-boot)",                     "accelerator", ACCELERATOR },
-     { "Accelerator (Non-coherent, bootable)",                 "accelerator", ACCELERATOR },
-     { "Accelerator (Coherent, bootable)",                     "accelerator", ACCELERATOR },
-     { "I/O (Non-coherent, non-boot)",                         "io", IO },
-     { "I/O (Coherent, non-boot)",                             "io", IO },
-     { "I/O (Non-coherent, bootable)",                         "io", IO },
-     { "I/O (Coherent, bootable)",                             "io", IO },
-     { "Block Storage (Bootable)",                             "block_storage", BLOCK_STORAGE },
-     { "Block Storage (Non-boot)",                             "block_storage", BLOCK_STORAGE },
-     { "Transparent Router",                                   "transparent_router", TRANSPARENT_ROUTER },
-     { "Multi-class Component (see  Service UUID Structure )", "multiclass_component", MULTICLASS_COMPONENT },
-     { "Discrete Gen-Z Bridge",                                "bridge", BRIDGE },
-     { "Integrated Gen-Z Bridge",                              "bridge", BRIDGE },
-     { "Compliance Test Board",                                "compliance_test_board", COMPLIANCE_TEST_BOARD },
-     { "Logical PCIe Hierarchy (LPH)",                         "logical_pcie_hierarchy", LOGICAL_PCIE_HIERARCHY },
+struct genz_hardware_classes_meta genz_hardware_classes[] = {
+     { "Reserved—shall not be used",                           "reserved_shall_not_be_used", GENZ_RESERVED_SHALL_NOT_BE_USED },
+     { "Memory ( P2P 64 )",                                    "memory", GENZ_MEMORY },
+     { "Memory (Explicit OpClass)",                            "memory", GENZ_MEMORY },
+     { "Integrated Switch",                                    "switch", GENZ_SWITCH },
+     { "Enclosure / Expansion Switch",                         "switch", GENZ_SWITCH },
+     { "Fabric Switch",                                        "switch", GENZ_SWITCH },
+     { "Processor (Bootable)",                                 "processor", GENZ_PROCESSOR },
+     { "Processor (Non-boot)",                                 "processor", GENZ_PROCESSOR },
+     { "Accelerator (Non-coherent, non-boot)",                 "accelerator", GENZ_ACCELERATOR },
+     { "Accelerator (Coherent, non-boot)",                     "accelerator", GENZ_ACCELERATOR },
+     { "Accelerator (Non-coherent, bootable)",                 "accelerator", GENZ_ACCELERATOR },
+     { "Accelerator (Coherent, bootable)",                     "accelerator", GENZ_ACCELERATOR },
+     { "I/O (Non-coherent, non-boot)",                         "io", GENZ_IO },
+     { "I/O (Coherent, non-boot)",                             "io", GENZ_IO },
+     { "I/O (Non-coherent, bootable)",                         "io", GENZ_IO },
+     { "I/O (Coherent, bootable)",                             "io", GENZ_IO },
+     { "Block Storage (Bootable)",                             "block_storage", GENZ_BLOCK_STORAGE },
+     { "Block Storage (Non-boot)",                             "block_storage", GENZ_BLOCK_STORAGE },
+     { "Transparent Router",                                   "transparent_router", GENZ_TRANSPARENT_ROUTER },
+     { "Multi-class Component (see  Service UUID Structure )", "multiclass_component", GENZ_MULTICLASS_COMPONENT },
+     { "Discrete Gen-Z Bridge",                                "bridge", GENZ_BRIDGE },
+     { "Integrated Gen-Z Bridge",                              "bridge", GENZ_BRIDGE },
+     { "Compliance Test Board",                                "compliance_test_board", GENZ_COMPLIANCE_TEST_BOARD },
+     { "Logical PCIe Hierarchy (LPH)",                         "logical_pcie_hierarchy", GENZ_LOGICAL_PCIE_HIERARCHY },
 };
-EXPORT_SYMBOL(hardware_classes);
 
 struct genz_control_structure_ptr core_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x48, GENZ_GENERIC_STRUCTURE },
@@ -74,7 +88,7 @@ struct genz_control_structure_ptr core_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x60, GENZ_GENERIC_STRUCTURE },
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x64, GENZ_GENERIC_STRUCTURE },
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x68, GENZ_GENERIC_STRUCTURE },
-    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x6c, GENZ_CORE_LPD_BDF_TABLE },
+    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x6c, GENZ_CORE_LPD_BDF_TABLE },
     { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x70, GENZ_OPCODE_SET_STRUCTURE },
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x74, GENZ_COMPONENT_C_ACCESS_STRUCTURE },
     { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x78, GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE },
@@ -97,8 +111,8 @@ struct genz_control_structure_ptr opcode_set_structure_ptrs[] = {
 
 struct genz_control_structure_ptr interface_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x70, GENZ_INTERFACE_STRUCTURE },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x78, GENZ_GENERIC_STRUCTURE },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x7c, GENZ_GENERIC_STRUCTURE },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x78, GENZ_UNKNOWN_STRUCTURE },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x7c, GENZ_UNKNOWN_STRUCTURE },
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x80, GENZ_INTERFACE_PHY_STRUCTURE },
     { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x84, GENZ_INTERFACE_STATISTICS_STRUCTURE },
     { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x88, GENZ_COMPONENT_MECHANICAL_STRUCTURE },
@@ -115,7 +129,7 @@ struct genz_control_structure_ptr interface_phy_structure_ptrs[] = {
 
 struct genz_control_structure_ptr interface_statistics_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x8, GENZ_VENDOR_DEFINED_STRUCTURE },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0xc, GENZ_GENERIC_STRUCTURE },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0xc, GENZ_UNKNOWN_STRUCTURE },
 };
 
 struct genz_control_structure_ptr component_error_and_signal_event_structure_ptrs[] = {
@@ -147,7 +161,7 @@ struct genz_control_structure_ptr component_switch_structure_ptrs[] = {
 
 struct genz_control_structure_ptr component_statistics_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x8, GENZ_COMPONENT_STATISTICS_STRUCTURE },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0xc, GENZ_GENERIC_STRUCTURE },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0xc, GENZ_UNKNOWN_STRUCTURE },
 };
 
 struct genz_control_structure_ptr component_extension_structure_ptrs[] = {
@@ -173,14 +187,8 @@ struct genz_control_structure_ptr component_multicast_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x28, GENZ_RELIABLE_MULTICAST_TABLE },
 };
 
-struct genz_control_structure_ptr component_security_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x18, GENZ_C_CERT_TABLE },
-    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x1c, GENZ_CERTIFICATE_TABLE },
-    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x20, GENZ_TIK_TABLE },
-};
-
 struct genz_control_structure_ptr component_tr_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x8, GENZ_COMPONENT_TR_TABLE },
+    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x8, GENZ_TR_TABLE },
 };
 
 struct genz_control_structure_ptr component_image_structure_ptrs[] = {
@@ -193,7 +201,7 @@ struct genz_control_structure_ptr component_precision_time_structure_ptrs[] = {
 };
 
 struct genz_control_structure_ptr component_mechanical_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x1c, GENZ_VENDOR_DEFINED_WITH_UUID_STRUCTURE },
+    { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x1c, GENZ_VENDOR_DEFINED_STRUCTURE },
 };
 
 struct genz_control_structure_ptr component_destination_table_structure_ptrs[] = {
@@ -201,7 +209,7 @@ struct genz_control_structure_ptr component_destination_table_structure_ptrs[] =
     { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x20, GENZ_SSDT_MSDT_TABLE },
     { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x24, GENZ_SSDT_MSDT_TABLE },
     { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x28, GENZ_REQUESTER_VCAT_TABLE },
-    { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x2c, GENZ_RIT_TABLE },
+    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x2c, GENZ_RIT_TABLE },
     { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x30, GENZ_RESPONDER_VCAT_TABLE },
 };
 
@@ -226,9 +234,6 @@ struct genz_control_structure_ptr component_pa_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x24, GENZ_SSAP_MCAP_MSAP_AND_MSMCAP_TABLE },
     { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x28, GENZ_SSAP_MCAP_MSAP_AND_MSMCAP_TABLE },
     { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x2c, GENZ_SSAP_MCAP_MSAP_AND_MSMCAP_TABLE },
-    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x34, GENZ_SEC_TABLE },
-    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x48, GENZ_CERTIFICATE_TABLE },
-    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x4c, GENZ_TIK_TABLE },
 };
 
 struct genz_control_structure_ptr component_lpd_structure_ptrs[] = {
@@ -236,21 +241,21 @@ struct genz_control_structure_ptr component_lpd_structure_ptrs[] = {
 };
 
 struct genz_control_structure_ptr component_lpd_structure_array_ptrs[] = {
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x54, GENZ_GENERIC_STRUCTURE },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x54, GENZ_UNKNOWN_STRUCTURE },
 };
 
 struct genz_control_structure_ptr component_sod_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x14, GENZ_SSOD_TABLE },
-    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x18, GENZ_MSOD_TABLE },
+    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x14, GENZ_SSOD_MSOD_TABLE },
+    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x18, GENZ_SSOD_MSOD_TABLE },
 };
 
 struct genz_control_structure_ptr congestion_management_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x8, GENZ_VENDOR_DEFINED_STRUCTURE },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0xc, GENZ_RESOURCE_ARRAY_TABLE },
+    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0xc, GENZ_RESOURCE_TABLE },
 };
 
 struct genz_control_structure_ptr component_pm_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x8, GENZ_GENERIC_STRUCTURE },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x8, GENZ_UNKNOWN_STRUCTURE },
 };
 
 struct genz_control_structure_ptr component_re_table_structure_ptrs[] = {
@@ -260,23 +265,22 @@ struct genz_control_structure_ptr component_re_table_structure_ptrs[] = {
 
 struct genz_control_structure_ptr component_lph_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x4, GENZ_COMPONENT_LPH_STRUCTURE },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x54, GENZ_GENERIC_STRUCTURE },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x60, GENZ_GENERIC_STRUCTURE },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x54, GENZ_UNKNOWN_STRUCTURE },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x60, GENZ_UNKNOWN_STRUCTURE },
 };
 
 struct genz_control_structure_ptr component_page_grid_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x18, GENZ_PG_RESTRICTED_PG_TABLE },
+    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x18, GENZ_PAGE_GRID_RESTRICTED_PAGE_GRID_TABLE },
     { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x1c, GENZ_PTE_RESTRICTED_PTE_TABLE },
     { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x20, GENZ_VENDOR_DEFINED_WITH_UUID_STRUCTURE },
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x24, GENZ_COMPONENT_PAGE_GRID_STRUCTURE },
-    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x28, GENZ_PG_RESTRICTED_PG_TABLE },
+    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x28, GENZ_PAGE_GRID_RESTRICTED_PAGE_GRID_TABLE },
     { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x2c, GENZ_PTE_RESTRICTED_PTE_TABLE },
 };
 
 struct genz_control_structure_ptr component_page_table_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x4, GENZ_VENDOR_DEFINED_WITH_UUID_STRUCTURE },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x18, GENZ_GENERIC_STRUCTURE },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x1c, GENZ_GENERIC_STRUCTURE },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x10, GENZ_UNKNOWN_STRUCTURE },
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x34, GENZ_COMPONENT_PAGE_TABLE_STRUCTURE },
 };
 
@@ -290,33 +294,28 @@ struct genz_control_structure_ptr component_firmware_structure_ptrs[] = {
 };
 
 struct genz_control_structure_ptr component_sw_management_structure_ptrs[] = {
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x18, GENZ_GENERIC_STRUCTURE },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x18, GENZ_UNKNOWN_STRUCTURE },
 };
 
-struct genz_control_structure_ptr component_tr_table_array_ptrs[] = {
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x0, GENZ_GENERIC_STRUCTURE },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x4, GENZ_GENERIC_STRUCTURE },
-    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x8, GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE },
-    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0xc, GENZ_COMPONENT_PA_STRUCTURE },
-    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x10, GENZ_OPCODE_SET_STRUCTURE },
-};
-
-struct genz_control_structure_ptr c_cert_table_array_ptrs[] = {
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x0, GENZ_GENERIC_STRUCTURE },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x4, GENZ_GENERIC_STRUCTURE },
-};
-
-struct genz_control_structure_ptr opcode_set_table_ptrs[] = {
-    { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x4, GENZ_OPCODE_SET_TABLE },
+struct genz_control_structure_ptr backup_mgmt_table_ptrs[] = {
+    { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x68, GENZ_PM_BACKUP_TABLE },
+    { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x6c, GENZ_SM_BACKUP_TABLE },
 };
 
 struct genz_control_structure_ptr elog_table_ptrs[] = {
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x4, GENZ_ELOG_TABLE },
 };
 
-struct genz_control_structure_ptr backup_mgmt_table_ptrs[] = {
-    { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x68, GENZ_PM_BACKUP_TABLE },
-    { GENZ_CONTROL_POINTER_TABLE_WITH_HEADER, GENZ_4_BYTE_POINTER, 0x6c, GENZ_SM_BACKUP_TABLE },
+struct genz_control_structure_ptr opcode_set_table_ptrs[] = {
+    { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x4, GENZ_OPCODE_SET_TABLE },
+};
+
+struct genz_control_structure_ptr tr_table_array_ptrs[] = {
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x0, GENZ_UNKNOWN_STRUCTURE },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x4, GENZ_UNKNOWN_STRUCTURE },
+    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x8, GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE },
+    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0xc, GENZ_COMPONENT_PA_STRUCTURE },
+    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x10, GENZ_OPCODE_SET_STRUCTURE },
 };
 
 
@@ -334,7 +333,7 @@ struct genz_control_ptr_info genz_struct_type_to_ptrs[] = {
     {},
     {},
      { component_multicast_structure_ptrs, sizeof(component_multicast_structure_ptrs)/sizeof(component_multicast_structure_ptrs[0]), sizeof(struct genz_component_multicast_structure), false, 0x1, "component_multicast" },
-     { component_security_structure_ptrs, sizeof(component_security_structure_ptrs)/sizeof(component_security_structure_ptrs[0]), sizeof(struct genz_component_security_structure), false, 0x1, "component_security" },
+    {},
      { component_tr_structure_ptrs, sizeof(component_tr_structure_ptrs)/sizeof(component_tr_structure_ptrs[0]), sizeof(struct genz_component_tr_structure), false, 0x1, "component_tr" },
      { component_image_structure_ptrs, sizeof(component_image_structure_ptrs)/sizeof(component_image_structure_ptrs[0]), sizeof(struct genz_component_image_structure), true, 0x1, "component_image" },
      { component_precision_time_structure_ptrs, sizeof(component_precision_time_structure_ptrs)/sizeof(component_precision_time_structure_ptrs[0]), sizeof(struct genz_component_precision_time_structure), true, 0x1, "component_precision_time" },
@@ -362,28 +361,8 @@ struct genz_control_ptr_info genz_struct_type_to_ptrs[] = {
 };
 
 struct genz_control_ptr_info genz_table_type_to_ptrs[] = {
+     { backup_mgmt_table_ptrs, sizeof(backup_mgmt_table_ptrs)/sizeof(backup_mgmt_table_ptrs[0]), sizeof(struct genz_backup_mgmt_table), false, 0x0, "backup_mgmt_table_ptrs" },
     {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-    {},
-     { opcode_set_table_ptrs, sizeof(opcode_set_table_ptrs)/sizeof(opcode_set_table_ptrs[0]), sizeof(struct genz_opcode_set_table), true, 0x0, "opcode_set_table_ptrs" },
     {},
     {},
     {},
@@ -400,10 +379,26 @@ struct genz_control_ptr_info genz_table_type_to_ptrs[] = {
     {},
     {},
     {},
+     { opcode_set_table_ptrs, sizeof(opcode_set_table_ptrs)/sizeof(opcode_set_table_ptrs[0]), sizeof(struct genz_opcode_set_table), true, 0x0, "opcode_set_table_ptrs" },
     {},
     {},
     {},
-     { backup_mgmt_table_ptrs, sizeof(backup_mgmt_table_ptrs)/sizeof(backup_mgmt_table_ptrs[0]), sizeof(struct genz_backup_mgmt_table), false, 0x0, "backup_mgmt_table_ptrs" },
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
     {},
     {},
     {},
@@ -425,3 +420,9 @@ EXPORT_SYMBOL(genz_table_type_to_ptrs);
 size_t genz_table_type_to_ptrs_nelems = sizeof(genz_table_type_to_ptrs) / sizeof(genz_table_type_to_ptrs[0]);
 
 EXPORT_SYMBOL(genz_table_type_to_ptrs_nelems);
+
+EXPORT_SYMBOL(genz_hardware_classes);
+
+size_t genz_hardware_classes_nelems = sizeof(genz_hardware_classes) / sizeof(genz_hardware_classes[0]);
+
+EXPORT_SYMBOL(genz_hardware_classes_nelems);

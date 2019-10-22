@@ -134,7 +134,7 @@ struct genz_component {
 	struct list_head	control_zres_list; /* head of zres list */
 	struct list_head	data_zres_list;    /* head of zres list */
 	struct kref		kref;
-	int resource_count[HARDWARE_TYPES_MAX];
+	int resource_count[GENZ_NUM_HARDWARE_TYPES];
 };
 #define dev_to_genz_component(x) container_of(x, struct genz_component, dev)
 
@@ -183,22 +183,6 @@ static inline int genz_get_gcid(int sid, int cid)
 	return((sid<<12) | cid);
 }
 
-/*
- * Use these macros so that KBUILD_MODNAME and THIS_MODULE can be expanded
- */
-#define genz_register_driver(driver)             \
-        __genz_register_driver(driver, THIS_MODULE, KBUILD_MODNAME)
-#define genz_unregister_driver(driver)             \
-        __genz_unregister_driver(driver)
-
-/* 
- * Don't call these directly - use the macros. 
- */
-int __genz_register_driver(struct genz_driver *driver, struct module *, 
-				const char *mod_name);
-void __genz_unregister_driver(struct genz_driver *driver);
-
-
 extern struct device_type genz_bridge_type;
 
 static inline int is_genz_bridge_device(struct device *dev)
@@ -235,10 +219,9 @@ struct genz_control_info_attribute {
 };
 #define to_genz_control_info_attr(x) container_of(x, struct genz_control_info_attribute, attr)
 
-#define GENZ_NUM_PASIDS  BIT(16)
-#define NO_PASID         0
-
 #define arithcmp(_a, _b)        ((_a) < (_b) ? -1 : ((_a) > (_b) ? 1 : 0))
+#define ROUND_DOWN_PAGE(_addr, _sz) ((_addr) & -(_sz))
+#define ROUND_UP_PAGE(_addr, _sz)   (((_addr) + ((_sz) - 1)) & -(_sz))
 
 /* Global Variables */
 extern struct list_head genz_fabrics;
@@ -248,8 +231,6 @@ void genz_lock_rescan_remove(void);
 void genz_unlock_rescan_remove(void);
 void genz_pasid_init(void);
 void genz_pasid_exit(void);
-int genz_pasid_alloc(unsigned int *pasid);
-void genz_pasid_free(unsigned int pasid);
 uint genz_parse_page_grid_opt(char *str, uint64_t max_page_count,
 			      bool allow_cpu_visible,
 			      struct genz_page_grid pg[]);
@@ -258,4 +239,5 @@ int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
 			     struct genz_page_grid *grid);
 int genz_rsp_page_grid_alloc(struct genz_bridge_dev *br,
 			     struct genz_page_grid *grid);
+void genz_uuid_exit(void);
 #endif /* DRIVERS_GENZ_H */

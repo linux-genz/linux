@@ -113,6 +113,7 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 	uint32_t rw_rkey = -1U;
 	struct netlink_ext_ack extack;
 	struct genz_resource *zres;
+	char *name;
 
 	printk(KERN_INFO "\t\tMemory Region List:\n");
 	/* Go through the nested list of memory region structures */
@@ -148,28 +149,29 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 			zres->rw_rkey = rw_rkey;
 			if (mem_type == GENZ_CONTROL) {
 				zres->res.flags |= IORESOURCE_GENZ_CONTROL;
-				zres->res.name = kzalloc(GENZ_CONTROL_STR_LEN,
-							GFP_KERNEL);
-				if (zres->res.name == NULL) {
+				name = kzalloc(GENZ_CONTROL_STR_LEN,
+					       GFP_KERNEL);
+				if (name == NULL) {
 					printk(KERN_ERR "Failed to kmalloc res->name\n");
 				}
-				snprintf(zres->res.name, GENZ_CONTROL_STR_LEN,
+				snprintf(name, GENZ_CONTROL_STR_LEN,
 					"control%d",
 					zdev->resource_count[GENZ_CONTROL]++);
-	
+				zres->res.name = name;
 				list_add_tail(&zres->component_list,
 					&zdev->zcomp->control_zres_list);
 			}
 			else if (mem_type == GENZ_DATA) {
 				zres->res.flags &= ~IORESOURCE_GENZ_CONTROL;
-				zres->res.name = kzalloc(GENZ_DATA_STR_LEN,
-							GFP_KERNEL);
-				if (zres->res.name == NULL) {
+				name = kzalloc(GENZ_DATA_STR_LEN,
+					       GFP_KERNEL);
+				if (name == NULL) {
 					printk(KERN_ERR "Failed to kmalloc res->name\n");
 				}
-				snprintf(zres->res.name, GENZ_DATA_STR_LEN,
+				snprintf(name, GENZ_DATA_STR_LEN,
 					"data%d",
 					zdev->resource_count[GENZ_DATA]++);
+				zres->res.name = name;
 				list_add_tail(&zres->component_list,
 					&zdev->zcomp->data_zres_list);
 			}
@@ -253,7 +255,7 @@ static int parse_resource_list(const struct nlattr * resource_list,
 			zdev->class = nla_get_u16(u_attrs[GENZ_A_U_CLASS]);
 			printk(KERN_DEBUG "\t\tClass = %d\n",
 				(uint32_t) zdev->class);
-			if (zdev->class > HARDWARE_TYPES_MAX) {
+			if (zdev->class >= GENZ_NUM_HARDWARE_TYPES) {
 				printk(KERN_ERR "%s: hardware CLASS invalid %d\n", __FUNCTION__, zdev->class);
 				ret = -EINVAL;
 				goto error;
@@ -262,9 +264,9 @@ static int parse_resource_list(const struct nlattr * resource_list,
 			 * The class is used as the device name along with 
 			 * the count of that type of class. e.g. "memory0"
 			 */
-			condensed_class = hardware_classes[zdev->class].value;
+			condensed_class = genz_hardware_classes[zdev->class].value;
 			dev_set_name(&zdev->dev, "%s%d",
-				hardware_classes[zdev->class].condensed_name,
+				genz_hardware_classes[zdev->class].condensed_name,
 				zdev->zcomp->resource_count[condensed_class]++);
 		} else {
 			printk(KERN_ERR "%s: missing required CLASS\n", __FUNCTION__);

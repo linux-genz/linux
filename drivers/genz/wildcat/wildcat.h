@@ -41,6 +41,9 @@
 #include <linux/bitmap.h>
 #include <linux/spinlock.h>
 #include <linux/interrupt.h>
+#include <linux/if_ether.h>
+
+#include "wildcat-uapi.h"
 
 #define SLICES                        4
 #define VECTORS_PER_SLICE             32
@@ -86,7 +89,7 @@ struct xdm_qcm_header {
 	uint64_t rv18             : 32;
 };
 
-struct xdm_qcm {
+struct wildcat_xdm_qcm {
 	struct xdm_qcm_header     hdr;
 	uint64_t rv19[8159];
 };
@@ -116,7 +119,7 @@ struct rdm_qcm_header {
 	uint64_t rv11             : 44;
 };
 
-struct rdm_qcm {
+struct wildcat_rdm_qcm {
 	struct rdm_qcm_header     hdr;
 	uint64_t rv12[8167];
 };
@@ -177,22 +180,16 @@ struct big_hammer_containment {
 	uint64_t rv1[3];              /* bytes 8 - 31 */
 } __attribute__ ((aligned (32)));
 
-#define GB(_x)            ((_x)*BIT_ULL(30))
-#define TB(_x)            ((_x)*BIT_ULL(40))
-
-#define WILDCAT_MIN_CPUVISIBLE_ADDR  (GB(4)+TB(1))
-#define WILDCAT_MAX_CPUVISIBLE_ADDR  (GENZ_MIN_CPUVISIBLE_ADDR+TB(250)-1ull)
-
-#define REQ_ZMMU_ENTRIES             (1024)
-#define RSP_ZMMU_ENTRIES             (1024)
+#define WILDCAT_REQ_ZMMU_ENTRIES     (1024)
+#define WILDCAT_RSP_ZMMU_ENTRIES     (1024)
 #define MAX_REQ_ZMMU_ENTRIES         (128*1024)
 #define MAX_RSP_ZMMU_ENTRIES         (64*1024)
-#define DUMMY_REQ_ZMMU_ENTRIES       (MAX_REQ_ZMMU_ENTRIES - REQ_ZMMU_ENTRIES)
-#define DUMMY_RSP_ZMMU_ENTRIES       (MAX_RSP_ZMMU_ENTRIES - RSP_ZMMU_ENTRIES)
+#define DUMMY_REQ_ZMMU_ENTRIES       (MAX_REQ_ZMMU_ENTRIES - WILDCAT_REQ_ZMMU_ENTRIES)
+#define DUMMY_RSP_ZMMU_ENTRIES       (MAX_RSP_ZMMU_ENTRIES - WILDCAT_RSP_ZMMU_ENTRIES)
 #define CONTAINMENT_COUNTER_ALIASES  (128*1024)
 #define WILDCAT_PAGE_GRID_ENTRIES    (16)
 
-#define REQ_PTE_SZ   (REQ_ZMMU_ENTRIES*sizeof(struct wildcat_req_pte))
+#define REQ_PTE_SZ   (WILDCAT_REQ_ZMMU_ENTRIES*sizeof(struct wildcat_req_pte))
 #define PAGE_GRID_SZ (WILDCAT_PAGE_GRID_ENTRIES * \
 		      sizeof(struct wildcat_page_grid))
 #define REQ_RV0_SZ       (DUMMY_REQ_ZMMU_ENTRIES*sizeof(struct wildcat_req_pte))
@@ -205,8 +202,8 @@ struct big_hammer_containment {
 #define WILDCAT_PAGE_GRID_MAX_PAGESIZE       48
 
 struct wildcat_req_zmmu {
-	struct wildcat_req_pte        pte[REQ_ZMMU_ENTRIES];
-#if REQ_ZMMU_ENTRIES < MAX_REQ_ZMMU_ENTRIES
+	struct wildcat_req_pte        pte[WILDCAT_REQ_ZMMU_ENTRIES];
+#if WILDCAT_REQ_ZMMU_ENTRIES < MAX_REQ_ZMMU_ENTRIES
 	uint8_t                       rv0[REQ_RV0_SZ];
 #endif
 	struct wildcat_page_grid      page_grid[WILDCAT_PAGE_GRID_ENTRIES];
@@ -222,8 +219,8 @@ struct wildcat_req_zmmu {
 #define RSP_RV2_SZ       (0x2000000 - 0x400000 - PAGE_GRID_SZ)
 
 struct wildcat_rsp_zmmu {
-	struct wildcat_rsp_pte        pte[RSP_ZMMU_ENTRIES];
-#if RSP_ZMMU_ENTRIES < MAX_RSP_ZMMU_ENTRIES
+	struct wildcat_rsp_pte        pte[WILDCAT_RSP_ZMMU_ENTRIES];
+#if WILDCAT_RSP_ZMMU_ENTRIES < MAX_RSP_ZMMU_ENTRIES
 	uint8_t                       rv0[RSP_RV0_SZ];
 #endif
 	uint8_t                       rv1[RSP_RV1_SZ];
@@ -244,29 +241,45 @@ struct rdm_vector_list {
 	void             *data;
 };
 
+struct func1_bar0 {
+	struct wildcat_req_zmmu req_zmmu;
+	struct wildcat_rsp_zmmu rsp_zmmu;
+	struct wildcat_xdm_qcm  xdm[512];
+	struct wildcat_rdm_qcm  rdm[512];
+};
+
+#define GB(_x)            ((_x)*BIT_ULL(30))
+#define TB(_x)            ((_x)*BIT_ULL(40))
+
+#define WILDCAT_MIN_CPUVISIBLE_ADDR  (GB(4)+TB(1))
+#define WILDCAT_MAX_CPUVISIBLE_ADDR  (WILDCAT_MIN_CPUVISIBLE_ADDR+TB(250)-1ull)
+
 struct slice {
 	struct func1_bar0   *bar;        /* kernel mapping of BAR */
 	phys_addr_t         phys_base;   /* physical address of BAR */
 	spinlock_t          zmmu_lock;   /* per-slice zmmu lock */
 	bool                valid;       /* slice is fully initialized */
 	unsigned int        id;          /* zero based, unique slice id */
-	struct pci_dev	*pdev;
+	struct pci_dev	    *pdev;
 	/* Revisit: add s_link boolean */
-	spinlock_t           xdm_slice_lock; /* locks alloc_count, alloced_bitmap */
-	int                  xdm_alloc_count;
+	spinlock_t          xdm_slice_lock; /* locks alloc_count, alloced_bitmap */
+	int                 xdm_alloc_count;
 	DECLARE_BITMAP(xdm_alloced_bitmap, XDM_QUEUES_PER_SLICE);
-	spinlock_t           rdm_slice_lock; /* locks alloc_count, alloced_bitmap */
-	int                  rdm_alloc_count;
+	spinlock_t          rdm_slice_lock; /* locks alloc_count, alloced_bitmap */
+	int                 rdm_alloc_count;
 	DECLARE_BITMAP(rdm_alloced_bitmap, RDM_QUEUES_PER_SLICE);
-	uint16_t             irq_vectors_count; /* number of interrupt vectors */
-	struct list_head     irq_vectors[VECTORS_PER_SLICE]; /* per vector list
-								of queues sharing
-								a vector */
+	uint16_t            irq_vectors_count; /* number of interrupt vectors */
+	struct list_head    irq_vectors[VECTORS_PER_SLICE]; /* per vector list
+							       of queues sharing
+							       a vector */
 };
 
+struct bridge;  /* tentative declaration */
 #define SLICE_VALID(s) ((s)->valid) /* bool SLICE_VALID(struct slice *s) */
+/* struct bridge *BRIDGE_FROM_SLICE(struct slice *s) */
+#define BRIDGE_FROM_SLICE(s) ((struct bridge *)(((void *)((s) - (s)->id)) - \
+                                                offsetof(struct bridge, slice)))
 
-struct bridge;  /* tentative declarations */
 struct queue_zpage {  /* also used for LOCAL_SHARED_PAGE/GLOBAL_SHARED_PAGE */
 	int		page_type;
 	size_t		size;	/* in bytes */
@@ -291,7 +304,7 @@ struct dma_zpage {
 struct rmr_zpage {
 	int		page_type;
 	size_t		size;	/* in bytes */
-	struct zhpe_rmr *rmr;
+	struct genz_rmr *rmr;
 };
 
 struct hdr_zpage {
@@ -314,7 +327,7 @@ struct xdm_info {
 	bool           cur_valid;
 	size_t         cmdq_size, cmplq_size, qcm_size;
 	struct slice   *sl;
-	struct xdm_qcm *hw_qcm_addr;
+	struct wildcat_xdm_qcm *hw_qcm_addr;
 	union zpages   *cmdq_zpage, *cmplq_zpage;
 	int            slice, queue;
 	uint           cmdq_tail_shadow, cmdq_head_shadow; /* shadow of HW reg */
@@ -331,7 +344,7 @@ struct rdm_info {
 	bool           cur_valid;
 	size_t         cmplq_size, qcm_size;
 	struct slice   *sl;
-	struct rdm_qcm *hw_qcm_addr;
+	struct wildcat_rdm_qcm *hw_qcm_addr;
 	union zpages   *cmplq_zpage;
 	int            slice, queue, vector;
 	uint32_t       rspctxid;
@@ -349,14 +362,15 @@ struct bridge {
 	struct page_grid_info   req_zmmu_pg;
 	struct page_grid_info   rsp_zmmu_pg;
 	struct zhpe_core_info   core_info;
-	spinlock_t              fdata_lock;  /* protects fdata_list */
-	struct list_head        fdata_list;
 #endif
 	struct workqueue_struct *wildcat_msg_workq;
 	wait_queue_head_t       wildcat_poll_wq[MAX_IRQ_VECTORS];
 };
 
-struct mem_data;
+enum {
+	UUID_IS_FAM  = 0x1,
+	UUID_IS_ENIC = 0x2,
+};
 
 enum {
 	HELPER_STATE_OPEN      = 0,
@@ -377,14 +391,7 @@ struct helper_state {
 	int (*func)(uint cur_state, union wildcat_op *op, uint *next_state);
 };
 
-#define do_kmalloc(...) \
-    _do_kmalloc(__func__, __LINE__, __VA_ARGS__)
-void *_do_kmalloc(const char *callf, uint line,
-                         size_t size, gfp_t flags, bool zero);
-#define do_kfree(...) \
-    _do_kfree(__func__, __LINE__, __VA_ARGS__)
-void _do_kfree(const char *callf, uint line, void *ptr);
-
+/* Revisit: convert to standard page-allocation API */
 #define do_free_pages(...) \
     _do_free_pages(__func__, __LINE__, __VA_ARGS__)
 void _do_free_pages(const char *callf, uint line, void *ptr, int order);
@@ -400,9 +407,9 @@ void *_do__get_free_pages(const char *callf, uint line,
 #define do__get_free_page(_flags, _zero)                        \
     _do__get_free_pages(__func__, __LINE__, 0, (_flags), (_zero))
 
-void _zpages_free(const char *callf, uint line, union zpages *zpages);
-#define zpages_free(...) \
-    _zpages_free(__func__, __LINE__, __VA_ARGS__)
+void _wildcat_zpages_free(const char *callf, uint line, union zpages *zpages);
+#define wildcat_zpages_free(...) \
+    _wildcat_zpages_free(__func__, __LINE__, __VA_ARGS__)
 
 enum {
 	QUEUE_PAGE =           1,
@@ -423,24 +430,84 @@ union zpages *_dma_zpages_alloc(const char *callf, uint line,
 #define dma_zpages_alloc(...) \
     _dma_zpages_alloc(__func__, __LINE__, __VA_ARGS__)
 
-union zpages *_hsr_zpage_alloc(const char *callf, uint line,
+union zpages *_wildcat_hsr_zpage_alloc(const char *callf, uint line,
                                phys_addr_t base_addr);
-#define hsr_zpage_alloc(...) \
-    _hsr_zpage_alloc(__func__, __LINE__, __VA_ARGS__)
+#define wildcat_hsr_zpage_alloc(...) \
+    _wildcat_hsr_zpage_alloc(__func__, __LINE__, __VA_ARGS__)
 
-union zpages *_rmr_zpages_alloc(const char *callf, uint line,
-                                struct zhpe_rmr *rmr);
-#define rmr_zpages_alloc(...) \
-    _rmr_zpages_alloc(__func__, __LINE__, __VA_ARGS__)
+union zpages *_wildcat_rmr_zpages_alloc(const char *callf, uint line,
+                                struct genz_rmr *rmr);
+#define wildcat_rmr_zpages_alloc(...) \
+    _wildcat_rmr_zpages_alloc(__func__, __LINE__, __VA_ARGS__)
+
+struct enic_info {        /* must be <= 44 bytes - currently 42 */
+	uuid_t                uuid;              /* 16 */
+	uint32_t              flags;             /*  4 */
+	uint32_t              credits;           /*  4 */
+	uint32_t              rsp_ctxid;         /*  4 */
+	uint32_t              req_ctxid;         /*  4 */
+	uint32_t              max_msg_sz;        /*  4 */
+	u8                    macaddr[ETH_ALEN]; /*  6 */
+};
+
+struct enic_mrreg {       /* must be <= 44 bytes - currently 38 */
+	uuid_t                uuid;              /* 16 */
+	uint64_t              rsp_zaddr;         /*  8 */
+	uint32_t              size;              /*  4 - just big enough */
+	uint32_t              ro_rkey;           /*  4 */
+	u8                    macaddr[ETH_ALEN]; /*  6 */
+};
+
+struct enic {
+	struct xdm_info       xdmi;
+	struct rdm_info       req_rdmi;
+	struct rdm_info       rsp_rdmi;
+	struct zhpe_driver    *drv;
+	struct enic_info      src_info;
+	struct genz_mem_data  md;
+};
+
+/* Revisit: need platform-independent mechanism */
+#ifndef ioread64
+#ifdef readq
+#define ioread64 readq
+#else
+#error Platform has no useable ioread64
+#endif
+#endif
+
+#ifndef iowrite64
+#ifdef writeq
+#define iowrite64 writeq
+#else
+#error Platform has no useable iowrite64
+#endif
+#endif
 
 /* Revisit: these should go away */
 extern uint wildcat_debug_flags;
 extern uint wildcat_kmsg_timeout;
 
+extern uint wildcat_no_rkeys;
+extern uint wildcat_loopback;
+extern const char wildcat_driver_name[];
+
 extern struct bridge wildcat_bridge;
-extern void wildcat_init_mem_data(struct mem_data *mdata, struct bridge *br);
-extern struct file_data *wildcat_pid_to_fdata(struct bridge *br, pid_t pid);
-extern union zpages *shared_zpage_alloc(size_t size, int type);
-void queue_zpages_free(union zpages *zpages);
+extern union zpages *wildcat_shared_zpage_alloc(size_t size, int type);
+void wildcat_queue_zpages_free(union zpages *zpages);
+struct slice *wildcat_slice_id_to_slice(struct bridge *bridge, int slice);
+int wildcat_bind_iommu(struct genz_bridge_dev *gzbr,
+		       spinlock_t *io_lock, uint pasid);
+void wildcat_unbind_iommu(struct genz_bridge_dev *gzbr,
+			  spinlock_t *io_lock, uint pasid);
+
+#define arithcmp(_a, _b)        ((_a) < (_b) ? -1 : ((_a) > (_b) ? 1 : 0))
+
+#include "wildcat-zmmu.h"
+#include "wildcat-queue.h"
+#include "wildcat-intr.h"
+#include "wildcat-memreg.h"
+#include "wildcat-msg.h"
+#include "wildcat-uuid.h"
 
 #endif /* _WILDCAT_H_ */

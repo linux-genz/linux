@@ -240,8 +240,9 @@ void __genz_unregister_driver(struct genz_driver *driver)
 EXPORT_SYMBOL(__genz_unregister_driver);
 
 static int initialize_zbdev(struct genz_bridge_dev *zbdev,
-			struct device *dev,
-			struct genz_bridge_driver *zbdrv)
+			    struct device *dev,
+			    struct genz_bridge_driver *zbdrv,
+			    void *driver_data)
 {
 	struct genz_component *zcomp;
 
@@ -254,6 +255,7 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	zbdev->zbdrv = zbdrv;
 	zbdev->zdev.zdrv = &zbdrv->zdrv;
 	zbdev->zdev.zbdev = zbdev;
+	dev_set_drvdata(&zbdev->zdev.dev, driver_data);
 
 	/* Revisit: How do we get the bridge's fabric number here? */
 	zbdev->fabric = genz_find_fabric(0);
@@ -271,17 +273,20 @@ static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br);
  * genz_register_bridge - register a new Gen-Z bridge driver
  * @struct device *dev: the device structure to register
  * @struct genz_driver *driver: the Gen-Z driver structure to register
+ * @void *driver_data: pointer to private driver data
  *
  * A driver calls genz_register_bridge() during probe of a device that
  * is a bridge component. This marks the bridge component as a bridge
  * so that a fabric manager can discover it through sysfs files named
  * 'bridgeN'. Typically a bridge device driver is a PCI device (for example)
- * and the driver is both a PCI driver and a Gen-Z driver. 
+ * and the driver is both a PCI driver and a Gen-Z driver. The driver_data
+ * will be installed into the genz_bridge_dev before any callbacks are called.
  *
  * Return:
  * Returns 0 on success. Returns a negative value on error.
  */
-int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv)
+int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv,
+			 void *driver_data)
 {
 	int ret = 0;
 	struct genz_bridge_dev *zbdev;
@@ -293,7 +298,7 @@ int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv)
 		return -ENOMEM;
 
 	/* Initialize the genz_bridge_dev */
-	ret = initialize_zbdev(zbdev, dev, zbdrv);
+	ret = initialize_zbdev(zbdev, dev, zbdrv, driver_data);
 	if (ret < 0) {
 		kfree (zbdev);
 		return ret;
@@ -312,10 +317,10 @@ EXPORT_SYMBOL(genz_register_bridge);
 
 /**
  * genz_unregister_bridge - unregister a Gen-Z bridge driver
- * @struct genz_driver *driver: the Gen-Z driver structure to register
+ * @struct device *dev: the native device originally passed to genz_register_bridge
  *
  * A driver calls genz_unregister_bridge() to unregister a bridge
- * driver with the Gen-Z sub-system. Typically a bridge device driver
+ * device with the Gen-Z sub-system. Typically a bridge device driver
  * is a PCI device (for example) and the driver is both a PCI driver and
  * a Gen-Z driver. The driver must call the appropriate native bus "unregister"
  * function after calling genz_unregister_bridge(), e.g.
@@ -324,7 +329,7 @@ EXPORT_SYMBOL(genz_register_bridge);
  * Return:
  * Returns 0 on success. Returns a negative value on error.
  */
-int genz_unregister_bridge(struct genz_driver *driver)
+int genz_unregister_bridge(struct device *dev)
 {
 	int ret = 0;
 
@@ -352,9 +357,12 @@ static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br)
 {
 	uint pg;
 	int pg_index, err = 0;
+	bool cleared = false;
 
 	if (br->br_info.req_zmmu) {
 		if (br->br_info.nr_req_page_grids) {
+			genz_zmmu_clear_all(br, false);
+			cleared = true;
 			for (pg = 0; pg < req_pg_cnt; pg++) {
 				pg_index = genz_req_page_grid_alloc(
 					br, &req_parse_pg[pg]);
@@ -366,6 +374,9 @@ static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br)
 
 	if (br->br_info.rsp_zmmu) {
 		if (br->br_info.nr_rsp_page_grids) {
+			if (!cleared) {
+				genz_zmmu_clear_all(br, false);
+			}
 			for (pg = 0; pg < rsp_pg_cnt; pg++) {
 				pg_index = genz_rsp_page_grid_alloc(
 					br, &rsp_parse_pg[pg]);
@@ -378,17 +389,25 @@ static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br)
 	return err;
 }
 
+static int genz_bridge_zmmu_clear(struct genz_bridge_dev *br)
+{
+	if ((br->br_info.req_zmmu && br->br_info.nr_req_page_grids) ||
+	    (br->br_info.rsp_zmmu && br->br_info.nr_rsp_page_grids))
+		genz_zmmu_clear_all(br, true);
+	/* Revisit: finish this */
+}
+
 static void force_dev_cleanup(void)
 {
 	struct genz_fabric *f, *f_tmp;
 
 	/* go through each fabric */
         list_for_each_entry_safe(f, f_tmp, &genz_fabrics, node) {
+#ifdef NOT_YET
 		struct genz_dev *zdev, *zdev_tmp;
 		struct genz_component *zcomp, *zcomp_tmp;
 		struct genz_subnet *zsub, *zsub_tmp;
 
-#ifdef NOT_YET
 		/* remove each genz_dev */
         	list_for_each_entry_safe(zdev, zdev_tmp, &f->devices,
 				fab_dev_node) {
@@ -431,6 +450,8 @@ static int __init genz_init(void)
 	}
 
 	genz_parse_page_grids();
+	genz_pasid_init();
+	genz_rkey_init();
 
 	return ret;
 error_nl:
@@ -445,6 +466,9 @@ static void __exit genz_exit(void)
 	force_dev_cleanup();
 	bus_unregister(&genz_bus_type);
 	genz_nl_exit();
+	genz_rkey_exit();
+	genz_pasid_exit();
+	genz_uuid_exit();
 }
 
 module_exit(genz_exit);

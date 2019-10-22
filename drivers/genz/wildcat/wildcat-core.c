@@ -93,13 +93,9 @@ static void wildcat_exit(void);
 module_init(wildcat_init);
 module_exit(wildcat_exit);
 
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("GPL v2");
 
 struct bridge    wildcat_bridge = { 0 };
-
-uint no_iommu = 0;
-module_param(no_iommu, uint, S_IRUGO);
-MODULE_PARM_DESC(no_iommu, "System does not have an IOMMU (default=0)");
 
 #define TRACKER_MAX     (256)
 
@@ -110,9 +106,10 @@ uint genz_gcid = 0x0000001;  /* Revisit Carbon: carbon node 1 */
 module_param(genz_gcid, uint, S_IRUGO);
 MODULE_PARM_DESC(genz_gcid, "Gen-Z bridge global CID");
 
-uint genz_loopback = 1;
-module_param(genz_loopback, uint, S_IRUGO);
-MODULE_PARM_DESC(genz_loopback, "Gen-Z loopback mode (default=1)");
+uint wildcat_loopback = 1;
+module_param(wildcat_loopback, uint, S_IRUGO);
+MODULE_PARM_DESC(wildcat_loopback, "Wildcat Gen-Z loopback mode (default=1)");
+EXPORT_SYMBOL(wildcat_loopback); /* Revist: should not export */
 
 static char *helper_path = "/sbin/wildcat_helper";
 module_param(helper_path, charp, 0444);
@@ -120,26 +117,13 @@ MODULE_PARM_DESC(helper_path, "path-to-helper");
 
 static DECLARE_WAIT_QUEUE_HEAD(helper_wq);
 static uint             helper_state = HELPER_STATE_INIT;
-static uint32_t         helper_req_len;
-static union wildcat_op helper_op;
 static pid_t            helper_pid;
+#ifdef OLD_ZHPE
+static uint32_t         helper_req_len;
 static struct file_data *helper_fdata = NULL;
+#endif
 
-static bool _expected_saw(const char *callf, uint line,
-                          const char *label, uintptr_t expected, uintptr_t saw)
-{
-	if (expected == saw)
-		return true;
-
-	pr_err("%s,%u:%s:%s:expected 0x%lx saw 0x%lx\n",
-	       callf, line, __func__, label, expected, saw);
-
-	return false;
-}
-
-#define expected_saw(...) \
-    _expected_saw(__func__, __LINE__, __VA_ARGS__)
-
+/* Revisit: convert to standard kernel memory allocation API */
 void _do_kfree(const char *callf, uint line, void *ptr)
 {
 	size_t              size;
@@ -220,7 +204,7 @@ void *_do__get_free_pages(const char *callf, uint line,
 	return ret;
 }
 
-void queue_zpages_free(union zpages *zpages)
+void wildcat_queue_zpages_free(union zpages *zpages)
 {
 	size_t              npages;
 	size_t              i;
@@ -238,8 +222,9 @@ void queue_zpages_free(union zpages *zpages)
 		do_free_pages(zpages->queue.pages[i], 0);
 	}
 }
+EXPORT_SYMBOL(wildcat_queue_zpages_free);
 
-void _zpages_free(const char *callf, uint line, union zpages *zpages)
+void _wildcat_zpages_free(const char *callf, uint line, union zpages *zpages)
 {
 	if (!zpages)
 		return;
@@ -250,7 +235,7 @@ void _zpages_free(const char *callf, uint line, union zpages *zpages)
 	switch (zpages->hdr.page_type) {
 	case QUEUE_PAGE:
 	case LOCAL_SHARED_PAGE:
-		queue_zpages_free(zpages);
+		wildcat_queue_zpages_free(zpages);
 		break;
 	case GLOBAL_SHARED_PAGE:
 	case HSR_PAGE:
@@ -263,17 +248,18 @@ void _zpages_free(const char *callf, uint line, union zpages *zpages)
 		break;
 	}
 
-	do_kfree(zpages);
+	kfree(zpages);
 }
+EXPORT_SYMBOL(_wildcat_zpages_free);
 
 /*
- * hsr_zpages_alloc - allocate a zpages structure for a single page of
+ * wildcat_hsr_zpage_alloc - allocate a zpages structure for a single page of
  * HSR registers. This is used to map the QCM application data for queues.
  * The space for the HSRs is already allocated and mapped by the pci probe
  * function.
  * 	base_addr - pointer to the start of the QCM app first 64 bytes
  */
-union zpages *_hsr_zpage_alloc(
+union zpages *_wildcat_hsr_zpage_alloc(
 	const char  *callf,
 	uint        line,
 	phys_addr_t base_addr)
@@ -283,7 +269,7 @@ union zpages *_hsr_zpage_alloc(
 	pr_debug("page_type HSR_PAGE\n");
 
 	/* kmalloc space for the return and an array of pages in the zpage struct */
-	ret = do_kmalloc(sizeof(*ret), GFP_KERNEL, true);
+	ret = kzalloc(sizeof(*ret), GFP_KERNEL);
 	if (!ret)
 		goto done;
 
@@ -295,6 +281,7 @@ done:
 	pr_debug("ret 0x%px\n", ret);
 	return ret;
 }
+EXPORT_SYMBOL(_wildcat_hsr_zpage_alloc);
 
 /*
  * dma_zpages_alloc - allocate a zpages structure that can be used for the
@@ -318,7 +305,7 @@ union zpages *_dma_zpages_alloc(
 	npages = 1UL << order;
 
 	/* kmalloc space for the return structure. */
-	ret = do_kmalloc(sizeof(*ret), GFP_KERNEL, true);
+	ret = kzalloc(sizeof(*ret), GFP_KERNEL);
 	if (!ret)
 		goto done;
 
@@ -332,7 +319,7 @@ union zpages *_dma_zpages_alloc(
 	ret->dma.size = size;
 	ret->dma.dev = &sl->pdev->dev;
 	if (!ret->dma.cpu_addr) {
-		do_kfree(ret);
+		kfree(ret);
 		ret = NULL;
 	}
 
@@ -342,11 +329,11 @@ done:
 }
 
 /*
- * shared_zpage_alloc - allocate a single page for the shared data. It is
- * allocated at init and only free'ed at exit.
+ * wildcat_shared_zpage_alloc - allocate a single page for the shared data.
+ * It is allocated at init and only free'ed at exit.
  */
 
-union zpages *shared_zpage_alloc(size_t size, int type)
+union zpages *wildcat_shared_zpage_alloc(size_t size, int type)
 {
 	union zpages       *ret = NULL;
 
@@ -358,6 +345,7 @@ union zpages *shared_zpage_alloc(size_t size, int type)
 	ret->queue.page_type = type;
 	return ret;
 }
+EXPORT_SYMBOL(wildcat_shared_zpage_alloc);
 
 /*
  * queue_zpages_alloc - allocate a zpages structure that can be used for
@@ -385,8 +373,8 @@ union zpages *_queue_zpages_alloc(
 	}
 
 	/* kmalloc space for the return and an array of pages in the zpage struct */
-	ret = do_kmalloc(sizeof(*ret) + npages * sizeof(ret->queue.pages[0]),
-			 GFP_KERNEL, true);
+	ret = kzalloc(sizeof(*ret) + npages * sizeof(ret->queue.pages[0]),
+			 GFP_KERNEL);
 	if (!ret || !npages)
 		goto done;
 
@@ -416,7 +404,7 @@ union zpages *_queue_zpages_alloc(
 	if (!ret->queue.pages[i-1]) {
 		for (i = 0; i < npages; i++)
 			do_free_pages(ret->queue.pages[i], 0);
-		do_kfree(ret);
+		kfree(ret);
 		ret = NULL;
 	}
 
@@ -426,19 +414,20 @@ done:
 }
 
 /*
- * rmr_zpages_alloc - allocate a zpages structure for a cpu-visible RMR_IMPORT.
+ * wildcat_rmr_zpages_alloc - allocate a zpages structure for a
+ * cpu-visible RMR_IMPORT.
  * This is used to map the requester ZMMU PTE.
  * 	rmr - pointer to the corresponding rmr structure
  */
-union zpages *_rmr_zpages_alloc(const char *callf, uint line,
-                                struct zhpe_rmr *rmr)
+union zpages *_wildcat_rmr_zpages_alloc(const char *callf, uint line,
+					struct genz_rmr *rmr)
 {
 	union zpages       *ret = NULL;
 
 	pr_debug("page_type RMR_PAGE\n");
 
 	/* kmalloc space for the return struct */
-	ret = do_kmalloc(sizeof(*ret), GFP_KERNEL, true);
+	ret = kzalloc(sizeof(*ret), GFP_KERNEL);
 	if (!ret)
 		goto done;
 
@@ -450,8 +439,10 @@ done:
 	pr_debug("ret 0x%px\n", ret);
 	return ret;
 }
+EXPORT_SYMBOL(_wildcat_rmr_zpages_alloc);
 
 #ifdef OLD_ZHPE
+/* Revisit: convert to netlink interface */
 static int zhpe_user_req_HELPER_WAIT(struct io_entry *entry)
 {
     int                 ret = 0;
@@ -519,46 +510,49 @@ static int iommu_invalid_ppr_cb(struct pci_dev *pdev, int pasid,
     return AMD_IOMMU_INV_PRI_RSP_INVALID;
 }
 
-static int zhpe_bind_iommu(struct file_data *fdata)
+int wildcat_bind_iommu(struct genz_bridge_dev *gzbr,
+		       spinlock_t *io_lock, uint pasid)
 {
-    int s, ret = 0;
-    struct pci_dev *pdev;
+	int s, ret = 0;
+	struct pci_dev *pdev;
+	struct bridge  *br = wildcat_gzbr_to_br(gzbr);
 
-    if (!no_iommu) {
-        spin_lock(&fdata->io_lock);
-        for (s=0; s<SLICES; s++) {
-            if (!SLICE_VALID(&(fdata->md.bridge->slice[s])))
-                continue;
-            pdev = fdata->md.bridge->slice[s].pdev;
-            ret = amd_iommu_bind_pasid(pdev, fdata->pasid, current);
-            if (ret < 0) {
-                pr_debug("amd_iommu_bind_pasid failed for slice %d with return %d\n", s, ret);
-            }
-            amd_iommu_set_invalid_ppr_cb(pdev, iommu_invalid_ppr_cb);
-        }
-        spin_unlock(&fdata->io_lock);
-    }
-    return (ret);
-}
-
-static void zhpe_unbind_iommu(struct file_data *fdata)
-{
-    int s;
-    struct pci_dev *pdev;
-
-    spin_lock(&fdata->io_lock);
-    if (!no_iommu) {
+	spin_lock(io_lock);
 	for (s=0; s<SLICES; s++) {
-            if (!SLICE_VALID(&(fdata->md.bridge->slice[s])))
-                continue;
-            pdev = fdata->md.bridge->slice[s].pdev;
-            amd_iommu_unbind_pasid(pdev, fdata->pasid);
+		if (!SLICE_VALID(&(br->slice[s])))
+			continue;
+		pdev = br->slice[s].pdev;
+		ret = amd_iommu_bind_pasid(pdev, pasid, current);
+		if (ret < 0) {
+			pr_debug("amd_iommu_bind_pasid failed for slice %d with return %d\n",
+				 s, ret);
+		}
+		amd_iommu_set_invalid_ppr_cb(pdev, iommu_invalid_ppr_cb);
+	}
+	spin_unlock(io_lock);
+	return ret;
+}
+EXPORT_SYMBOL(wildcat_bind_iommu);
+
+void wildcat_unbind_iommu(struct genz_bridge_dev *gzbr,
+			  spinlock_t *io_lock, uint pasid)
+{
+	int s;
+	struct pci_dev *pdev;
+	struct bridge  *br = wildcat_gzbr_to_br(gzbr);
+
+    spin_lock(io_lock);
+    for (s=0; s<SLICES; s++) {
+            if (!SLICE_VALID(&(br->slice[s])))
+		    continue;
+            pdev = br->slice[s].pdev;
+            amd_iommu_unbind_pasid(pdev, pasid);
             amd_iommu_set_invalid_ppr_cb(pdev, NULL);
-        }
     }
-    spin_unlock(&fdata->io_lock);
+    spin_unlock(io_lock);
     return;
 }
+EXPORT_SYMBOL(wildcat_unbind_iommu);
 
 #ifdef OLD_ZHPE
 static int zhpe_helper_cmd(union zhpe_req *req, uint32_t req_len,
@@ -597,25 +591,25 @@ static int zhpe_helper_cmd(union zhpe_req *req, uint32_t req_len,
  * it, but it's not, so we do it ourselves here.
  */
 
-#define vma_set_page_prot zhpe_vma_set_page_prot
-#define vm_pgprot_modify zhpe_pgprot_modify
-#define vma_wants_writenotify zhpe_vma_wants_writenotify
+#define vma_set_page_prot wildcat_vma_set_page_prot
+#define vm_pgprot_modify wildcat_pgprot_modify
+#define vma_wants_writenotify wildcat_vma_wants_writenotify
 
 /* Revisit: copy actual vma_wants_writenotify? */
-static inline int zhpe_vma_wants_writenotify(struct vm_area_struct *vma,
+static inline int wildcat_vma_wants_writenotify(struct vm_area_struct *vma,
                                              pgprot_t vm_page_prot)
 {
     return 0;
 }
 
 /* identical to vm_pgprot_modify, except for function name */
-static pgprot_t zhpe_pgprot_modify(pgprot_t oldprot, unsigned long vm_flags)
+static pgprot_t wildcat_pgprot_modify(pgprot_t oldprot, unsigned long vm_flags)
 {
         return pgprot_modify(oldprot, vm_get_page_prot(vm_flags));
 }
 
 /* identical to vma_set_page_prot, except for function name */
-void zhpe_vma_set_page_prot(struct vm_area_struct *vma)
+void wildcat_vma_set_page_prot(struct vm_area_struct *vma)
 {
         unsigned long vm_flags = vma->vm_flags;
         pgprot_t vm_page_prot;
@@ -628,44 +622,20 @@ void zhpe_vma_set_page_prot(struct vm_area_struct *vma)
         /* remove_protection_ptes reads vma->vm_page_prot without mmap_sem */
         WRITE_ONCE(vma->vm_page_prot, vm_page_prot);
 }
+EXPORT_SYMBOL(wildcat_vma_set_page_prot);
 
-struct file_data *wildcat_pid_to_fdata(struct bridge *br, pid_t pid)
+struct slice *wildcat_slice_id_to_slice(struct bridge *bridge, int slice)
 {
-    struct file_data *cur, *ret = NULL;
+	struct slice *sl;
+	int i;
 
-    spin_lock(&br->fdata_lock);
-    list_for_each_entry(cur, &br->fdata_list, fdata_list) {
-        if (cur->pid == pid) {
-            ret = cur;
-            break;
-        }
-    }
-    spin_unlock(&br->fdata_lock);
-    return ret;
+	for (i = 0; i < SLICES; i++) {
+		if (bridge->slice[i].id == slice)
+			return sl;
+	}
+	return NULL;
 }
-
-void wildcat_init_mem_data(struct mem_data *mdata, struct bridge *br)
-{
-    mdata->bridge = br;
-    spin_lock_init(&mdata->uuid_lock);
-    mdata->local_uuid = NULL;
-    mdata->md_remote_uuid_tree = RB_ROOT;
-    spin_lock_init(&mdata->md_lock);
-    mdata->md_mr_tree = RB_ROOT;
-    mdata->md_rmr_tree = RB_ROOT;
-}
-
-struct slice *slice_id_to_slice(struct file_data *fdata, int slice)
-{
-    struct slice *sl;
-    int i;
-
-    for (i = 0; i < SLICES; i++) {
-        if (fdata->md.bridge->slice[i].id == slice)
-            return sl;
-    }
-    return NULL;
-}
+EXPORT_SYMBOL(wildcat_slice_id_to_slice);
 
 #ifdef ZHPE_ENIC  /* Revisit: convert to Gen-Z subsystem interface */
 LIST_HEAD(zhpe_core_driver_list);
@@ -713,6 +683,7 @@ static int zhpe_core_generate_uuid(void *hw, uuid_t *uuid)
 out:
 	return status;
 }
+
 static int zhpe_core_alloc_queues(void *hw, uint xdm_cmdq_ent,
 				  uint xdm_cmplq_ent, uint rdm_cmplq_ent)
 {
@@ -737,7 +708,7 @@ static int zhpe_core_alloc_queues(void *hw, uint xdm_cmdq_ent,
 	xdmi->br = br;
 	xdmi->cmdq_ent = xdm_cmdq_ent;
 	xdmi->cmplq_ent = xdm_cmplq_ent;
-	xdmi->traffic_class = ZHPE_TC_0;
+	xdmi->traffic_class = WILDCAT_TC_0;
 	xdmi->priority = 0;
 	xdmi->slice_mask = ALL_SLICES;
 	xdmi->cur_valid = 1;
@@ -855,7 +826,7 @@ static union zpages *zhpe_core_dma_alloc(void *hw, size_t size)
 		goto out;
 	zmap = zmap_alloc(helper_fdata, zpages);
 	if (IS_ERR(zmap)) {
-		zpages_free(zpages);
+		wildcat_zpages_free(zpages);
 		zpages = NULL;
 		goto out;
 	}
@@ -879,7 +850,7 @@ static void zhpe_core_dma_free(void *hw, union zpages *zpage)
 		return;
 
 	/* Revisit: fix this - HELPER_FREE? */
-	zpages_free(zpage);
+	wildcat_zpages_free(zpage);
 }
 
 static int zhpe_core_mr_reg(void *hw, union zpages *zpage,
@@ -960,7 +931,7 @@ int zhpe_register_driver(struct zhpe_driver *drv, struct zhpe_bus **bus)
 	pr_info("zhpe registering driver %s\n", drv->name);
 	*bus = &zhpe_bus_info;
 	if (drv->recv_enic_info) {  /* must be an enic driver */
-		enic = do_kmalloc(sizeof(*enic), GFP_KERNEL, true);
+		enic = kzalloc(sizeof(*enic), GFP_KERNEL);
 		if (!enic) {
 			ret = -ENOMEM;
 			goto done;
@@ -981,17 +952,17 @@ EXPORT_SYMBOL(zhpe_register_driver);
 static void zhpe_enic_cleanup(struct enic *enic)
 {
 	struct bridge *br = enic->md.bridge;
-	struct mem_data *mdata = &enic->md;
+	struct genz_mem_data *mdata = &enic->md;
 
 	zhpe_rmr_free_all(mdata);
 	zhpe_notify_remote_uuids(mdata);
 	zhpe_umem_free_all(mdata, NULL);
 	zhpe_free_remote_uuids(mdata);
-	(void)zhpe_free_local_uuid(mdata, true); /* also frees associated R-keys */
+	(void)genz_free_local_uuid(mdata, true); /* also frees associated R-keys */
 	/* Revisit: what else do we need to clean up? */
 	if (br)
 		br->enic = 0;
-	do_kfree(enic);
+	kfree(enic);
 }
 
 void zhpe_unregister_driver(struct zhpe_driver *drv)
@@ -1018,6 +989,7 @@ EXPORT_SYMBOL(zhpe_unregister_driver);
 #define PCI_EXT_CAP_ID_DVSEC 0x23  /* Revisit: should be in pci.h */
 #endif
 
+/* Revisit: make these dynamic based on bridge HW */
 static struct genz_bridge_info wildcat_br_info = {
 	.req_zmmu            = 1,
 	.rsp_zmmu            = 1,
@@ -1025,8 +997,8 @@ static struct genz_bridge_info wildcat_br_info = {
 	.rdm                 = 1,
 	.nr_req_page_grids   = WILDCAT_PAGE_GRID_ENTRIES,
 	.nr_rsp_page_grids   = WILDCAT_PAGE_GRID_ENTRIES,
-	.nr_req_ptes         = REQ_ZMMU_ENTRIES,
-	.nr_rsp_ptes         = RSP_ZMMU_ENTRIES,
+	.nr_req_ptes         = WILDCAT_REQ_ZMMU_ENTRIES,
+	.nr_rsp_ptes         = WILDCAT_RSP_ZMMU_ENTRIES,
 	.min_cpuvisible_addr = WILDCAT_MIN_CPUVISIBLE_ADDR,
 	.max_cpuvisible_addr = WILDCAT_MAX_CPUVISIBLE_ADDR,
 };
@@ -1042,7 +1014,13 @@ static int wildcat_bridge_info(struct genz_dev *zdev,
 }
 
 static struct genz_bridge_driver wildcat_genz_bridge_driver = {
-	.bridge_info = wildcat_bridge_info;
+	.bridge_info = wildcat_bridge_info,
+	.req_page_grid_write = wildcat_req_page_grid_write,
+	.rsp_page_grid_write = wildcat_rsp_page_grid_write,
+	.req_pte_write = wildcat_req_pte_write,
+	.rsp_pte_write = wildcat_rsp_pte_write,
+	.dma_map_sg_attrs = wildcat_dma_map_sg_attrs,
+	.dma_unmap_sg_attrs = wildcat_dma_unmap_sg_attrs,
 };
 
 #define WILDCAT_ZMMU_XDM_RDM_HSR_BAR 0
@@ -1088,15 +1066,13 @@ static int wildcat_probe(struct pci_dev *pdev,
 	/* Zero based slice ID */
 	l_slice_id = atomic_inc_return(&slice_id) - 1;
 	sl = &br->slice[l_slice_id];
-
-	debug(DEBUG_PCI, "%s:%s device = %s, slice = %u\n",
-	      wildcat_driver_name, __func__, pci_name(pdev), l_slice_id);
+	dev_dbg(&pdev->dev, "slice=%u\n", l_slice_id);
 
 	ret = pci_enable_device(pdev);
 	if (ret) {
-		debug(DEBUG_PCI,
-		      "%s:%s:pci_enable_device probe error %d for device %s\n",
-		      wildcat_driver_name, __func__, ret, pci_name(pdev));
+		dev_dbg(&pdev->dev,
+			"pci_enable_device probe error %d for device %s\n",
+			ret, pci_name(pdev));
 		goto err_out;
 	}
 
@@ -1109,18 +1085,17 @@ static int wildcat_probe(struct pci_dev *pdev,
 
 	ret = pci_request_regions(pdev, DRIVER_NAME);
 	if (ret < 0) {
-		debug(DEBUG_PCI,
-		      "%s:%s:pci_request_regions error %d for device %s\n",
-		      wildcat_driver_name, __func__, ret, pci_name(pdev));
+		dev_dbg(&pdev->dev,
+			"pci_request_regions error %d for device %s\n",
+			ret, pci_name(pdev));
 		goto err_pci_disable_device;
 	}
 
 	base_addr = pci_iomap(pdev, WILDCAT_ZMMU_XDM_RDM_HSR_BAR,
 			      sizeof(struct func1_bar0));
 	if (!base_addr) {
-		debug(DEBUG_PCI,
-		      "%s:%s:cannot iomap bar %u registers of size %lu (requested size = %lu)\n",
-		      wildcat_driver_name, __func__,
+		dev_dbg(&pdev->dev,
+		      "cannot iomap bar %u registers of size %lu (requested size = %lu)\n",
 		      WILDCAT_ZMMU_XDM_RDM_HSR_BAR,
 		      (unsigned long) pci_resource_len(
 			      pdev, WILDCAT_ZMMU_XDM_RDM_HSR_BAR),
@@ -1130,13 +1105,13 @@ static int wildcat_probe(struct pci_dev *pdev,
 	}
 	phys_base = pci_resource_start(pdev, 0);
 
-	debug(DEBUG_PCI,
-	      "%s:%s bar = %u, start = 0x%lx, actual len = %lu, requested len = %lu, base_addr = 0x%lx\n",
-	      wildcat_driver_name, __func__, 0,
-	      (unsigned long) phys_base,
-	      (unsigned long) pci_resource_len(pdev, 0),
-	      sizeof(struct func1_bar0),
-	      (unsigned long) base_addr);
+	dev_dbg(&pdev->dev,
+		"bar=%u, start=0x%lx, actual len=%lu, requested len=%lu, base_addr=0x%lx\n",
+		0,
+		(unsigned long) phys_base,
+		(unsigned long) pci_resource_len(pdev, 0),
+		sizeof(struct func1_bar0),
+		(unsigned long) base_addr);
 
 	sl->bar = base_addr;
 	sl->phys_base = phys_base;
@@ -1145,18 +1120,19 @@ static int wildcat_probe(struct pci_dev *pdev,
 	sl->valid = true;
 
 	wildcat_zmmu_clear_slice(sl);
+#ifdef OLD_ZHPE
 	wildcat_zmmu_setup_slice(sl);
-
+#endif
 	wildcat_xqueue_init(sl);
 	if (wildcat_clear_xdm_qcm(sl->bar->xdm)) {
-		debug(DEBUG_PCI, "wildcat_clear_xdm_qcm failed\n");
+		dev_dbg(&pdev->dev, "wildcat_clear_xdm_qcm failed\n");
 		ret = -1;
 		goto err_pci_release_regions;
 	}
 
 	wildcat_rqueue_init(sl);
 	if (wildcat_clear_rdm_qcm(sl->bar->rdm)) {
-		debug(DEBUG_PCI, "wildcat_clear_rdm_qcm failed\n");
+		dev_dbg(&pdev->dev, "wildcat_clear_rdm_qcm failed\n");
 		ret = -1;
 		goto err_pci_release_regions;
 	}
@@ -1164,19 +1140,17 @@ static int wildcat_probe(struct pci_dev *pdev,
 	pci_set_drvdata(pdev, sl);
 
 	/* Initialize this pci_dev with the AMD iommu */
-	if (!no_iommu) {
-		ret = amd_iommu_init_device(pdev, WILDCAT_NUM_PASIDS);
-		if (ret < 0) {
-			debug(DEBUG_PCI,
-			      "amd_iommu_init_device failed with error %d\n",
-			      ret);
-			goto err_pci_release_regions;
-		}
+	ret = amd_iommu_init_device(pdev, GENZ_NUM_PASIDS);
+	if (ret < 0) {
+		dev_dbg(&pdev->dev,
+			"amd_iommu_init_device failed with error %d\n",
+			ret);
+		goto err_pci_release_regions;
 	}
 
 	ret = wildcat_register_interrupts(pdev, sl);
 	if (ret) {
-		debug(DEBUG_PCI,
+		dev_dbg(&pdev->dev,
 		      "wildcat_register_interrupts failed with ret=%d\n", ret);
 		goto err_iommu_free;
 	}
@@ -1185,15 +1159,16 @@ static int wildcat_probe(struct pci_dev *pdev,
 		/* allocate driver-driver msg queues on slice 0 only */
 		ret = wildcat_msg_qalloc(br);
 		if (ret) {
-			debug(DEBUG_PCI,
+			dev_dbg(&pdev->dev,
 			      "wildcat_msg_qalloc failed with error %d\n", ret);
 			goto err_free_interrupts;
 		}
 		/* register with Gen-Z subsystem on slice 0 only */
 		ret = genz_register_bridge(&pdev->dev,
-					   &wildcat_genz_bridge_driver);
+					   &wildcat_genz_bridge_driver,
+			br);
 		if (ret) {
-			debug(DEBUG_PCI,
+			dev_dbg(&pdev->dev,
 			      "genz_register_bridge failed with error %d\n",
 			      ret);
 			goto err_msg_qfree;
@@ -1209,9 +1184,7 @@ err_free_interrupts:
 	wildcat_free_interrupts(pdev);
 
 err_iommu_free:
-	if (!no_iommu) {
-		amd_iommu_free_device(pdev);
-	}
+	amd_iommu_free_device(pdev);
 
 err_pci_release_regions:
 	pci_release_regions(pdev);
@@ -1236,8 +1209,8 @@ static void wildcat_remove(struct pci_dev *pdev)
 
 	sl = (struct slice *)pci_get_drvdata(pdev);
 
-	debug(DEBUG_PCI, "%s:%s device = %s, slice = %u\n",
-	      wildcat_driver_name, __func__, pci_name(pdev), sl->id);
+	dev_dbg(&pdev->dev, "device=%s, slice=%u\n",
+		pci_name(pdev), sl->id);
 
 	if (sl->id == 0) {
 		genz_unregister_bridge(&pdev->dev);
@@ -1246,10 +1219,8 @@ static void wildcat_remove(struct pci_dev *pdev)
 	wildcat_free_interrupts(pdev);
 	pci_clear_master(pdev);
 
-	/* If we are using the IOMMU, free the device */
-	if (!no_iommu) {
-		amd_iommu_free_device(pdev);
-	}
+	/* Remove our use of the IOMMU */
+	amd_iommu_free_device(pdev);
 
 	wildcat_zmmu_clear_slice(sl);
 	pci_iounmap(pdev, sl->bar);
@@ -1267,18 +1238,21 @@ static int helper_init(struct subprocess_info *info, struct cred *new)
 
 static void wildcat_helper_exit(void)
 {
-	if (!helper_fdata)
+#ifdef OLD_ZHPE
+	if (!helper_fdata)  /* Revisit: fix this */
 		return;
-
+#endif
 	/* Revisit: finish this */
 }
 
+#ifdef OLD_ZHPE
 static struct miscdevice miscdev = {
 	.name               = wildcat_driver_name,
 	.fops               = &wildcat_fops,
 	.minor              = MISC_DYNAMIC_MINOR,
 	.mode               = 0600,
 };
+#endif
 
 static struct pci_driver wildcat_pci_driver = {
 	.name      = DRIVER_NAME,
@@ -1289,138 +1263,124 @@ static struct pci_driver wildcat_pci_driver = {
 
 static int __init wildcat_init(void)
 {
-    int                 ret;
-    char                *argv[] = { helper_path, NULL };
-    char                *envp[] = { NULL };
-    int                 i;
-    struct wildcat_attr default_attr = {
-        .max_tx_queues      = 1024,
-        .max_rx_queues      = 1024,
-        .max_hw_qlen        = 65535,
-        .max_sw_qlen        = 65535,
-        .max_dma_len        = (1U << 31),
-    };
-    struct subprocess_info *helper_info;
-    uint                sl, pg, cnt, pg_index;
+	int                 ret;
+	char                *argv[] = { helper_path, NULL };
+	char                *envp[] = { NULL };
+#ifdef OLD_ZHPE
+	int                 i;
+	struct wildcat_attr default_attr = {
+		.max_tx_queues      = 1024,
+		.max_rx_queues      = 1024,
+		.max_hw_qlen        = 65535,
+		.max_sw_qlen        = 65535,
+		.max_dma_len        = (1U << 31),
+	};
+#endif
+	struct subprocess_info *helper_info;
+	uint                sl;
 
-    ret = -EINVAL;
-    if (!(wildcat_no_avx || boot_cpu_has(X86_FEATURE_AVX))) {
-        pr_warning("%s:%s:missing required AVX CPU feature.\n",
-               wildcat_driver_name, __func__);
-        goto err_out;
-    }
-    ret = -ENOMEM;
-    global_shared_zpage = shared_zpage_alloc(sizeof(*global_shared_data), GLOBAL_SHARED_PAGE);
-    if (!global_shared_zpage) {
-        pr_warning("%s:%s:queue_zpages_alloc failed.\n",
-               wildcat_driver_name, __func__);
-        goto err_out;
-    }
-    global_shared_data = global_shared_zpage->queue.pages[0];
-    global_shared_data->magic = WILDCAT_MAGIC;
-    global_shared_data->version = WILDCAT_GLOBAL_SHARED_VERSION;
-    global_shared_data->debug_flags = wildcat_debug_flags;
-    global_shared_data->default_attr = default_attr;
-    for (i = 0; i < MAX_IRQ_VECTORS; i++)
-	global_shared_data->triggered_counter[i] = 0;
+	ret = -EINVAL;
+	if (!(wildcat_no_avx || boot_cpu_has(X86_FEATURE_AVX))) {
+		pr_warning("%s:%s:missing required AVX CPU feature.\n",
+			   wildcat_driver_name, __func__);
+		goto err_out;
+	}
+	ret = -ENOMEM;
+#ifdef OLD_ZHPE
+	global_shared_zpage = wildcat_shared_zpage_alloc(
+		sizeof(*global_shared_data), GLOBAL_SHARED_PAGE);
+	if (!global_shared_zpage) {
+		pr_warning("%s:%s:queue_zpages_alloc failed.\n",
+			   wildcat_driver_name, __func__);
+		goto err_out;
+	}
+	global_shared_data = global_shared_zpage->queue.pages[0];
+	global_shared_data->magic = WILDCAT_MAGIC;
+	global_shared_data->version = WILDCAT_GLOBAL_SHARED_VERSION;
+	global_shared_data->debug_flags = wildcat_debug_flags;
+	global_shared_data->default_attr = default_attr;
+	for (i = 0; i < MAX_IRQ_VECTORS; i++)
+		global_shared_data->triggered_counter[i] = 0;
+#endif
+	wildcat_bridge.gcid = genz_gcid;
+	spin_lock_init(&wildcat_bridge.zmmu_lock);
+	for (sl = 0; sl < SLICES; sl++) {
+		spin_lock_init(&wildcat_bridge.slice[sl].zmmu_lock);
+	}
 
-    wildcat_bridge.gcid = genz_gcid;
-    spin_lock_init(&wildcat_bridge.zmmu_lock);
-    for (sl = 0; sl < SLICES; sl++) {
-        spin_lock_init(&wildcat_bridge.slice[sl].zmmu_lock);
-    }
-    spin_lock_init(&wildcat_bridge.fdata_lock);
-    INIT_LIST_HEAD(&wildcat_bridge.fdata_list);
+#ifdef OLD_ZHPE
+	/* Create 128 polling devices for interrupt notification to userspace */
+	if (wildcat_setup_poll_devs() != 0)
+		goto err_zpage_free;
+#endif
+	/* Create msg workqueue */
+	wildcat_bridge.wildcat_msg_workq = create_workqueue("wildcat_wq");
+	if (!wildcat_bridge.wildcat_msg_workq)
+		goto err_cleanup_poll_devs;
 
-    debug(DEBUG_ZMMU, "%s:%s,%u: calling wildcat_zmmu_clear_all\n",
-          wildcat_driver_name, __func__, __LINE__);
-    wildcat_zmmu_clear_all(&wildcat_bridge, false);
-    debug(DEBUG_ZMMU, "%s:%s,%u: calling wildcat_pasid_init\n",
-          wildcat_driver_name, __func__, __LINE__);
-    wildcat_pasid_init();
-    debug(DEBUG_RKEYS, "%s:%s,%u: calling wildcat_rkey_init\n",
-          wildcat_driver_name, __func__, __LINE__);
-    wildcat_rkey_init();
+	/* Initiate call to wildcat_probe() for each wildcat PCI function */
+	ret = pci_register_driver(&wildcat_pci_driver);
+	if (ret < 0) {
+		pr_warning("%s:%s:pci_register_driver ret = %d\n",
+			   wildcat_driver_name, __func__, ret);
+		goto err_delete_workq;
+	}
 
-    /* Create 128 polling devices for interrupt notification to user space */
-    if (wildcat_setup_poll_devs() != 0)
-        goto err_zpage_free;
+	/* Launch helper. */
+	helper_info = call_usermodehelper_setup(helper_path, argv, envp,
+						GFP_KERNEL, helper_init, NULL,
+						&helper_pid);
+	if (!helper_info) {
+		pr_warning("%s:%s:call_usermodehelper_setup(%s) returned NULL\n",
+			   wildcat_driver_name, __func__, helper_path);
+		ret = -ENOMEM;
+		goto err_misc_deregister;
+	}
+	ret = call_usermodehelper_exec(helper_info, UMH_WAIT_EXEC);
+	if (ret < 0) {
+		pr_warning("%s:%s:call_usermodehelper_exec(%s) returned %d\n",
+			   wildcat_driver_name, __func__, helper_path, ret);
+		goto err_wildcat_helper_exit;
+	}
 
-    /* Create msg workqueue */
-    wildcat_bridge.wildcat_msg_workq = create_workqueue("wildcat_wq");
-    if (!wildcat_bridge.wildcat_msg_workq)
-	goto err_cleanup_poll_devs;
+	pr_info("%s:%s: helper_pid=%d, ret=%d\n",
+		wildcat_driver_name, __func__,
+		helper_pid, ret);
 
-    /* Initiate call to wildcat_probe() for each wildcat PCI function */
-    ret = pci_register_driver(&wildcat_pci_driver);
-    if (ret < 0) {
-        pr_warning("%s:%s:pci_register_driver ret = %d\n",
-               wildcat_driver_name, __func__, ret);
-        goto err_delete_workq;
-    }
-
-    /* Create device. */
-    debug(DEBUG_IO, "%s:%s,%u: creating device\n",
-          wildcat_driver_name, __func__, __LINE__);
-    ret = misc_register(&miscdev);
-    if (ret < 0) {
-        pr_warning("%s:%s:misc_register() returned %d\n",
-               wildcat_driver_name, __func__, ret);
-        goto err_pci_unregister_driver;
-    }
-
-    wildcat_poll_init_waitqueues(&wildcat_bridge);
-
-    /* Launch helper. */
-    helper_info = call_usermodehelper_setup(helper_path, argv, envp,
-                                            GFP_KERNEL, helper_init, NULL,
-                                            &helper_pid);
-    if (!helper_info) {
-        pr_warning("%s:%s:call_usermodehelper_setup(%s) returned NULL\n",
-               wildcat_driver_name, __func__, helper_path);
-        ret = -ENOMEM;
-        goto err_misc_deregister;
-    }
-    ret = call_usermodehelper_exec(helper_info, UMH_WAIT_EXEC);
-    if (ret < 0) {
-        pr_warning("%s:%s:call_usermodehelper_exec(%s) returned %d\n",
-               wildcat_driver_name, __func__, helper_path, ret);
-        goto err_wildcat_helper_exit;
-    }
-
-    pr_info("%s:%s:%s %s, helper_pid = %d, ret = %d\n",
-           wildcat_driver_name, __func__, __DATE__, __TIME__, helper_pid, ret);
-
-    return 0;
+	return 0;
 
 err_wildcat_helper_exit:
-    wildcat_helper_exit();
+	wildcat_helper_exit();
 
 err_misc_deregister:
-    misc_deregister(&miscdev);
 
 err_pci_unregister_driver:
-    /* Initiate call to wildcat_remove() for each wildcat PCI function */
-    pci_unregister_driver(&wildcat_pci_driver);
+	/* Initiate call to wildcat_remove() for each wildcat PCI function */
+	pci_unregister_driver(&wildcat_pci_driver);
 
 err_delete_workq:
-    destroy_workqueue(wildcat_bridge.wildcat_msg_workq);
+	destroy_workqueue(wildcat_bridge.wildcat_msg_workq);
 
 err_cleanup_poll_devs:
-    wildcat_cleanup_poll_devs();
+#ifdef OLD_ZHPE
+	wildcat_cleanup_poll_devs();
+#endif
 
+#ifdef OLD_ZHPE
 err_zpage_free:
-    if (global_shared_zpage) {
-        queue_zpages_free(global_shared_zpage);
-        do_kfree(global_shared_zpage);
-    }
+	if (global_shared_zpage) {
+		wildcat_queue_zpages_free(global_shared_zpage);
+		kfree(global_shared_zpage);
+	}
+#endif
 
 err_out:
-    return ret;
+	return ret;
 }
 
 static void wildcat_exit(void)
 {
+#ifdef OLD_ZHPE
     if (miscdev.minor != MISC_DYNAMIC_MINOR)
         misc_deregister(&miscdev);
 
@@ -1428,20 +1388,15 @@ static void wildcat_exit(void)
 
     /* free shared data page. */
     if (global_shared_zpage) {
-        queue_zpages_free(global_shared_zpage);
-        do_kfree(global_shared_zpage);
+        wildcat_queue_zpages_free(global_shared_zpage);
+        kfree(global_shared_zpage);
     }
-
+#endif
     destroy_workqueue(wildcat_bridge.wildcat_msg_workq);
 
     /* Initiate call to wildcat_remove() for each wildcat PCI function */
     pci_unregister_driver(&wildcat_pci_driver);
 
-    wildcat_zmmu_clear_all(&wildcat_bridge, true);
-    wildcat_rkey_exit();
-    wildcat_pasid_exit();
-    wildcat_uuid_exit();
-
     pr_info("%s:%s mem_total %lld\n",
-           wildcat_driver_name, __func__, (llong)atomic64_read(&mem_total));
+           wildcat_driver_name, __func__, (long long)atomic64_read(&mem_total));
 }

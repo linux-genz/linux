@@ -36,7 +36,7 @@
 
 #include <linux/slab.h>
 #include <linux/sysfs.h>
-#include <linux/genz.h>
+
 #include "genz.h"
 #include "genz-control.h"
 #include "genz-probe.h"
@@ -70,8 +70,6 @@ int genz_create_uuid_file(struct genz_dev *zdev)
 
 void genz_remove_uuid_file(struct genz_dev *zdev)
 {
-	int ret = 0;
-
 	sysfs_remove_file(&zdev->dev.kobj, &uuid_attribute.attr);
 }
 
@@ -712,7 +710,7 @@ static int read_header_at_offset(struct genz_dev *zdev,
 
 static int read_and_validate_header(struct genz_dev *zdev,
 			off_t start,
-			struct genz_control_structure_ptr *csp,
+			const struct genz_control_structure_ptr *csp,
 			struct genz_control_structure_header *hdr,
 			off_t *hdr_offset)
 {
@@ -783,7 +781,7 @@ static int traverse_array(struct genz_dev *zdev,
 			struct genz_control_info *parent,
 			struct genz_control_ptr_info *pi,
 			struct kobject *struct_dir,
-			struct genz_control_structure_ptr *csp)
+			const struct genz_control_structure_ptr *csp)
 {
 	struct genz_control_info *ci;
 	struct genz_control_structure_header hdr;
@@ -821,7 +819,7 @@ static int traverse_table(struct genz_dev *zdev,
 			struct genz_control_info *parent,
 			struct genz_control_ptr_info *pi,
 			struct kobject *dir,
-			struct genz_control_structure_ptr *csp)
+			const struct genz_control_structure_ptr *csp)
 {
 	return 0;
 }
@@ -830,7 +828,7 @@ static int traverse_table_with_header(struct genz_dev *zdev,
 			struct genz_control_info *parent,
 			struct genz_control_ptr_info *pi,
 			struct kobject *dir,
-			struct genz_control_structure_ptr *csp)
+			const struct genz_control_structure_ptr *csp)
 {
 	return 0;
 }
@@ -838,7 +836,7 @@ static int traverse_table_with_header(struct genz_dev *zdev,
 #ifdef NOT_YET
 static int type_is_chained(int type)
 {
-	struct genz_control_structure_ptr *csp;
+	const struct genz_control_structure_ptr *csp;
 	size_t num_ptrs;
 	int i;
 
@@ -860,12 +858,11 @@ static int type_is_chained(int type)
  */
 static off_t find_chain_offset(struct genz_control_ptr_info *pinfo)
 {
-	struct genz_control_structure_ptr *csp;
+	const struct genz_control_structure_ptr * const csp = pinfo->ptr;
 	size_t num_ptrs;
 	int chain_offset = -ENOENT;
 	int i;
 
-	csp = pinfo->ptr;
 	num_ptrs = pinfo->num_ptrs;
 	for (i = 0; i < num_ptrs; i++) {
 		if (csp[i].ptr_type == GENZ_CONTROL_POINTER_CHAINED) {
@@ -899,7 +896,7 @@ static int traverse_chained_control_pointers(struct genz_dev *zdev,
 			struct genz_control_info *parent,
 			struct genz_control_ptr_info *pi,
 			struct kobject *dir,
-			struct genz_control_structure_ptr *csp)
+			const struct genz_control_structure_ptr *csp)
 {
 	int chain_num = 0;
 	struct genz_control_structure_header hdr;
@@ -998,7 +995,7 @@ static int traverse_structure(struct genz_dev *zdev,
 			struct genz_control_info *parent,
 			struct genz_control_ptr_info *pi,
 			struct kobject *dir,
-			struct genz_control_structure_ptr *csp)
+			const struct genz_control_structure_ptr *csp)
 {
 	int ret;
 	struct genz_control_structure_header hdr;
@@ -1060,7 +1057,7 @@ static int traverse_control_pointers(struct genz_dev *zdev,
 {
 	int i;
 	int ret = 0;
-	struct genz_control_structure_ptr *csp;
+	const struct genz_control_structure_ptr *csp;
 
 	for (i = 0; i < pi->num_ptrs; i++) {
 		csp = &(pi->ptr[i]);

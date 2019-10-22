@@ -62,8 +62,10 @@ int genz_pasid_alloc(unsigned int *pasid)
     *pasid = (unsigned int)ret;
     return 0;
 }
+EXPORT_SYMBOL(genz_pasid_alloc);
 
 void genz_pasid_free(unsigned int pasid)
 {
     ida_simple_remove(&genz_pasid_ida, pasid);
 }
+EXPORT_SYMBOL(genz_pasid_free);

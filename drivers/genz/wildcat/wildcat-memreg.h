@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2018-2019 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -34,79 +34,17 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Gen-Z Component Structure */
-enum {
-	GENZ_A_UNSPEC,
-	GENZ_A_FABRIC_NUM,
-	GENZ_A_GCID,
-	GENZ_A_CCLASS,
-	GENZ_A_FRU_UUID,
-	GENZ_A_MGR_UUID,
-	GENZ_A_RESOURCE_LIST,
-	__GENZ_A_MAX,
-};
-#define GENZ_A_MAX (__GENZ_A_MAX - 1)
+#ifndef _WILDCAT_MEMREG_H_
+#define _WILDCAT_MEMREG_H_
 
-/* Resource List Structure */
-enum {
-	GENZ_A_UL_UNSPEC,
-	GENZ_A_UL,
-	__GENZ_A_UL_MAX,
-};
-#define GENZ_A_UL_MAX (__GENZ_A_UL_MAX - 1)
+#include <linux/dma-mapping.h>
+#include <linux/scatterlist.h>
+#include <linux/workqueue.h>
 
-/* Resource Structure */
-enum {
-	GENZ_A_U_UNSPEC,
-	GENZ_A_U_UUID,
-	GENZ_A_U_CLASS,
-	GENZ_A_U_MRL,
-	__GENZ_A_U_MAX,
-};
-#define GENZ_A_U_MAX (__GENZ_A_U_MAX - 1)
-
-/* Memory Region List Structure */
-enum {
-	GENZ_A_MRL_UNSPEC,
-	GENZ_A_MRL,
-	__GENZ_A_MRL_MAX,
-};
-#define GENZ_A_MRL_MAX (__GENZ_A_MRL_MAX - 1)
-
-/* Memory Region Structure */
-enum {
-	GENZ_A_MR_UNSPEC,
-	GENZ_A_MR_START,
-	GENZ_A_MR_LENGTH,
-	GENZ_A_MR_TYPE,
-	GENZ_A_MR_RO_RKEY,
-	GENZ_A_MR_RW_RKEY,
-	__GENZ_A_MR_MAX,
-};
-#define GENZ_A_MR_MAX (__GENZ_A_MR_MAX - 1)
-
-#define GENZ_CONTROL_STR_LEN	12
-#define GENZ_DATA_STR_LEN	9
-
-/* Netlink Generic Commands */
-
-/* Netlink Generic Commands */
-enum {
-	GENZ_C_ADD_OS_COMPONENT,
-	GENZ_C_REMOVE_OS_COMPONENT,
-	GENZ_C_SYMLINK_OS_COMPONENT,
-	GENZ_C_FAB_MGR_CTL_WR_MSG,
-	GENZ_C_ADD_FABRIC_COMPONENT,
-	GENZ_C_REMOVE_FABRIC_COMPONENT,
-	__GENZ_C_MAX,
-};
-#define GENZ_C_MAX (__GENZ_C_MAX - 1)
-
-#define UUID_LEN	16	/* 16 uint8_t's */
-
-#define NLINK_MSG_LEN 1024
-#define GENZ_FAMILY_NAME "genz_cmd"
-
-int genz_nl_init(void);
-void genz_nl_exit(void);
-void genz_free_zres(struct genz_dev *zdev, struct genz_resource *zres);
+int wildcat_dma_map_sg_attrs(
+	struct genz_bridge_dev *gzbr, struct scatterlist *sg, int nents,
+	enum dma_data_direction direction, unsigned long dma_attrs);
+void wildcat_dma_unmap_sg_attrs(
+	struct genz_bridge_dev *gzbr, struct scatterlist *sg, int nents,
+	enum dma_data_direction direction, unsigned long dma_attrs);
+#endif /* _WILDCAT_MEMREG_H_ */

@@ -319,6 +319,7 @@ out:
 #endif
 	return ret;
 }
+EXPORT_SYMBOL(genz_rkey_alloc);
 
 void genz_rkey_free(uint32_t ro_rkey, uint32_t rw_rkey)
 {
@@ -327,3 +328,4 @@ void genz_rkey_free(uint32_t ro_rkey, uint32_t rw_rkey)
 
 	rkey_delete(&rki, ro_rkey);
 }
+EXPORT_SYMBOL(genz_rkey_free);

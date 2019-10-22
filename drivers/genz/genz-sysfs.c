@@ -39,8 +39,6 @@
 #include <linux/slab.h>
 #include "genz.h"
 
-MODULE_LICENSE("GPL v2");
-
 static ssize_t genz_read_control(struct file * file,
 		struct kobject *kobj,
 		struct bin_attribute * battr,

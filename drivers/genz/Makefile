@@ -11,6 +11,8 @@ genz-y := genz-core.o \
           genz-page-grid.o \
           genz-pasid.o \
           genz-rkey.o \
+          genz-uuid.o \
+          genz-memreg.o \
           genz-probe.o
 
 obj-$(CONFIG_GENZ)           += genz.o
