@@ -47,14 +47,6 @@
 LIST_HEAD(genz_fabrics);
 DECLARE_RWSEM(genz_fabrics_sem);
 
-static void fabric_release(struct kref *kref)
-{
-	struct genz_fabric *fab;
-
-	fab = to_genz_fabric(kref);
-	kfree(fab);
-}
-
 static struct genz_fabric *genz_alloc_fabric(void)
 {
 	struct genz_fabric *f;
@@ -229,9 +221,7 @@ static void subnet_release(struct kobject *kobj)
 
 	pr_debug("subnet_release %s\n", kobj->name);
 	s = to_genz_subnet(kobj);
-//	down_write(&s->fabric->subnet_sem);
 	list_del(&s->node);
-//	up_write(&s->fabric->subnet_sem);
 	kfree(s);
 }
 
@@ -523,7 +513,8 @@ static void component_release(struct kobject *kobj)
 
 	pr_debug("component_release %s\n", kobj->name);
 	comp = kobj_to_genz_component(kobj);
-	/* Revisit: remove from fabric list */
+	/* Remove from fabric list */
+	list_del(&comp->fab_comp_node);
 	kfree(comp);
 }
 
@@ -572,7 +563,8 @@ int genz_init_component(struct genz_component *zcomp,
 
 	zcomp->subnet = s;
 	zcomp->cid = cid;
-#ifdef NOT_YET
+
+/*
         ret = kobject_init_and_add(&zcomp->kobj, &component_ktype, &s->dev.kobj, "%03x", cid);
 	if (ret) {
 		pr_debug( "%s: kobject_init_and_add failed for cid %d\n",
@@ -582,14 +574,14 @@ int genz_init_component(struct genz_component *zcomp,
 	}
 
 	kobject_uevent(&zcomp->kobj, KOBJ_ADD);
-#endif
+*/
 
         zcomp->dev.bus = &genz_bus_type;
         zcomp->dev.id = cid;
 	zcomp->dev.release = genz_free_comp;
 	zcomp->dev.parent = &s->dev;
 	dev_set_name(&zcomp->dev, "%03x", cid);
-
+	pr_debug("in genz_init_component name is cid %03x\n", cid);
         ret = device_register(&zcomp->dev);
 	if (ret) {
 		pr_debug( "device_register failed with %d\n", ret);
@@ -657,21 +649,11 @@ void genz_free_component(struct kref *kref)
 static void genz_release_dev(struct device *dev)
 {
         struct genz_dev *zdev;
-	struct genz_resource *pos, *next;
 
 	pr_debug("genz_release_dev %s\n", dev_name(dev));
         zdev = to_genz_dev(dev);
 	if (zdev == NULL)
 		return;
-	if (zdev->zcomp)
-		kref_put(&zdev->zcomp->kref, genz_free_component);
-	/* free the resources */
-	list_for_each_entry_safe(pos, next, &zdev->zres_list, zres_list) {
-		genz_free_zres(zdev, pos);
-	}
-
-	/* remove uuid sysfs file */
-	genz_remove_uuid_file(zdev); 
 
 	/* remove from the list of devices in the genz_fabric */
         list_del(&zdev->fab_dev_node);
