@@ -51,7 +51,7 @@ static ssize_t uuid_show(struct kobject *kobj,
 	dev = kobj_to_dev(kobj);
 	zdev = to_genz_dev(dev);
 	if (zdev == NULL) {
-		printk(KERN_ERR "zdev is NULL\n");
+		pr_debug("zdev is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad zdev\n"));
 	}
 	return(snprintf(buf, PAGE_SIZE, "%pUb\n", &zdev->uuid));
@@ -81,9 +81,9 @@ static ssize_t mgr_uuid_show(struct device *dev,
 	struct genz_fabric *fab;
 	
 	fab = dev_to_genz_fabric(dev);
-	printk(KERN_ERR "fab is %px\n", fab);
+	pr_debug("fab is %px\n", fab);
 	if (fab == NULL) {
-		printk(KERN_ERR "fab is NULL\n");
+		pr_debug("fab is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad fabric\n"));
 	}
 	return(snprintf(buf, PAGE_SIZE, "%pUb\n", &fab->mgr_uuid));
@@ -94,7 +94,7 @@ int genz_create_mgr_uuid_file(struct device *dev)
 {
 	int ret = 0;
 
-	printk(KERN_ERR "%s: create_file for dev %px\n", __func__, dev);
+	pr_debug("%s: create_file for dev %px\n", __func__, dev);
 	ret = device_create_file(dev, &dev_attr_mgr_uuid);
 	return ret;
 }

@@ -37,6 +37,7 @@
 struct genz_fabric *genz_find_fabric(uint32_t fabric_num);
 struct genz_fabric * genz_dev_to_fabric(struct device *dev);
 void genz_free_fabric(struct device *dev);
+struct genz_component *genz_find_component(struct genz_subnet *s, uint32_t cid);
 struct genz_component *genz_alloc_component(void);
 int genz_init_component(struct genz_component *zcomp, struct genz_subnet *s, uint32_t cid);
 void genz_free_component(struct kref *kref);

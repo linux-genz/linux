@@ -42,6 +42,9 @@
 #include <linux/rbtree.h>
 #include <linux/genz.h>
 
+#define MAX_GCID (1<<28)
+#define MAX_FABRIC_NUM (256) /* Revisit: what is it from the spec? */
+
 /* Value of Z-UUID in control space that indicates a Gen-Z device */
 #define GENZ_Z_UUID	0x4813ea5f074e4be2a355a354145c9927
 #define GENZ_CAST_UUID(u) *((uuid_t *)&(u))

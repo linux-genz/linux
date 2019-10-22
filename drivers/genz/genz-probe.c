@@ -111,7 +111,7 @@ void genz_free_fabric(struct device *dev)
 
 	f = container_of(dev, struct genz_fabric, dev);
 
-	printk(KERN_INFO "genz_free_fabric %s\n", dev_name(dev));
+	pr_debug("genz_free_fabric %s\n", dev_name(dev));
 // Revisit:	down_write(&genz_fabrics_sem);
 	list_del(&f->node);
 // Revisit:	up_write(&genz_fabrics_sem);
@@ -199,7 +199,7 @@ void genz_free_subnet(struct device *dev)
 {
 	struct genz_subnet *s;
 
-	printk(KERN_INFO "genz_free_subnet %s\n", dev_name(dev));
+	pr_debug("genz_free_subnet %s\n", dev_name(dev));
 	s = container_of(dev, struct genz_subnet, dev);
 
 	list_del(&s->node);
@@ -227,7 +227,7 @@ static void subnet_release(struct kobject *kobj)
 {
 	struct genz_subnet *s;
 
-	printk(KERN_INFO "subnet_release %s\n", kobj->name);
+	pr_debug("subnet_release %s\n", kobj->name);
 	s = to_genz_subnet(kobj);
 //	down_write(&s->fabric->subnet_sem);
 	list_del(&s->node);
@@ -350,7 +350,7 @@ static void fru_release(struct kobject *kobj)
 {
 	struct genz_fru *f;
 
-	printk(KERN_INFO "fru_release %s\n", kobj->name);
+	pr_debug("fru_release %s\n", kobj->name);
 	f = to_genz_fru(kobj);
 //	down_write(&f->fabric->fru_sem);
 	list_del(&f->node);
@@ -437,7 +437,7 @@ static ssize_t cclass_show(struct device *dev,
 
 	comp = dev_to_genz_component(dev);
 	if (comp == NULL) {
-		printk(KERN_ERR "comp is NULL\n");
+		pr_debug("comp is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
 	}
 	return(snprintf(buf, PAGE_SIZE, "%d\n", comp->cclass));
@@ -451,14 +451,14 @@ static ssize_t gcid_show(struct device *dev,
 	struct genz_component *comp;
 
 	comp = dev_to_genz_component(dev);
-	printk(KERN_ERR "comp is %px\n", comp);
+	pr_debug("comp is %px\n", comp);
 
 	if (comp == NULL) {
-		printk(KERN_ERR "comp is NULL\n");
+		pr_debug("comp is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
 	}
 	if (comp->subnet == NULL) {
-		printk(KERN_ERR "comp->subnet is NULL\n");
+		pr_debug("comp->subnet is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component subnet\n"));
 	}
 	return(snprintf(buf, PAGE_SIZE, "%04x:%03x\n", comp->subnet->sid, comp->cid));
@@ -472,10 +472,10 @@ static ssize_t fru_uuid_show(struct device *dev,
 	struct genz_component *comp;
 
 	comp = dev_to_genz_component(dev);
-	printk(KERN_ERR "comp is %px\n", comp);
+	pr_debug("comp is %px\n", comp);
 
 	if (comp == NULL) {
-		printk(KERN_ERR "comp is NULL\n");
+		pr_debug("comp is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
 	}
 	return(snprintf(buf, PAGE_SIZE, "%pUb\n", &comp->fru_uuid));
@@ -486,7 +486,7 @@ static int genz_create_component_files(struct device *dev)
 {
 	int ret = 0;
 
-	printk(KERN_ERR "%s: create_file for device %px\n", __func__, dev);
+	pr_debug("%s: create_file for device %px\n", __func__, dev);
 	ret = device_create_file(dev, &dev_attr_gcid);
 	ret = device_create_file(dev, &dev_attr_cclass);
 	ret = device_create_file(dev, &dev_attr_fru_uuid);
@@ -521,7 +521,7 @@ static void component_release(struct kobject *kobj)
 {
 	struct genz_component *comp;
 
-	printk(KERN_INFO "component_release %s\n", kobj->name);
+	pr_debug("component_release %s\n", kobj->name);
 	comp = kobj_to_genz_component(kobj);
 	/* Revisit: remove from fabric list */
 	kfree(comp);
@@ -555,7 +555,7 @@ void genz_free_comp(struct device *dev)
 {
 	struct genz_component *c;
 
-	printk(KERN_INFO "genz_free_comp %s\n", dev_name(dev));
+	pr_debug("genz_free_comp %s\n", dev_name(dev));
 
 	c = container_of(dev, struct genz_component, dev);
 
@@ -596,13 +596,46 @@ int genz_init_component(struct genz_component *zcomp,
 		put_device(&zcomp->dev);
 		return ret;
 	}
-	printk(KERN_ERR "component kobj is %px\n", &(zcomp->dev.kobj));
-	printk(KERN_ERR "subnet kobj is %px\n", &(s->dev.kobj));
+	pr_debug("component kobj is %px\n", &(zcomp->dev.kobj));
+	pr_debug("subnet kobj is %px\n", &(s->dev.kobj));
 
 	/* Revisit: add the fab_comp_node to the fabric component list */
 	kref_init(&zcomp->kref);
 	genz_create_component_files(&zcomp->dev);
 	return(ret);
+}
+
+struct genz_component *genz_find_component(struct genz_subnet *s,
+               uint32_t cid)
+{
+       struct genz_component *c, *found = NULL;
+       int ret = 0;
+       
+       pr_debug( "in %s\n", __func__);
+       list_for_each_entry(c, &s->fabric->components, fab_comp_node) {
+               if (c->cid == cid) {
+                       found = c;
+                       break;
+               }
+       }
+       pr_debug( "cid %d is not in the components list yet\n", cid);
+       if (!found) {
+               /* Allocate a new genz_component and add to list */
+               found = genz_alloc_component();
+               if (!found) {
+                       pr_debug( "alloc_componenet failed\n");
+                       return found;
+               }
+               ret = genz_init_component(found, s, cid);
+               if (ret) {
+               /* make sure this has not already been added. */
+                       pr_debug( "init_component failed\n");
+                       return NULL;
+               }
+               list_add_tail(&found->fab_comp_node, &s->fabric->components);
+               pr_debug( "added to the component list\n");
+       }
+       return found;
 }
 
 void genz_free_component(struct kref *kref)
@@ -626,7 +659,7 @@ static void genz_release_dev(struct device *dev)
         struct genz_dev *zdev;
 	struct genz_resource *pos, *next;
 
-	printk(KERN_INFO "genz_release_dev %s\n", dev_name(dev));
+	pr_debug("genz_release_dev %s\n", dev_name(dev));
         zdev = to_genz_dev(dev);
 	if (zdev == NULL)
 		return;
@@ -681,7 +714,7 @@ int genz_device_add(struct genz_dev *zdev)
 
 	ret = device_add(&zdev->dev);
 	if (ret)
-		printk(KERN_ERR "device_add failed with %d\n", ret);
+		pr_debug("device_add failed with %d\n", ret);
 	return ret;
 }
 EXPORT_SYMBOL(genz_device_add);
