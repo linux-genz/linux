@@ -401,6 +401,7 @@ static void force_dev_cleanup(void)
 {
 	struct genz_fabric *f, *f_tmp;
 
+	pr_debug("in force_dev_cleanup\n");
 	/* go through each fabric */
         list_for_each_entry_safe(f, f_tmp, &genz_fabrics, node) {
 #ifdef NOT_YET
@@ -424,7 +425,6 @@ static void force_dev_cleanup(void)
 			device_unregister(&zsub->dev);
 		}
 
-#endif
 		/* finally remove the fabric device */
 		device_unregister(&f->dev);
         }
@@ -433,6 +433,8 @@ static void force_dev_cleanup(void)
 static int __init genz_init(void)
 {
 	int ret = 0;
+
+	pr_debug("genz_init\n");
 
 	if (genz_disabled())
 		return -ENODEV;
@@ -463,6 +465,7 @@ module_init(genz_init);
 
 static void __exit genz_exit(void)
 {
+	pr_debug("in genz_exit\n");
 	force_dev_cleanup();
 	bus_unregister(&genz_bus_type);
 	genz_nl_exit();

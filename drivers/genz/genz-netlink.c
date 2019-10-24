@@ -99,6 +99,34 @@ void genz_free_zres(struct genz_dev *zdev, struct genz_resource *zres)
 	kfree(zres);
 }
 
+static int setup_zres(struct genz_resource *zres,
+		struct genz_dev *zdev,
+		int cdtype, int iores_flags,
+		int str_len,
+		char * fmt,
+		struct list_head *cd_zres_list)
+{
+	int ret = 0;
+	char *name;
+
+	zres->res.flags = iores_flags;
+	name = kzalloc(str_len, GFP_KERNEL);
+	if (name == NULL) {
+		/* Revisit: clean up and exit */
+		pr_debug("Failed to kmalloc res->name\n");
+		ret = -ENOMEM;
+		goto error;
+	}
+	snprintf(name, GENZ_CONTROL_STR_LEN, fmt,
+		zdev->resource_count[cdtype]++);
+	zres->res.name = name;
+
+	list_add_tail(&zres->component_list, cd_zres_list);
+
+error:
+	return(ret);
+}
+
 static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 {
 	struct nlattr *nested_attr;
@@ -148,34 +176,28 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 			zres->ro_rkey = ro_rkey;
 			zres->rw_rkey = rw_rkey;
 			if (mem_type == GENZ_CONTROL) {
-				zres->res.flags |= IORESOURCE_GENZ_CONTROL;
-				name = kzalloc(GENZ_CONTROL_STR_LEN,
-					       GFP_KERNEL);
-				if (name == NULL) {
-					pr_debug("Failed to kmalloc res->name\n");
-				}
-				snprintf(name, GENZ_CONTROL_STR_LEN,
+				ret = setup_zres(zres, zdev, GENZ_CONTROL,
+					(zres->res.flags | IORESOURCE_GENZ_CONTROL),
+					GENZ_CONTROL_STR_LEN,
 					"control%d",
-					zdev->resource_count[GENZ_CONTROL]++);
-				zres->res.name = name;
-				list_add_tail(&zres->component_list,
 					&zdev->zcomp->control_zres_list);
-			} else if (mem_type == GENZ_DATA) {
-				zres->res.flags &= ~IORESOURCE_GENZ_CONTROL;
-				name = kzalloc(GENZ_DATA_STR_LEN, GFP_KERNEL);
-				if (name == NULL) {
-					pr_debug("Failed to kmalloc res->name\n");
-				}
-				snprintf(name, GENZ_DATA_STR_LEN,
+				if (ret)
+					goto error;
+
+			}
+			else if (mem_type == GENZ_DATA) {
+				ret = setup_zres(zres, zdev, GENZ_DATA,
+					(zres->res.flags & ~IORESOURCE_GENZ_CONTROL),
+					GENZ_DATA_STR_LEN,
 					"data%d",
-					zdev->resource_count[GENZ_DATA]++);
-				zres->res.name = name;
-				list_add_tail(&zres->component_list,
 					&zdev->zcomp->data_zres_list);
+				if (ret)
+					goto error;
 			}
 			ret = genz_create_attr(zdev, zres);
 			if (ret) {
 				pr_debug("%s: genz_create_attr failed with %d\n", __FUNCTION__, ret);
+				goto error;
 			}
 			/* Revisit: how to get the parent resource?
 			ret = insert_resource(&zres->res, &zdev->parent_res);
@@ -189,7 +211,14 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 		pr_debug("\t\t\tMR_START: 0x%llx\n\t\t\t\tMR_LENGTH: %lld\n\t\t\t\tMR_TYPE: %s\n\t\t\t\tRO_RKEY: 0x%x\n\t\t\t\tRW_KREY 0x%x\n", mem_start, mem_len, (mem_type == GENZ_DATA ? "DATA":"CONTROL"), ro_rkey, rw_rkey);
 	}
 	pr_debug("\t\tend of Memory Region List\n");
+error:
 	return ret;
+}
+
+static void bytes_to_uuid(uuid_t *uuid, uint8_t *ub)
+{
+	memcpy(&uuid->b, (void *) ub, UUID_SIZE);
+	return;
 }
 
 static int parse_resource_list(const struct nlattr * resource_list,
@@ -227,26 +256,10 @@ static int parse_resource_list(const struct nlattr * resource_list,
 		}
 		if (u_attrs[GENZ_A_U_UUID]) {
 			uint8_t * uuid;
-			char *	uuid_name;
-			int	u;
 
 			uuid = nla_data(u_attrs[GENZ_A_U_UUID]);
-			/* use the UUID as the device name */
-			/* Revisit: when to free this name??? */
-			uuid_name = kmalloc(UUID_STRING_LEN+1, GFP_KERNEL);
-			if (!uuid_name) {
-				pr_debug("kmalloc of uuid_name failed\n");
-				goto error;
-			}
-				
-			snprintf(uuid_name, UUID_STRING_LEN + 1, "%pUb", uuid);
-			/* convert to uuid_t */
-			u = uuid_parse(uuid_name, &zdev->uuid);
-			if (u) {
-				pr_debug("uuid_parse failed for resource uuid %pUb\n", (void *) uuid);
-			}
+			bytes_to_uuid(&zdev->uuid, uuid);
 			pr_debug("\t\tUUID: %pUb\n", (void *) uuid);
-			
 		}
 		if (u_attrs[GENZ_A_U_CLASS]) {
 			int condensed_class;
@@ -306,6 +319,7 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 	struct genz_fabric *f;
 	struct genz_subnet *s;
 
+	pr_debug("genz_add_os_component\n");
 	if (info->attrs[GENZ_A_FABRIC_NUM]) {
 		fabric_num = nla_get_u32(info->attrs[GENZ_A_FABRIC_NUM]);
 		pr_debug("Port: %u\n\tFABRIC_NUM: %d",
@@ -346,12 +360,6 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		pr_debug("%s: genz_find_component failed\n", __FUNCTION__);
 		return -ENOMEM;
 	}
-	ret = genz_init_component(zcomp, s, genz_get_cid(gcid));
-	if (ret) {
-		pr_debug("%s: genz_init_component failed with %d\n", __FUNCTION__, ret);
-		return -ret;
-	}
- 
 /*
 	ret = genz_create_gcid_file(&(zcomp->kobj));
 */
@@ -379,16 +387,11 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 */
 
 	if (info->attrs[GENZ_A_FRU_UUID]) {
-		char uuid_str[UUID_STRING_LEN+1];
-		int u;
-	
-		snprintf(uuid_str, UUID_STRING_LEN + 1, "%pUb", 
-				 nla_data(info->attrs[GENZ_A_FRU_UUID]));
-		u = uuid_parse(uuid_str, &zcomp->fru_uuid);
-		if (u)
-			pr_debug("invalid fru uuid\n");
-		else
-			pr_debug("\tFRU_UUID: %pUb\n", &zcomp->fru_uuid);
+		uint8_t * uuid;
+
+		uuid = nla_data(info->attrs[GENZ_A_FRU_UUID]);
+		bytes_to_uuid(&zcomp->fru_uuid, uuid);
+		pr_debug("\tFRU_UUID: %pUb\n", &zcomp->fru_uuid);
 	} else {
 		pr_debug("%s: missing required FRU_UUID\n", __FUNCTION__);
 		ret = -EINVAL;
@@ -399,16 +402,11 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 */
 
 	if (info->attrs[GENZ_A_MGR_UUID]) {
-		char uuid_str[UUID_STRING_LEN+1];
-		int u;
-	
-		snprintf(uuid_str, UUID_STRING_LEN + 1, "%pUb", 
-				 nla_data(info->attrs[GENZ_A_MGR_UUID]));
-		u = uuid_parse(uuid_str, &f->mgr_uuid);
-		if (u)
-			pr_debug("invalid mgr uuid\n");
-		else
-			pr_debug("\tMGR_UUID: %pUb\n", &f->mgr_uuid);
+		uint8_t * uuid;
+
+		uuid = nla_data(info->attrs[GENZ_A_MGR_UUID]);
+		bytes_to_uuid(&f->mgr_uuid, uuid);
+		pr_debug("\tFRU_UUID: %pUb\n", &f->mgr_uuid);
 	} else {
 		pr_debug("%s: missing required MGR_UUID\n", __FUNCTION__);
 		ret = -EINVAL;
@@ -498,6 +496,6 @@ int genz_nl_init(void)
 
 void genz_nl_exit(void)
 {
-	pr_debug("exiting nl module\n");
+	pr_debug("genz_nl_exit\n");
 	genl_unregister_family(&genz_gnl_family);
 }
