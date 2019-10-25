@@ -141,7 +141,6 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
 	uint32_t rw_rkey = -1U;
 	struct netlink_ext_ack extack;
 	struct genz_resource *zres;
-	char *name;
 
 	pr_debug("\t\tMemory Region List:\n");
 	/* Go through the nested list of memory region structures */

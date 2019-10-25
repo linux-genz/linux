@@ -404,7 +404,6 @@ static void force_dev_cleanup(void)
 	pr_debug("in force_dev_cleanup\n");
 	/* go through each fabric */
         list_for_each_entry_safe(f, f_tmp, &genz_fabrics, node) {
-#ifdef NOT_YET
 		struct genz_dev *zdev, *zdev_tmp;
 		struct genz_component *zcomp, *zcomp_tmp;
 		struct genz_subnet *zsub, *zsub_tmp;
