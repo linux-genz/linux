@@ -59,6 +59,7 @@ struct genz_dev {
 	uuid_t 			uuid;      /* component/service/virtual UUID */
 	uint16_t		class;
 	struct list_head	zres_list;
+	struct list_head	uu_list;   /* list of zdevs with same UUID */
 	struct genz_control_info *root_control_info;
 	struct kobject		*root_kobj; /* kobj for /sys/devices/genz<N> */
 	struct genz_driver	*zdrv;
@@ -77,6 +78,7 @@ struct genz_driver {
 	int (*suspend)(struct genz_dev *zdev);
 	int (*resume)(struct genz_dev *zdev);
 	struct device_driver		driver;
+	struct list_head	uu_list;   /* list of zdrvs with same UUID */
 };
 #define to_genz_driver(d) container_of(d, struct genz_driver, driver)
 
@@ -114,6 +116,7 @@ struct genz_bridge_info {
 	uint64_t min_nonvisible_addr;
 	uint64_t max_nonvisible_addr;
 	uint32_t gcid;
+	struct list_head	uu_list;   /* list of zbrs with same UUID */
 };
 
 struct genz_page_grid {
@@ -359,8 +362,13 @@ enum space_type {
 enum uuid_type {
     UUID_TYPE_LOCAL    = 0x1,
     UUID_TYPE_REMOTE   = 0x2,
-    UUID_TYPE_LOOPBACK = 0x3
+    UUID_TYPE_LOOPBACK = 0x4,
+    UUID_TYPE_ZDEVICE  = 0x8,
+    UUID_TYPE_ZDRIVER  = 0x10,
+    UUID_TYPE_ZBRIDGE  = 0x11
 };
+
+#define UUID_TYPE_REMOTE_LOCAL (UUID_TYPE_REMOTE | UUID_TYPE_LOCAL)
 
 struct uuid_tracker_remote {
     uint32_t                ro_rkey;
@@ -380,12 +388,34 @@ struct uuid_tracker_local {
     struct rb_root   uu_remote_uuid_tree;
 };
 
+struct uuid_remote_local {
+    struct uuid_tracker_remote  *remote;
+    struct uuid_tracker_local   *local;
+};
+
+struct uuid_zdev {
+    struct list_head zdev_list;
+};
+
+struct uuid_zdrv {
+    struct list_head zdrv_list;
+};
+
+struct uuid_zbr {
+    struct list_head zbr_list;
+};
+
 struct uuid_tracker {
     uuid_t                      uuid;
     struct rb_node              node;
     struct kref                 refcount;
-    struct uuid_tracker_remote  *remote;
-    struct uuid_tracker_local   *local;
+    enum uuid_type		uutype;
+    union {
+        struct uuid_remote_local	uu_rem_loc;
+        struct uuid_zdev		uu_zdev;
+        struct uuid_zdrv		uu_zdrv;
+        struct uuid_zbr			uu_zbr;
+    };
 };
 
 struct uuid_node {
@@ -471,7 +501,7 @@ static inline bool genz_remote_uuid_empty(struct genz_mem_data *mdata)
 static inline bool genz_uu_remote_uuid_empty(struct genz_mem_data *mdata)
 {
 	return (!mdata->local_uuid ||
-		RB_EMPTY_ROOT(&mdata->local_uuid->local->uu_remote_uuid_tree));
+		RB_EMPTY_ROOT(&mdata->local_uuid->uu_rem_loc.local->uu_remote_uuid_tree));
 }
 
 static inline bool genz_unode_rmr_empty(struct uuid_node *node)
