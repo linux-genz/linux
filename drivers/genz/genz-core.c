@@ -255,12 +255,14 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	zbdev->zbdrv = zbdrv;
 	zbdev->zdev.zdrv = &zbdrv->zdrv;
 	zbdev->zdev.zbdev = zbdev;
+	spin_lock_init(&zbdev->zmmu_lock);
 	dev_set_drvdata(&zbdev->zdev.dev, driver_data);
 
 	/* Revisit: How do we get the bridge's fabric number here? */
 	zbdev->fabric = genz_find_fabric(0);
 	zbdev->bridge_dev = dev;
-	
+
+	/* Revisit: locking */
 	list_add_tail(&zbdev->fab_bridge_node, &zbdev->fabric->bridges);
 	list_add_tail(&zbdev->zdev.fab_dev_node, &zbdev->fabric->devices);
 
@@ -268,6 +270,8 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 }
 
 static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br);
+static int genz_bridge_zmmu_clear(struct genz_bridge_dev *br);
+LIST_HEAD(genz_bridge_list);
 
 /**
  * genz_register_bridge - register a new Gen-Z bridge driver
@@ -290,6 +294,7 @@ int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv,
 {
 	int ret = 0;
 	struct genz_bridge_dev *zbdev;
+	struct genz_bridge_info *info;
 
 	/* Allocate a genz_bridge_dev */
 	/* Revisist: need an genz_allocate_bridge_dev() */
@@ -297,20 +302,38 @@ int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv,
 	if (zbdev == NULL)
 		return -ENOMEM;
 
+	dev_dbg(dev, "entered, zbdrv=%px, driver_data=%px, zbdev=%px\n",
+		zbdrv, driver_data, zbdev);
 	/* Initialize the genz_bridge_dev */
 	ret = initialize_zbdev(zbdev, dev, zbdrv, driver_data);
 	if (ret < 0) {
-		kfree (zbdev);
+		kfree(zbdev);
 		return ret;
 	}
 
+	info = &zbdev->br_info;
 	ret = zbdrv->bridge_info(&zbdev->zdev, &zbdev->br_info);
-	/* Revisit: handle errors */
+	dev_dbg(dev, "bridge_info: ret=%d, req_zmmu=%u, rsp_zmmu=%u, "
+		"xdm=%u, rdm=%u, nr_req_page_grids=%u, nr_rsp_page_grids=%u, "
+		"nr_req_ptes=%llu, nr_rsp_ptes=%llu\n",
+		ret, info->req_zmmu, info->rsp_zmmu, info->xdm, info->rdm,
+		info->nr_req_page_grids, info->nr_rsp_page_grids,
+		info->nr_req_ptes, info->nr_rsp_ptes);
+	if (ret < 0)
+		goto out; /* Revisit: properly undo stuff */
 
 	ret = genz_bridge_zmmu_setup(zbdev);
-	/* Revisit: handle errors */
+	if (ret < 0)
+		goto out; /* Revisit: properly undo stuff */
 
 	ret = genz_bridge_create_control_files(zbdev);
+	/* Revisit: handle errors */
+
+	/* add zbdev to global list */
+	/* Revisit: locking */
+	list_add_tail(&zbdev->bridge_node, &genz_bridge_list);
+
+out:
 	return ret;
 }
 EXPORT_SYMBOL(genz_register_bridge);
@@ -332,6 +355,25 @@ EXPORT_SYMBOL(genz_register_bridge);
 int genz_unregister_bridge(struct device *dev)
 {
 	int ret = 0;
+	struct genz_bridge_dev *zbdev = NULL, *cur;
+
+	/* dev is the native bridge dev - find corresponding genz_bridge_dev */
+	/* Revisit: locking */
+	list_for_each_entry(cur, &genz_bridge_list, bridge_node) {
+		if (cur->bridge_dev == dev) {
+			zbdev = cur;
+			list_del(&zbdev->bridge_node);
+			break;
+		}
+	}
+
+	if (zbdev) {
+		genz_bridge_remove_control_files(zbdev);
+		genz_bridge_zmmu_clear(zbdev);
+		kfree(zbdev);
+	} else {
+		ret = -ENODEV;
+	}
 
 	return ret;
 }
@@ -395,6 +437,8 @@ static int genz_bridge_zmmu_clear(struct genz_bridge_dev *br)
 	    (br->br_info.rsp_zmmu && br->br_info.nr_rsp_page_grids))
 		genz_zmmu_clear_all(br, true);
 	/* Revisit: finish this */
+
+	return 0;
 }
 
 static void force_dev_cleanup(void)

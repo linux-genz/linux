@@ -793,7 +793,7 @@ irqreturn_t wildcat_rdma_rdm_interrupt_handler(int irq_index, void *data)
 	}
 
 	dev_dbg(&zdev->dev, "irq_index %d\n", irq_index);
-	rstate = dev_get_drvdata(&zdev->dev);
+	rstate = genz_get_drvdata(zdev);
 	if (rstate == NULL) {
 		dev_dbg(&zdev->dev, "rstate is NULL\n");
 		return IRQ_NONE;
@@ -1800,7 +1800,7 @@ static int wildcat_rdma_probe(struct genz_dev *zdev,
 	spin_lock_init(&rstate->fdata_lock);
 	INIT_LIST_HEAD(&rstate->fdata_list);
 	rstate->zdev = zdev;
-	dev_set_drvdata(&zdev->dev, rstate);
+	genz_set_drvdata(zdev, rstate);
 
 	/* Create device. */
 	dev_dbg(&zdev->dev, "creating device %s\n", rstate->miscdev.name);
@@ -1817,7 +1817,7 @@ static int wildcat_rdma_probe(struct genz_dev *zdev,
 	return ret;
 
 free_rstate:
-	dev_set_drvdata(&zdev->dev, NULL);
+	genz_set_drvdata(zdev, NULL);
 	kfree(rstate);
 	goto out;
 }
@@ -1826,7 +1826,7 @@ static int wildcat_rdma_remove(struct genz_dev *zdev)
 {
 	struct wildcat_rdma_state *rstate;
 
-	rstate = dev_get_drvdata(&zdev->dev);
+	rstate = genz_get_drvdata(zdev);
 	misc_deregister(&rstate->miscdev);
 	/* Revisit: finish this */
 	kfree(rstate);

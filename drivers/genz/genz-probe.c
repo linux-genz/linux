@@ -162,7 +162,7 @@ out:
 
 }
 
-struct genz_fabric * genz_dev_to_fabric(struct device *dev)
+struct genz_fabric *genz_dev_to_fabric(struct device *dev)
 {
 	struct genz_fabric *fab;
 

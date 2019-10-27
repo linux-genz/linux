@@ -278,7 +278,8 @@ union genz_zmmu_info {
 };
 
 struct genz_bridge_dev {
-	struct list_head	fab_bridge_node;	/* node in list of bridges on fabric */
+	struct list_head	fab_bridge_node; /* node in list of bridges on fabric */
+	struct list_head	bridge_node;	 /* node in global list of bridges */
 	struct genz_dev		zdev;
 	struct genz_bridge_driver *zbdrv;
 	struct device		*bridge_dev; /* native device pointer */
@@ -292,7 +293,7 @@ struct genz_bridge_dev {
 static inline bool zdev_is_local_bridge(struct genz_dev *zdev)
 {
 	return ((zdev != NULL && zdev->zbdev != NULL) ?
-		(zdev == &zdev->zbdev->zdev) : 0);
+		(zdev == &zdev->zbdev->zdev) : false);
 }
 
 #define GENZ_ANY_VERSION  (0xffff)
@@ -347,6 +348,8 @@ extern uint32_t genz_unused_rkey;
 
 #define GENZ_NUM_PASIDS  BIT(16)
 #define NO_PASID         0
+
+#define GENZ_CONTROL_SIZE_UNIT  16 /* control structs are in 16-byte units */
 
 enum space_type {
     GENZ_DATA    = 0,
@@ -474,6 +477,21 @@ static inline bool genz_uu_remote_uuid_empty(struct genz_mem_data *mdata)
 static inline bool genz_unode_rmr_empty(struct uuid_node *node)
 {
 	return RB_EMPTY_ROOT(&node->un_rmr_tree);
+}
+
+static inline void *genz_get_drvdata(struct genz_dev *zdev)
+{
+        return dev_get_drvdata(&zdev->dev);
+}
+
+static inline void genz_set_drvdata(struct genz_dev *zdev, void *data)
+{
+        dev_set_drvdata(&zdev->dev, data);
+}
+
+static inline const char *genz_name(const struct genz_dev *zdev)
+{
+        return dev_name(&zdev->dev);
 }
 
 void genz_rkey_init(void);

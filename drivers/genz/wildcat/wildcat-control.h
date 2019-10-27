@@ -34,30 +34,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "genz.h"
+#ifndef _WILDCAT_CONTROL_H_
+#define _WILDCAT_CONTROL_H_
 
-int genz_create_gcid_file(struct kobject *kobj);
-int genz_create_cclass_file(struct kobject *kobj);
-int genz_create_uuid_file(struct genz_dev *zdev);
-int genz_create_fru_uuid_file(struct kobject *kobj);
-int genz_create_mgr_uuid_file(struct device *dev);
-int genz_create_sid_file(struct genz_subnet *s);
-int  genz_map_core( struct genz_dev *zdev, struct genz_core_structure ** core);
-int genz_find_control_structure(struct genz_dev *zdev, int type, int version);
-int genz_request_control_structure(struct genz_dev *zdev, int index, int type,
-	int version, genz_control_cookie * cookie);
-void genz_release_control_structure(struct genz_dev *zdev,
-	genz_control_cookie cookie);
-int genz_map_control_structure( struct genz_dev *zdev,
-	genz_control_cookie cookie, size_t *size, void **ctrl_struct);
-int genz_request_control_table(struct genz_dev *zdev,
-	genz_control_cookie cookie, int table_offset,
-	int table_prt_size, genz_control_cookie * table_cookie);
-void genz_release_control_table( struct genz_dev *zdev,
-	genz_control_cookie cookie);
-int genz_map_control_table(struct genz_dev *zdev,
-	genz_control_cookie cookie, size_t *size,
-	void **control_table);
-int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev);
-int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev);
-void genz_remove_uuid_file(struct genz_dev *zdev);
+/* Function Prototypes */
+int wildcat_control_read(struct genz_dev *zdev, loff_t offset, size_t size,
+			 void *data, uint flags);
+int wildcat_control_write(struct genz_dev *zdev, loff_t offset, size_t size,
+			  void *data, uint flags);
+
+#endif /* _WILDCAT_CONTROL_H_ */

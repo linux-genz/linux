@@ -358,6 +358,7 @@ struct bridge {
 	spinlock_t              zmmu_lock;  /* global bridge zmmu lock */
 	struct xdm_info         msg_xdm;
 	struct rdm_info         msg_rdm;
+	struct mutex            csr_mutex;  /* protect CSR mailbox */
 #ifdef OLD_ZHPE
 	struct page_grid_info   req_zmmu_pg;
 	struct page_grid_info   rsp_zmmu_pg;
@@ -503,11 +504,12 @@ void wildcat_unbind_iommu(struct genz_bridge_dev *gzbr,
 
 #define arithcmp(_a, _b)        ((_a) < (_b) ? -1 : ((_a) > (_b) ? 1 : 0))
 
-#include "wildcat-zmmu.h"
-#include "wildcat-queue.h"
+#include "wildcat-control.h"
 #include "wildcat-intr.h"
 #include "wildcat-memreg.h"
 #include "wildcat-msg.h"
+#include "wildcat-queue.h"
 #include "wildcat-uuid.h"
+#include "wildcat-zmmu.h"
 
 #endif /* _WILDCAT_H_ */

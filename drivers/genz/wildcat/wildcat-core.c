@@ -109,7 +109,7 @@ MODULE_PARM_DESC(genz_gcid, "Gen-Z bridge global CID");
 uint wildcat_loopback = 1;
 module_param(wildcat_loopback, uint, S_IRUGO);
 MODULE_PARM_DESC(wildcat_loopback, "Wildcat Gen-Z loopback mode (default=1)");
-EXPORT_SYMBOL(wildcat_loopback); /* Revist: should not export */
+EXPORT_SYMBOL(wildcat_loopback); /* Revisit: should not export */
 
 static char *helper_path = "/sbin/wildcat_helper";
 module_param(helper_path, charp, 0444);
@@ -1015,6 +1015,8 @@ static int wildcat_bridge_info(struct genz_dev *zdev,
 
 static struct genz_bridge_driver wildcat_genz_bridge_driver = {
 	.bridge_info = wildcat_bridge_info,
+	.control_read = wildcat_control_read,
+	.control_write = wildcat_control_write,
 	.req_page_grid_write = wildcat_req_page_grid_write,
 	.rsp_page_grid_write = wildcat_rsp_page_grid_write,
 	.req_pte_write = wildcat_req_pte_write,
@@ -1031,7 +1033,7 @@ static int wildcat_probe(struct pci_dev *pdev,
 	int ret, pos;
 	int l_slice_id;
 	void __iomem *base_addr;
-	struct bridge *br = &wildcat_bridge;
+	struct bridge *br = &wildcat_bridge; /* Revisit: MultiBridge */
 	struct slice *sl;
 	phys_addr_t phys_base;
 	uint16_t devctl2;
@@ -1165,8 +1167,7 @@ static int wildcat_probe(struct pci_dev *pdev,
 		}
 		/* register with Gen-Z subsystem on slice 0 only */
 		ret = genz_register_bridge(&pdev->dev,
-					   &wildcat_genz_bridge_driver,
-			br);
+					   &wildcat_genz_bridge_driver, br);
 		if (ret) {
 			dev_dbg(&pdev->dev,
 			      "genz_register_bridge failed with error %d\n",
@@ -1304,6 +1305,7 @@ static int __init wildcat_init(void)
 #endif
 	wildcat_bridge.gcid = genz_gcid;
 	spin_lock_init(&wildcat_bridge.zmmu_lock);
+	mutex_init(&wildcat_bridge.csr_mutex);
 	for (sl = 0; sl < SLICES; sl++) {
 		spin_lock_init(&wildcat_bridge.slice[sl].zmmu_lock);
 	}

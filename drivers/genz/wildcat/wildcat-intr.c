@@ -49,14 +49,12 @@ int wildcat_get_irq_index(struct slice *sl, int queue)
 	}
 	if (queue < 0 || queue > RDM_QUEUES_PER_SLICE) {
 		dev_dbg(&sl->pdev->dev,
-			"%s: failed - queue %d is out of range\n",
-			__func__, queue);
+			"failed - queue %d is out of range\n", queue);
 		return -1;
 	}
 	if (test_bit(queue, sl->rdm_alloced_bitmap) == 0) {
 		dev_dbg(&sl->pdev->dev,
-			"%s: failed - queue %d is not allocated\n",
-			__func__, queue);
+			"failed - queue %d is not allocated\n", queue);
 		return -1;
 	}
 
@@ -155,8 +153,8 @@ static irqreturn_t wildcat_intr_handler(int irq, void *data_ptr)
 	vector = wildcat_irq_to_vector(irq, sl);
 	irq_vector = (sl->id*VECTORS_PER_SLICE) + vector;
 	dev_dbg(&sl->pdev->dev,
-		"%s: received interrupt irq %d maps to irq_vector %d\n",
-		pci_name(pdev), irq, irq_vector);
+		"received interrupt irq %d maps to irq_vector %d\n",
+		irq, irq_vector);
 #ifdef OLD_ZHPE
 	/* Update the triggered count in the shared page */
 	ret = wildcat_trigger(irq_vector, &triggered);
@@ -189,13 +187,11 @@ int wildcat_register_interrupts(struct pci_dev *pdev, struct slice *sl)
 	nvec = pci_alloc_irq_vectors(pdev, 1, VECTORS_PER_SLICE,
 				     PCI_IRQ_MSI);
 	if (nvec <= 0) {
-		dev_dbg(&sl->pdev->dev, "%s: Request for MSI vectors failed.\n",
-			pci_name(pdev));
+		dev_dbg(&sl->pdev->dev, "Request for MSI vectors failed.\n");
 		ret = -1;
 		goto done;
 	} else {
-		dev_dbg(&sl->pdev->dev, "%s: allocated %d irq vectors\n",
-			pci_name(pdev), nvec);
+		dev_dbg(&sl->pdev->dev, "allocated %d irq vectors\n", nvec);
 	}
 
 	sl->irq_vectors_count = nvec;
@@ -204,13 +200,11 @@ int wildcat_register_interrupts(struct pci_dev *pdev, struct slice *sl)
 				  0, wildcat_driver_name, sl);
 		if (ret) {
 			dev_dbg(&sl->pdev->dev,
-				"%s: request_irq %d failed with %d\n",
-				pci_name(pdev), i, ret);
+				"request_irq %d failed with %d\n", i, ret);
 			goto free_vectors;
 		} else {
-			dev_dbg(&sl->pdev->dev,
-				"%s: request_irq[%d] = IRQ %d\n",
-				pci_name(pdev), i, pci_irq_vector(pdev, i));
+			dev_dbg(&sl->pdev->dev, "request_irq[%d] = IRQ %d\n",
+				i, pci_irq_vector(pdev, i));
                 }
 	}
 

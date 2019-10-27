@@ -236,13 +236,13 @@ static ssize_t read_control_structure(struct file *fd,
 		return err;
 	}
 	ret = bridge_zdev->zbdrv->control_read(zdev, ci->start+offset,
-			(int)size, (void *)data, 0);
+					       size, (void *)data, 0);
 	if (ret) {
 		pr_debug("%s: control read failed with %ld\n",
 			__func__, ret);
 		return ret;
 	}
-	return ret;
+	return size;
 }
 
 static ssize_t write_control_structure(struct file *fd,
@@ -265,18 +265,18 @@ static ssize_t write_control_structure(struct file *fd,
 		return err;
 	}
 	ret = bridge_zdev->zbdrv->control_write(zdev, ci->start+offset,
-			(int)size, (void *)data, 0);
+						size, (void *)data, 0);
 	if (ret) {
 		pr_debug("%s: control write failed with %ld\n",
 			__func__, ret);
 		return ret;
 	}
-	return 0;
+	return size;
 }
 
 /*
  * genz_create_control_hierarchy - 
- *  Start with reading the control space a offset 0 to find the core
+ *  Start with reading the control space at offset 0 to find the core
  *  structure. Each structure in the control space is represented by
  *  a struct genz_control_info. The genz_control_info has a tree
  *  representation with pointers to a parent, sibling, and child. The
@@ -481,8 +481,6 @@ static int genz_destroy_control_hierarchy(struct genz_dev *zdev)
 {
 	return 0;	
 }
-
-
 
 static int find_opcode_set_structure(struct genz_dev *zdev, int version);
 {
@@ -768,7 +766,7 @@ static struct genz_control_info * alloc_control_info(struct genz_dev *zdev,
 	ci->start = offset;
 	ci->type = hdr->type;
 	ci->vers = hdr->vers;
-	ci->size = hdr->size;
+	ci->size = hdr->size * GENZ_CONTROL_SIZE_UNIT;
 	ci->parent = parent;
 	/* Revisit: fill out remaining fields.
 	ci->c_access_res =;
@@ -804,6 +802,7 @@ static int traverse_array(struct genz_dev *zdev,
 	}
 
 	/* Now initialize the binary attribute file. */
+	sysfs_bin_attr_init(&ci->battr);
 	ci->battr.attr.name = genz_structure_name(hdr.type);
 	ci->battr.attr.mode = S_IRUSR;
 	ci->battr.size = ci->size;
@@ -959,6 +958,7 @@ static int traverse_chained_control_pointers(struct genz_dev *zdev,
 		}
 
 		/* Now initialize the binary attribute file. */
+		sysfs_bin_attr_init(&ci->battr);
 		ci->battr.attr.name = genz_structure_name(hdr.type);
 		ci->battr.attr.mode = S_IRUSR;
 		ci->battr.size = ci->size;
@@ -1027,6 +1027,7 @@ static int traverse_structure(struct genz_dev *zdev,
 	}
 	
 	/* Now initialize the binary attribute file. */
+	sysfs_bin_attr_init(&ci->battr);
 	ci->battr.attr.name = genz_structure_name(hdr.type);
 	ci->battr.attr.mode = S_IRUSR;
 	ci->battr.size = ci->size;
@@ -1105,6 +1106,7 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	struct genz_control_ptr_info *cpi;
 	struct kobject *control_dir, *attribs_dir;
 	struct genz_dev *zdev;
+	struct genz_bridge_driver *zbdrv;
 
 	if (zbdev == NULL) {
                 pr_debug("%s: zbdev is NULL\n", __func__);
@@ -1117,25 +1119,27 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 		return -EINVAL;
 	}
 
+	zbdrv = zbdev->zbdrv;
 	/* A bridge must have control_read function */
-	if (zdev->zbdev->zbdrv->control_read == NULL) {
+	if (zbdrv->control_read == NULL) {
                 pr_debug("%s: missing control_read()\n", __func__);
 		return -EINVAL;
 	}
 
 	/* Start at offset 0 for the core structure */
-	ret = zdev->zbdev->zbdrv->control_read(zdev, 0, sizeof(hdr), (void *)&hdr, 0);
+	ret = zbdrv->control_read(zdev, 0, sizeof(hdr), (void *)&hdr, 0);
 	if (ret) {
 		pr_debug("%s: initial control read of core structure failed with %d\n",
 			__func__, ret);
 		return ret;
 	}
 
+	pr_debug("control_read of Core Structure header: type=%u, size=0x%x, vers=%u\n",
+		hdr.type, hdr.size, hdr.vers);
 	cpi = &genz_struct_type_to_ptrs[0];
 
-	/* Validate this the expected structure type */
-	/* Revisit: Get Core type from enum instead of hardcoding 0 */
-	if (hdr.type != 0) {
+	/* Validate this is the expected structure type */
+	if (hdr.type != GENZ_CORE_STRUCTURE) {
 		pr_debug("%s: control offset 0 is not core structure. Type is %d\n", __func__, hdr.type);
 		return -EINVAL;
 	}
@@ -1163,25 +1167,26 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	}
 
 	/*
-	 * Create kobject hierarchy under the local bridge devices for
+	 * Create kobject hierarchy under the local bridge device for
 	 * <device>/genzN/attribs and <device>/genzN/control
 	 */
-	/* Revisit: use a bridge number instead of hardcoded 0 for genz0. */
-	zdev->root_kobj = kobject_create_and_add("genz0", &zdev->dev.kobj);
+	/* Revisit: use correct fabric number instead of hardcoded 0 in genz0 */
+	zdev->root_kobj = kobject_create_and_add("genz0",
+						 &zbdev->bridge_dev->kobj);
 	if (zdev->root_kobj == NULL) {
-		pr_debug("%s: failed to create kobject for genz0\n", __func__);
+		pr_debug("failed to create kobject for genz0\n");
 		return -ENOMEM;
 	}
 
 	control_dir = kobject_create_and_add("control", zdev->root_kobj);
 	if (control_dir == NULL) {
-		pr_debug("%s: failed to create kobject for genz0/control\n", __func__);
+		pr_debug("failed to create kobject for genz0/control\n");
 		return -ENOMEM;
 	}
 
 	attribs_dir = kobject_create_and_add("attribs", zdev->root_kobj);
 	if (attribs_dir == NULL) {
-		pr_debug("%s: failed to create kobject for genz0/attribs\n", __func__);
+		pr_debug("failed to create kobject for genz0/attribs\n");
 		kobject_put(zdev->root_kobj);
 		kobject_put(control_dir);
 		return -ENOMEM;
@@ -1200,6 +1205,7 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	}
 
 	/* Now initialize the binary attribute file for the core structure. */
+	sysfs_bin_attr_init(&ci->battr);
 	ci->battr.attr.name = genz_structure_name(hdr.type);
 	ci->battr.attr.mode = S_IRUSR;
 	ci->battr.size = ci->size;
@@ -1208,12 +1214,14 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	ci->battr.private = ci; /* Revisit: is this used/needed? */
 
 	ret = sysfs_create_bin_file(&ci->kobj, &ci->battr);
-
+	/* Revisit: error handling */
 	
 	zdev->root_control_info = ci;
+#ifdef LATER
 	traverse_control_pointers(zdev, ci,
 			&genz_struct_type_to_ptrs[hdr.type], 
 			control_dir);
+#endif /* LATER */
 	return 0;
 }
 EXPORT_SYMBOL_GPL(genz_bridge_create_control_files);
@@ -1224,6 +1232,7 @@ EXPORT_SYMBOL_GPL(genz_bridge_create_control_files);
  */
 int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev)
 {
+	dev_dbg(zbdev->bridge_dev, "function unimplemented");
 	return 0;
 }
 EXPORT_SYMBOL_GPL(genz_bridge_remove_control_files);
