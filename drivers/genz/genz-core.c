@@ -198,10 +198,13 @@ static int genz_remove(struct device *dev)
  * Return:
  * Returns 0 on success. Returns a negative value on error.
  */
+
+/* Revisit: change driver to zdrv */
 int __genz_register_driver(struct genz_driver *driver, struct module *module, 
 				const char *mod_name)
 {
 	int ret;
+	struct genz_device_id *zid;
 
 	if (genz_disabled())
 		return -ENODEV;
@@ -213,12 +216,22 @@ int __genz_register_driver(struct genz_driver *driver, struct module *module,
         driver->driver.owner = module;
         driver->driver.mod_name = mod_name;
 
+	ret = genz_driver_uuid_add(driver);
+	if (ret) {
+		pr_debug( "genz_driver_uuid_add for genz driver %s failed with %d\n",
+			driver->name, ret);
+		return ret;
+	}
+
 	ret = driver_register(&driver->driver);
 	if (ret) {
+		/* Revisit: undo the uuid_add too */
 		pr_debug( "driver_register for genz driver %s failed with %d\n",
 			driver->name, ret);
 		return ret;
 	}
+
+	genz_match_driver_uuid(driver);
 
 	pr_info("Registered new genz driver %s\n", driver->name);
 	return 0;

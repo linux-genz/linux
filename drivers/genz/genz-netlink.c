@@ -299,10 +299,17 @@ static int parse_resource_list(const struct nlattr * resource_list,
 				pr_debug("\tparse of MRL failed\n");
 			}
 		}
+		/*
+		 * Add this resource UUID to the tracker so that drivers
+		 * can be bound to it.
+		 */
+		ret = genz_device_uuid_add(zdev);
 		if (ret) {
-			pr_debug("\tgenz_device_add failed with %d\n", ret);
+			pr_debug("\tgenz_device_uuid_add failed with %d\n", ret);
 			/* Revisit: more clean up here */
+			continue;
 		}
+		genz_match_device_uuid(zdev);
 	}
 	pr_debug("\tend of RESOURCE_LIST\n");
 error:

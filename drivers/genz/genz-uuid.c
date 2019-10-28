@@ -115,6 +115,21 @@ static struct uuid_tracker *uuid_insert(struct uuid_tracker *uu)
 	return uu;
 }
 
+static inline void _uuid_tracker_free(struct uuid_tracker *uu)
+{
+	if (uu->local)
+		kfree(uu->local);
+	if (uu->remote)
+		kfree(uu->remote);
+	if (uu->zdrv_list)
+		kfree(uu->zdrv_list);
+	if (uu->zdev_list)
+		kfree(uu->zdev_list);
+	if (uu->zbr_list)
+		kfree(uu->zbr_list);
+	kfree(uu);
+}
+
 struct uuid_tracker *genz_uuid_tracker_alloc(uuid_t *uuid,
                                              uint type,
                                              gfp_t alloc_flags,
@@ -133,51 +148,62 @@ struct uuid_tracker *genz_uuid_tracker_alloc(uuid_t *uuid,
 	uu->uutype = type;
 
 	if (type & UUID_TYPE_LOCAL) {
-		uu->uu_rem_loc.local = kzalloc(sizeof(struct uuid_tracker_local),
+		uu->local = kzalloc(sizeof(struct uuid_tracker_local),
 				    alloc_flags);
-		if (!uu->uu_rem_loc.local) {
-			kfree(uu);
+		if (!uu->local) {
 			ret = -ENOMEM;
-			goto done;
+			goto error;
 		}
 	}
 
 	if (type & UUID_TYPE_REMOTE) {
-		uu->uu_rem_loc.remote = kzalloc(sizeof(struct uuid_tracker_remote),
+		uu->remote = kzalloc(sizeof(struct uuid_tracker_remote),
 				     alloc_flags);
-		if (!uu->uu_rem_loc.remote) {
-			if (uu->uu_rem_loc.local)
-				kfree(uu->uu_rem_loc.local);
-			kfree(uu);
+		if (!uu->remote) {
 			ret = -ENOMEM;
-			goto done;
+			goto error;
 		}
 	}
 	if (type & UUID_TYPE_ZDRIVER) {
-		INIT_LIST_HEAD(&uu->uu_zdrv.zdrv_list);
+		uu->zdrv_list = kzalloc(sizeof(struct list_head),
+				     alloc_flags);
+		if (!uu->zdrv_list) {
+			ret = -ENOMEM;
+			goto error;
+		}
+		INIT_LIST_HEAD(uu->zdrv_list);
 	}
 	if (type & UUID_TYPE_ZDEVICE) {
-		INIT_LIST_HEAD(&uu->uu_zdev.zdev_list);
+		uu->zdev_list = kzalloc(sizeof(struct list_head),
+				     alloc_flags);
+		if (!uu->zdev_list) {
+			ret = -ENOMEM;
+			goto error;
+		}
+		INIT_LIST_HEAD(uu->zdev_list);
 	}
 	if (type & UUID_TYPE_ZBRIDGE) {
-		INIT_LIST_HEAD(&uu->uu_zbr.zbr_list);
+		uu->zbr_list = kzalloc(sizeof(struct list_head),
+				     alloc_flags);
+		if (!uu->zbr_list) {
+			ret = -ENOMEM;
+			goto error;
+		}
+		INIT_LIST_HEAD(uu->zbr_list);
 	}
 
  done:
 	*status = ret;
-	pr_debug("alloc uuid=%pUb, refcount=%u, local=%px, remote=%px, ret=%d\n",
+	pr_debug("alloc uuid=%pUb, refcount=%u, local=%px, remote=%px, zdrv_list=%px, zdev_list=%px, zbr_list=%px, ret=%d\n",
 		 &uu->uuid,
-		 kref_read(&uu->refcount), uu->uu_rem_loc.local, uu->uu_rem_loc.remote, ret);
-	return uu;
-}
+		 kref_read(&uu->refcount), uu->local, uu->remote,
+		 uu->zdrv_list, uu->zdev_list, uu->zbr_list, ret);
 
-static inline void _uuid_tracker_free(struct uuid_tracker *uu)
-{
-	if (uu->uu_rem_loc.local)
-		kfree(uu->uu_rem_loc.local);
-	if (uu->uu_rem_loc.remote)
-		kfree(uu->uu_rem_loc.remote);
-	kfree(uu);
+	return uu;
+ error:
+	*status = ret;
+	_uuid_tracker_free(uu);
+	return NULL;
 }
 
 struct uuid_tracker *genz_uuid_tracker_insert(struct uuid_tracker *uu,
@@ -190,13 +216,13 @@ struct uuid_tracker *genz_uuid_tracker_insert(struct uuid_tracker *uu,
 	if (found != uu) {  /* already there */
 		ret = -EEXIST;
 		/* make sure found has union of found+uu local & remote */
-		if (uu->uu_rem_loc.local && !found->uu_rem_loc.local) {
-			found->uu_rem_loc.local = uu->uu_rem_loc.local;
-			uu->uu_rem_loc.local = NULL;  /* so _uuid_tracker_free won't free it */
+		if (uu->local && !found->local) {
+			found->local = uu->local;
+			uu->local = NULL;  /* so _uuid_tracker_free won't free it */
 		}
-		if (uu->uu_rem_loc.remote && !found->uu_rem_loc.remote) {
-			found->uu_rem_loc.remote = uu->uu_rem_loc.remote;
-			uu->uu_rem_loc.remote = NULL;  /* so _uuid_tracker_free won't free it */
+		if (uu->remote && !found->remote) {
+			found->remote = uu->remote;
+			uu->remote = NULL;  /* so _uuid_tracker_free won't free it */
 		}
 		_uuid_tracker_free(uu);
 	}
@@ -242,7 +268,7 @@ static void teardown_local_uuid(struct uuid_tracker *local_uu)
 
 	pr_debug("uuid=%pUb\n", &local_uu->uuid);
 
-	for (rb = rb_first_postorder(&local_uu->uu_rem_loc.local->uu_remote_uuid_tree);
+	for (rb = rb_first_postorder(&local_uu->local->uu_remote_uuid_tree);
 	     rb; rb = next) {
 		node = container_of(rb, struct uuid_node, node);
 		uu = node->tracker;
@@ -252,7 +278,7 @@ static void teardown_local_uuid(struct uuid_tracker *local_uu)
 		genz_uuid_remove(uu); /* remove local_uuid reference */
 	}
 
-	local_uu->uu_rem_loc.local->uu_remote_uuid_tree = RB_ROOT;
+	local_uu->local->uu_remote_uuid_tree = RB_ROOT;
 }
 
 int genz_free_local_uuid(struct genz_mem_data *mdata, bool teardown)
@@ -305,8 +331,8 @@ static struct uuid_node *uuid_node_search(struct rb_root *root,
 		} else if (result > 0) {
 			rnode = rnode->rb_right;
 		} else {
-			if (!teardown && unode->tracker->uu_rem_loc.remote &&
-			    READ_ONCE(unode->tracker->uu_rem_loc.remote->torndown)) {
+			if (!teardown && unode->tracker->remote &&
+			    READ_ONCE(unode->tracker->remote->torndown)) {
 				pr_debug("returning NULL because torndown=true, uuid=%pUb\n",
 					 uuid);
 				goto null;
@@ -466,8 +492,8 @@ restart:
 		node = container_of(rb, struct uuid_node, node);
 		uu = node->tracker;
 		pr_debug("uuid = %pUb\n", &uu->uuid);
-		genz_free_uuid_node(mdata, &uu->uu_rem_loc.remote->local_uuid_lock,
-				    &uu->uu_rem_loc.remote->local_uuid_tree,
+		genz_free_uuid_node(mdata, &uu->remote->local_uuid_lock,
+				    &uu->remote->local_uuid_tree,
 				    &mdata->local_uuid->uuid, false);
 		next = rb_next_postorder(rb);  /* must precede kfree() */
 		kfree(node);
@@ -494,14 +520,14 @@ struct uuid_tracker *genz_uuid_tracker_alloc_and_insert(
 	uu = genz_uuid_tracker_alloc(uuid, type, alloc_flags, status);
 	if (uu) {
 		if (type & UUID_TYPE_LOCAL) {
-			uu->uu_rem_loc.local->mdata = mdata;
-			uu->uu_rem_loc.local->uu_remote_uuid_tree = RB_ROOT;
+			uu->local->mdata = mdata;
+			uu->local->uu_remote_uuid_tree = RB_ROOT;
 		}
 		if (type & UUID_TYPE_REMOTE) {
-			uu->uu_rem_loc.remote->rkeys_valid = false;
-			uu->uu_rem_loc.remote->uu_flags = uu_flags;
-			uu->uu_rem_loc.remote->local_uuid_tree = RB_ROOT;
-			spin_lock_init(&uu->uu_rem_loc.remote->local_uuid_lock);
+			uu->remote->rkeys_valid = false;
+			uu->remote->uu_flags = uu_flags;
+			uu->remote->local_uuid_tree = RB_ROOT;
+			spin_lock_init(&uu->remote->local_uuid_lock);
 		}
 
 		uu = genz_uuid_tracker_insert(uu, status);
@@ -566,35 +592,35 @@ int genz_teardown_remote_uuid(uuid_t *src_uuid)
 
 	pr_debug("uuid=%pUb\n", &suu->uuid);
 
-	if (!suu->uu_rem_loc.remote) {
+	if (!suu->remote) {
 		pr_debug("unexpected null ptr, suu->remote=%px, uuid=%pUb\n",
-			 suu->uu_rem_loc.remote, &suu->uuid);
+			 suu->remote, &suu->uuid);
 		goto local;
 	}
-	WRITE_ONCE(suu->uu_rem_loc.remote->torndown, true);
-	spin_lock_irqsave(&suu->uu_rem_loc.remote->local_uuid_lock, flags);
-	for (rb = rb_first_postorder(&suu->uu_rem_loc.remote->local_uuid_tree);
+	WRITE_ONCE(suu->remote->torndown, true);
+	spin_lock_irqsave(&suu->remote->local_uuid_lock, flags);
+	for (rb = rb_first_postorder(&suu->remote->local_uuid_tree);
 	     rb; rb = next) {
 		node = container_of(rb, struct uuid_node, node);
 		tuu = node->tracker;
 		pr_debug("local_uuid_tree uuid=%pUb\n", &tuu->uuid);
 		next = rb_next_postorder(rb);  /* must precede kfree() */
-		mdata = tuu->uu_rem_loc.local->mdata;
+		mdata = tuu->local->mdata;
 		status = genz_free_uuid_node(mdata, &mdata->uuid_lock,
 					     &mdata->md_remote_uuid_tree,
 					     src_uuid, true);
 		kfree(node);
 		genz_uuid_remove(tuu); /* remove local_uuid reference */
 	}
-	suu->uu_rem_loc.remote->local_uuid_tree = RB_ROOT;
-	spin_unlock_irqrestore(&suu->uu_rem_loc.remote->local_uuid_lock, flags);
+	suu->remote->local_uuid_tree = RB_ROOT;
+	spin_unlock_irqrestore(&suu->remote->local_uuid_lock, flags);
 
 local:
 	/* special case for alias loopback UUIDs */
-	if (suu->uu_rem_loc.local) {
-		spin_lock_irqsave(&suu->uu_rem_loc.local->mdata->uuid_lock, flags);
+	if (suu->local) {
+		spin_lock_irqsave(&suu->local->mdata->uuid_lock, flags);
 		teardown_local_uuid(suu);
-		spin_unlock_irqrestore(&suu->uu_rem_loc.local->mdata->uuid_lock, flags);
+		spin_unlock_irqrestore(&suu->local->mdata->uuid_lock, flags);
 	}
 
 	genz_uuid_remove(suu);  /* release extra reference */

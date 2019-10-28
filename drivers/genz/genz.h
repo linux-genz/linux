@@ -226,6 +226,13 @@ struct genz_control_info_attribute {
 #define ROUND_DOWN_PAGE(_addr, _sz) ((_addr) & -(_sz))
 #define ROUND_UP_PAGE(_addr, _sz)   (((_addr) + ((_sz) - 1)) & -(_sz))
 
+struct genz_driver_aux {
+	struct list_head	uu_node;
+	uuid_t			uuid;
+	struct genz_driver	*zdrv;
+	struct genz_device_id	*zid;
+};
+
 /* Global Variables */
 extern struct list_head genz_fabrics;
 

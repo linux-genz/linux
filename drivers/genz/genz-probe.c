@@ -69,9 +69,6 @@ static int genz_init_fabric(struct genz_fabric *f,
 	int ret = 0;
 
 	f->number = fabric_num;
-//	init_rwsem(&f->subnet_sem);
-//	kref_init(&f->kref);
-//	kref_get(&f->kref);
 
 	/*
          * The /sys/devices/genz<N> directory is created by adding a
@@ -104,10 +101,7 @@ void genz_free_fabric(struct device *dev)
 	f = container_of(dev, struct genz_fabric, dev);
 
 	pr_debug("genz_free_fabric %s\n", dev_name(dev));
-// Revisit:	down_write(&genz_fabrics_sem);
 	list_del(&f->node);
-// Revisit:	up_write(&genz_fabrics_sem);
-//	kref_put(&f->kref, fabric_release);
 }
 
 struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
@@ -116,15 +110,12 @@ struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
 	int ret = 0;
 	
 	pr_debug( "entering %s", __func__);
-//	down_read(&genz_fabrics_sem);
 	list_for_each_entry(f, &genz_fabrics, node) {
 		if (f->number == fabric_num) {
 			found = f;
-//			kref_get(&found->kref);
 			break;
 		}
 	}
-//	up_read(&genz_fabrics_sem);
 	if (!found) {
 		pr_debug( "fabric_num %d is not in the list\n", fabric_num);
 		/* make sure this has not already been added. */
@@ -132,7 +123,6 @@ struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
 			if (f->number == fabric_num) {
 				/* Already got added */
 				found = f;
-//				kref_get(&found->kref);
 				goto out;
 			}
 		}
@@ -151,13 +141,10 @@ struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
 			found = NULL;
 			goto out;
 		}
-//		down_write(&genz_fabrics_sem);
 		list_add_tail(&found->node, &genz_fabrics);
-//		up_write(&genz_fabrics_sem);
 	}
 	return found;
 out:
-//	up_write(&genz_fabrics_sem);
 	return found;
 
 }
@@ -198,42 +185,6 @@ void genz_free_subnet(struct device *dev)
 	kfree(s);
 }
 
-#ifdef NOT_YET
-static ssize_t subnet_attr_show(struct kobject *kobj,
-                             struct attribute *attr,
-                             char *buf)
-{
-        struct genz_subnet_attribute *attribute;
-        struct genz_subnet *s;
-
-        attribute = to_genz_subnet_attr(attr);
-        s = to_genz_subnet(kobj);
-
-        if (!attribute->show)
-                return -EIO;
-
-        return attribute->show(s, attribute, buf);
-}
-
-static void subnet_release(struct kobject *kobj)
-{
-	struct genz_subnet *s;
-
-	pr_debug("subnet_release %s\n", kobj->name);
-	s = to_genz_subnet(kobj);
-	list_del(&s->node);
-	kfree(s);
-}
-
-static const struct sysfs_ops subnet_sysfs_ops = {
-	.show = subnet_attr_show,
-};
-static struct kobj_type subnet_ktype = {
-	.sysfs_ops = &subnet_sysfs_ops,
-	.release = subnet_release,
-};
-#endif
-
 static int genz_init_subnet(struct genz_subnet *s,
 		uint32_t sid, struct genz_fabric *f)
 {
@@ -241,18 +192,6 @@ static int genz_init_subnet(struct genz_subnet *s,
 
         s->sid = sid;
 	s->fabric = f;
-
-#ifdef NOT_YET
-        ret = kobject_init_and_add(&s->kobj, &subnet_ktype, &f->dev.kobj, "%04d", sid);
-	if (ret) {
-		kobject_put(&s->kobj);
-		pr_debug( "%s: sid %d is not in the subnets list yet\n", __func__, sid);
-		return ret;
-	}
-	kobject_uevent(&s->kobj, KOBJ_ADD);
-	/* Revisit: add the node to the fabric subnets list */
-#endif
-	
         s->dev.bus = &genz_bus_type;
         s->dev.id = sid;
 	s->dev.release = genz_free_subnet;
@@ -274,149 +213,31 @@ struct genz_subnet *genz_find_subnet(uint32_t sid, struct genz_fabric *f)
 	int ret = 0;
 	
 	pr_debug( "in %s\n", __func__);
-//	down_read(&f->subnet_sem);
 	list_for_each_entry(s, &f->subnets, node) {
 		if (s->sid == sid) {
 			found = s;
-//			kobject_get(&found->kobj);
 			break;
 		}
 	}
 	pr_debug( "sid %d is not in the subnets list yet\n", sid);
-//	up_read(&f->subnet_sem);
 	if (!found) {
 		/* Allocate a new genz_subnet and add to list */
 		found = genz_alloc_subnet();
 		if (!found) {
-//			up_write(&f->subnet_sem);
 			pr_debug( "alloc_subnet failed\n");
 			return found;
 		}
 		ret = genz_init_subnet(found, sid, f);
 		if (ret) {
-//		down_write(&f->subnet_sem);
 		/* make sure this has not already been added. */
 			pr_debug( "init_subnet failed\n");
 			return NULL;
 		}
 		list_add_tail(&found->node, &f->subnets);
 		pr_debug( "added to the subnet list\n");
-//		up_write(&f->subnet_sem);
 	}
 	return found;
 }
-
-#ifdef NOT_YET
-static struct genz_fru *genz_alloc_fru(void)
-{
-	struct genz_fru *f;
-
-	f = kzalloc(sizeof(*f), GFP_KERNEL);
-	if (!f)
-		return NULL;
-
-        INIT_LIST_HEAD(&f->node);
-
-        return f;
-}
-
-static ssize_t fru_attr_show(struct kobject *kobj,
-                             struct attribute *attr,
-                             char *buf)
-{
-        struct genz_fru_attribute *attribute;
-        struct genz_fru *f;
-
-        attribute = to_genz_fru_attr(attr);
-        f = to_genz_fru(kobj);
-
-        if (!attribute->show)
-                return -EIO;
-
-        return attribute->show(f, attribute, buf);
-}
-
-static void fru_release(struct kobject *kobj)
-{
-	struct genz_fru *f;
-
-	pr_debug("fru_release %s\n", kobj->name);
-	f = to_genz_fru(kobj);
-//	down_write(&f->fabric->fru_sem);
-	list_del(&f->node);
-//	up_write(&f->fabric->fru_sem);
-	kfree(f);
-}
-
-void destroy_genz_fru(struct genz_fru *f)
-{
-	kobject_put(&f->kobj);
-}
-
-static const struct sysfs_ops fru_sysfs_ops = {
-	.show = fru_attr_show,
-};
-static struct kobj_type fru_ktype = {
-	.sysfs_ops = &fru_sysfs_ops,
-	.release = fru_release,
-};
-
-static int genz_init_fru(struct genz_fru *f,
-		uuid_t fru_uuid, struct genz_subnet *s)
-{
-	int ret = 0;
-
-        f->fru_uuid = fru_uuid;
-	f->subnet = s;
-
-        ret = kobject_init_and_add(&f->kobj, &fru_ktype, &s->dev.kobj, "%pUb", &fru_uuid);
-	if (ret) {
-		kobject_put(&f->kobj);
-		pr_debug("%s: fru %pUb is not in the frus list yet\n", __func__, &fru_uuid);
-		return ret;
-	}
-	kobject_uevent(&f->kobj, KOBJ_ADD);
-	
-	/* Revisit: locking on this list? */
-	list_add_tail(&f->node, &s->frus);
-
-	return ret;
-}
-
-struct genz_fru *genz_find_fru(uuid_t fru_uuid, struct genz_subnet *s)
-{
-	struct genz_fru *f, *found = NULL;
-	int ret = 0;
-	
-	pr_debug( "entering %s", __func__);
-	list_for_each_entry(f, &s->frus, node) {
-		if (uuid_equal(&f->fru_uuid, &fru_uuid)) {
-			found = f;
-			kobject_get(&found->kobj);
-			break;
-		}
-	}
-	if (!found) {
-		/* Allocate a new genz_fru and add to list */
-		/* Revisit: add a flag that is it initialized. Set to UNINIT in the alloc call. take lock and add to list. do init_fru. Take lock, Set to INITED in init_fru, release lock.  */
-		found = genz_alloc_fru();
-		if (!found) {
-			pr_debug( "genz_alloc_fru returned %d\n", ret);
-			goto out;
-		}
-		ret = genz_init_fru(found, fru_uuid, s);
-		if (ret) {
-			pr_debug( "genz_init_fru returned %d\n", ret);
-			kfree(found);
-			found = NULL;
-			goto out;
-		}
-	}
-	return found;
-out:
-	return found;
-}
-#endif
 
 /* Component Attributes */
 static ssize_t cclass_show(struct device *dev,
@@ -483,51 +304,6 @@ static int genz_create_component_files(struct device *dev)
 	return ret;
 }
 
-#ifdef NOT_YET
-static struct attribute *component_attrs[] = {
-	&gcid_attribute.attr,
-	&cclass_attribute.attr,
-	&fru_uuid_attribute.attr,
-	NULL,
-};
-ATTRIBUTE_GROUPS(component);
-
-static ssize_t component_attr_show(struct kobject *kobj,
-                             struct attribute *attr,
-                             char *buf)
-{
-        struct genz_component_attribute *attribute;
-        struct genz_component *comp;
-
-        attribute = to_genz_component_attr(attr);
-        comp = kobj_to_genz_component(kobj);
-
-        if (!attribute->show)
-                return -EIO;
-
-        return attribute->show(comp, attribute, buf);
-}
-static void component_release(struct kobject *kobj)
-{
-	struct genz_component *comp;
-
-	pr_debug("component_release %s\n", kobj->name);
-	comp = kobj_to_genz_component(kobj);
-	/* Remove from fabric list */
-	list_del(&comp->fab_comp_node);
-	kfree(comp);
-}
-
-static const struct sysfs_ops component_sysfs_ops = {
-	.show = component_attr_show,
-};
-static struct kobj_type component_ktype = {
-	.sysfs_ops = &component_sysfs_ops,
-	.release = component_release,
-	.default_groups = component_groups,
-};
-
-#endif
 struct genz_component *genz_alloc_component(void)
 {
 	struct genz_component *zcomp;
@@ -563,19 +339,6 @@ int genz_init_component(struct genz_component *zcomp,
 
 	zcomp->subnet = s;
 	zcomp->cid = cid;
-
-/*
-        ret = kobject_init_and_add(&zcomp->kobj, &component_ktype, &s->dev.kobj, "%03x", cid);
-	if (ret) {
-		pr_debug( "%s: kobject_init_and_add failed for cid %d\n",
-			 __func__, cid);
-		kobject_put(&zcomp->kobj);
-		return ret;
-	}
-
-	kobject_uevent(&zcomp->kobj, KOBJ_ADD);
-*/
-
         zcomp->dev.bus = &genz_bus_type;
         zcomp->dev.id = cid;
 	zcomp->dev.release = genz_free_comp;
@@ -683,7 +446,6 @@ struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric)
 
         return zdev;
 }
-EXPORT_SYMBOL(genz_alloc_dev);
 
 int genz_device_add(struct genz_dev *zdev)
 {
@@ -699,5 +461,156 @@ int genz_device_add(struct genz_dev *zdev)
 		pr_debug("device_add failed with %d\n", ret);
 	return ret;
 }
-EXPORT_SYMBOL(genz_device_add);
+
+int genz_device_uuid_add(struct genz_dev *zdev)
+{
+	int status = 0;
+	struct uuid_tracker *uu;
+
+	/* Revisit: validate uuid is set */
+	uu = genz_uuid_tracker_alloc(&zdev->uuid,
+			UUID_TYPE_ZDEVICE,
+			GFP_KERNEL,
+			&status);
+	if (status) {
+		return(status);
+	}
+
+	uu = genz_uuid_tracker_insert(uu, &status);
+	if (status) {
+		return(status);
+	}
+	/* add this device to the zdev_list */
+	/* Revisit: locking this list */
+	list_add(&zdev->uu_node, uu->zdev_list);
+
+	/* match with driver and call probe if a match is found */
+	return 0;
+}
+
+int genz_driver_uuid_remove(struct genz_driver *zdrv)
+{
+	/* Revisit: free zaux ++ */
+	return 0;
+}
+
+int genz_driver_uuid_add(struct genz_driver *zdrv)
+{
+	int ret = 0;
+	int status = 0;
+	struct uuid_tracker *uu;
+	struct genz_device_id *zid;
+	struct genz_driver_aux *zaux;
+	int count = 0;
+
+	for (zid = zdrv->id_table; zid != NULL; zid++) {
+		count++;
+	}
+	zdrv->zaux = kzalloc(sizeof(*zdrv->zaux)*count, GFP_KERNEL);
+	if (!zdrv->zaux) {
+		return -ENOMEM;
+	}
+	for (zid = zdrv->id_table, zaux = zdrv->zaux; zid != NULL;
+				zid++, zaux++) {
+		ret = uuid_parse(zid->uuid_str, &zaux->uuid);
+		zaux->zdrv = zdrv;
+		zaux->zid = zid;
+
+		if (ret) {
+			pr_debug("%pUb uuid_parse failed in genz_driver_uuid_add\n", zid->uuid_str);
+			continue;
+		}
+		/* Revisit: validate uuid is set */
+		uu = genz_uuid_tracker_alloc(&zaux->uuid,
+				UUID_TYPE_ZDEVICE,
+				GFP_KERNEL,
+				&status);
+		if (status) {
+			return(status);
+		}
+	
+		uu = genz_uuid_tracker_insert(uu, &status);
+		if (status) {
+			return(status);
+		}
+		/* add this device to the zdrv_list */
+		/* Revisit: locking this list */
+		list_add(&zaux->uu_node, uu->zdrv_list);
+	}
+
+	/* match with driver and call probe if a match is found */
+	return 0;
+}
+
+static int call_probe (struct genz_dev *zdev,
+		struct genz_driver *zdrv,
+		struct genz_device_id *zid)
+{
+	int ret = 0;
+
+	/* call driver probe */
+	if (!zdev->zdrv && zdrv->probe) {
+		zdev->zdrv = zdrv;
+		ret = zdrv->probe(zdev, zid);
+		if (ret < 0) {
+			/* a probe failed - but keep matching uuids */
+			zdev->zdrv = NULL;
+			return ret;
+		} else if (ret > 0) {
+			/* Revisit better message with driver name */
+			dev_warn(&zdev->dev, "Driver probe function unexpectedly returned %d\n", ret);
+		}
+	}
+	return ret;
+}
+
+int genz_match_driver_uuid(struct genz_driver *zdrv)
+{
+	struct uuid_tracker *uu;
+	struct genz_device_id *zid;
+	struct genz_dev *zdev;
+	struct genz_driver_aux *zaux;
+	int ret = 0;
+
+	for (zid = zdrv->id_table, zaux = zdrv->zaux; zid != NULL;
+				zid++, zaux++) {
+		uu = genz_uuid_search(&zaux->uuid);
+		if (!uu) {
+			dev_warn(&zdev->dev, "%pUb zdev uuid not in uuid tracker\n",
+					&zaux->uuid);
+			continue;
+		}
+		/* uuid tracker has a list of devices */
+		list_for_each_entry(zdev, uu->zdev_list, uu_node) {
+			/* call driver probe */
+			ret = call_probe(zdev, zdrv, zid);
+			/* Revisit better message with driver name */
+			dev_dbg(&zdev->dev, "Driver probe function returned %d\n", ret);
+		}
+	}
+	/* Revisit: what should it return? Maybe be a void function? */
+	return 0;
+}
+
+int genz_match_device_uuid(struct genz_dev *zdev)
+{
+	struct uuid_tracker *uu;
+	struct genz_driver_aux *zaux;
+	int ret = 0;
+
+	/* for each driver look for match of this zdev->uuid */
+	uu = genz_uuid_search(&zdev->uuid);
+	if (!uu) {
+		dev_warn(&zdev->dev, "%pUb zdev uuid not in uuid tracker\n",
+				&zdev->uuid);
+		return -EINVAL;
+	}
+	list_for_each_entry(zaux, uu->zdrv_list, uu_node) {
+		ret = call_probe(zdev, zaux->zdrv, zaux->zid);
+		/* Revisit better message with driver name */
+		dev_dbg(&zdev->dev, "Driver probe function returned %d\n", ret);
+	}
+	/* Revisit: what should it return? Maybe be a void function? */
+	return 0;
+}
 

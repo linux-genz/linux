@@ -805,8 +805,8 @@ struct genz_rmr *genz_rmr_get(
 	}
 	/* we now hold a reference to uu */
 	uu = unode->tracker;
-	if (!indiv_rkeys && uu->uu_rem_loc.remote->rkeys_valid)
-		rkey = (writable) ? uu->uu_rem_loc.remote->rw_rkey : uu->uu_rem_loc.remote->ro_rkey;
+	if (!indiv_rkeys && uu->remote->rkeys_valid)
+		rkey = (writable) ? uu->remote->rw_rkey : uu->remote->ro_rkey;
 	rmr->mdata       = mdata;
 	rmr->pte_info    = info;
 	rmr->rsp_zaddr   = rsp_zaddr;
