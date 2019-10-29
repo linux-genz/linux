@@ -159,8 +159,21 @@ static int genz_match_device(struct device *dev, struct device_driver *drv)
 
 static int genz_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
+	struct genz_dev *zdev;
+
 	/* Revisit: use this for hot-add/delete */
-	pr_debug( "%s: entered\n", __func__);
+	if (!dev)
+		return -ENODEV;
+	dev_dbg(dev, "entered\n");
+	zdev = to_genz_dev(dev);
+	if (add_uevent_var(env, "GENZ_UUID=%pUb", &zdev->uuid))
+		return -ENOMEM;
+	if (add_uevent_var(env, "GENZ_CLASS=%04x", zdev->class))
+		return -ENOMEM;
+	if (add_uevent_var(env, "MODALIAS=genz:u%pUbc%04x", 
+		       	&zdev->uuid, zdev->class))
+		return -ENOMEM;
+	dev_dbg(dev, "uuid=%pUb class=%u\n", &zdev->uuid, zdev->class);
 	return 0;
 }
 
@@ -173,6 +186,7 @@ struct bus_type genz_bus_type = {
 	.name = 	"genz",
 	.match =	genz_match_device,
 	.uevent =	genz_uevent,
+	.probe =	genz_device_probe,
 	.shutdown =	genz_shutdown,
 };
 EXPORT_SYMBOL(genz_bus_type);
@@ -204,6 +218,7 @@ int __genz_register_driver(struct genz_driver *driver, struct module *module,
 				const char *mod_name)
 {
 	int ret;
+	struct genz_device_id *zids;
 
 	if (genz_disabled())
 		return -ENODEV;
@@ -215,12 +230,16 @@ int __genz_register_driver(struct genz_driver *driver, struct module *module,
         driver->driver.owner = module;
         driver->driver.mod_name = mod_name;
 
-	ret = genz_driver_uuid_add(driver);
-	if (ret) {
-		pr_debug( "genz_driver_uuid_add for genz driver %s failed with %d\n",
-			driver->name, ret);
-		return ret;
-	}
+	/* Initialize the uuid_t in the genz_device_id list */
+	zids = driver->id_table;
+        if (zids) {
+                while (!uuid_is_null(&zids->uuid) ||
+		     	(zids->uuid_str && uuid_is_valid(zids->uuid_str))) {
+			if (uuid_is_null(&zids->uuid))
+				uuid_parse(zids->uuid_str, &zids->uuid);
+                        zids++;
+                }
+        }
 
 	ret = driver_register(&driver->driver);
 	if (ret) {
@@ -229,8 +248,6 @@ int __genz_register_driver(struct genz_driver *driver, struct module *module,
 			driver->name, ret);
 		return ret;
 	}
-
-	genz_match_driver_uuid(driver);
 
 	pr_info("Registered new genz driver %s\n", driver->name);
 	return 0;

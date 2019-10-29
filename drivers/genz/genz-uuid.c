@@ -121,10 +121,6 @@ static inline void _uuid_tracker_free(struct uuid_tracker *uu)
 		kfree(uu->local);
 	if (uu->remote)
 		kfree(uu->remote);
-	if (uu->zdrv_list)
-		kfree(uu->zdrv_list);
-	if (uu->zdev_list)
-		kfree(uu->zdev_list);
 	if (uu->zbr_list)
 		kfree(uu->zbr_list);
 	kfree(uu);
@@ -164,24 +160,6 @@ struct uuid_tracker *genz_uuid_tracker_alloc(uuid_t *uuid,
 			goto error;
 		}
 	}
-	if (type & UUID_TYPE_ZDRIVER) {
-		uu->zdrv_list = kzalloc(sizeof(struct list_head),
-				     alloc_flags);
-		if (!uu->zdrv_list) {
-			ret = -ENOMEM;
-			goto error;
-		}
-		INIT_LIST_HEAD(uu->zdrv_list);
-	}
-	if (type & UUID_TYPE_ZDEVICE) {
-		uu->zdev_list = kzalloc(sizeof(struct list_head),
-				     alloc_flags);
-		if (!uu->zdev_list) {
-			ret = -ENOMEM;
-			goto error;
-		}
-		INIT_LIST_HEAD(uu->zdev_list);
-	}
 	if (type & UUID_TYPE_ZBRIDGE) {
 		uu->zbr_list = kzalloc(sizeof(struct list_head),
 				     alloc_flags);
@@ -194,10 +172,10 @@ struct uuid_tracker *genz_uuid_tracker_alloc(uuid_t *uuid,
 
  done:
 	*status = ret;
-	pr_debug("alloc uuid=%pUb, refcount=%u, local=%px, remote=%px, zdrv_list=%px, zdev_list=%px, zbr_list=%px, ret=%d\n",
+	pr_debug("alloc uuid=%pUb, refcount=%u, local=%px, remote=%px, zbr_list=%px, ret=%d\n",
 		 &uu->uuid,
 		 kref_read(&uu->refcount), uu->local, uu->remote,
-		 uu->zdrv_list, uu->zdev_list, uu->zbr_list, ret);
+		 uu->zbr_list, ret);
 
 	return uu;
  error:

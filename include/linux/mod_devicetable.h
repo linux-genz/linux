@@ -812,6 +812,7 @@ struct wmi_device_id {
 struct genz_device_id {
 	const char uuid_str[UUID_STRING_LEN+1];	/* Vendor-assigned component or
 						   service UUID */
+	uuid_t		uuid;
 	kernel_ulong_t	driver_data;
 };
 

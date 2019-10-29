@@ -47,6 +47,141 @@
 LIST_HEAD(genz_fabrics);
 DECLARE_RWSEM(genz_fabrics_sem);
 
+static int call_probe(struct genz_dev *zdev, struct genz_driver *zdrv, const struct genz_device_id *zid);
+
+/**
+ * genz_dev_get - increments the reference count of the genz device structure
+ * @zdev: the device being referenced
+ *
+ * Each live reference to a device should be refcounted.
+ *
+ * Drivers for Gen-Z devices should normally record such references in
+ * their probe() methods, when they bind to a device, and release
+ * them by calling genz_dev_put(), in their disconnect() methods.
+ *
+ * A pointer to the device with the incremented reference counter is returned.
+ */
+struct genz_dev *genz_dev_get(struct genz_dev *zdev)
+{
+        if (zdev)
+                get_device(&zdev->dev);
+        return zdev;
+}
+EXPORT_SYMBOL(genz_dev_get);
+
+/**
+ * genz_dev_put - release a use of the genz device structure
+ * @zdev: device that's been disconnected
+ *
+ * Must be called when a user of a device is finished with it.  When the last
+ * user of the device calls this function, the memory of the device is freed.
+ */
+void genz_dev_put(struct genz_dev *zdev)
+{
+        if (zdev)
+                put_device(&zdev->dev);
+}
+EXPORT_SYMBOL(genz_dev_put);
+
+/**
+ * genz_match_one_device - Tell if a Gen-Z device structure has a matching
+ *                        Gen-Z device id structure
+ * @zid: single Gen-Z device id structure to match
+ * @zdev: the Gen-Z device structure to match against
+ *
+ * Returns the matching genz_device_id structure or %NULL if there is no match.
+ */
+static inline const struct genz_device_id *
+genz_match_one_device(const struct genz_device_id *zid,
+		const struct genz_dev *zdev)
+{
+        if (uuid_equal(&zid->uuid, &zdev->uuid))
+                return zid;
+        return NULL;
+}
+
+
+/**
+ * genz_match_id - See if a Gen-Z device matches a given genz id_table
+ * @zids: array of Gen-Z device id structures to search in
+ * @zdev: the Gen-Z device structure to match against.
+ *
+ * Used by a driver to check whether a Gen-Z device present in the
+ * system is in its list of supported devices.  Returns the matching
+ * genz_device_id structure or %NULL if there is no match.
+ */
+const struct genz_device_id *genz_match_id(const struct genz_device_id *zids,
+                                         struct genz_dev *zdev)
+{
+        if (zids) {
+                while (!uuid_is_null(&zids->uuid)) {
+                        if (genz_match_one_device(zids, zdev))
+                                return zids;
+                        zids++;
+                }
+        }
+        return NULL;
+}
+EXPORT_SYMBOL(genz_match_id);
+
+/**
+ * match_device - Tell if a Gen-Z device structure has a matching Gen-Z device id structure
+ * @zdrv: the Gen-Z driver to match against
+ * @zdev: the Gen-Z device structure to match against
+ *
+ * Used by a driver to check whether a Gen-Z device present in the
+ * system is in its list of supported devices.  Returns the matching
+ * genz_device_id structure or %NULL if there is no match.
+ */
+static const struct genz_device_id *match_device(struct genz_driver *zdrv,
+                                                    struct genz_dev *zdev)
+{
+        const struct genz_device_id *found_zid = NULL;
+
+        found_zid = genz_match_id(zdrv->id_table, zdev);
+
+        return found_zid;
+}
+
+
+/**
+ * __genz_device_probe - check if a driver wants to claim a specific Gen-Z device
+ * @zdrv: driver to call to check if it wants the Gen-Z device
+ * @zdev: Gen-Z device being probed
+ *
+ * returns 0 on success, else error.
+ * side-effect: zdev->driver is set to drv when drv claims zdev.
+ */
+static int __genz_device_probe(struct genz_driver *zdrv, struct genz_dev *zdev)
+{
+        const struct genz_device_id *zid;
+        int ret = 0;
+
+        if (!zdev->zdrv && zdrv->probe) {
+                ret = -ENODEV;
+
+                zid = match_device(zdrv, zdev);
+                if (zid)
+                        ret = call_probe(zdev, zdrv, zid);
+        }
+        return ret;
+}
+
+int genz_device_probe(struct device *dev)
+{
+	struct genz_dev *zdev = to_genz_dev(dev);
+	struct genz_driver *zdrv = to_genz_driver(dev->driver);
+	int ret;
+
+	genz_dev_get(zdev);
+	ret = __genz_device_probe(zdrv, zdev);
+	if (ret) {
+		genz_dev_put(zdev);
+	}
+	return ret;
+}
+
+
 static struct genz_fabric *genz_alloc_fabric(void)
 {
 	struct genz_fabric *f;
@@ -462,86 +597,9 @@ int genz_device_add(struct genz_dev *zdev)
 	return ret;
 }
 
-int genz_device_uuid_add(struct genz_dev *zdev)
-{
-	int status = 0;
-	struct uuid_tracker *uu;
-
-	/* Revisit: validate uuid is set */
-	uu = genz_uuid_tracker_alloc(&zdev->uuid, UUID_TYPE_ZDEVICE,
-				     GFP_KERNEL, &status);
-	if (status) {
-		return status;
-	}
-
-	uu = genz_uuid_tracker_insert(uu, &status);
-	if (status) {
-		return status;
-	}
-	/* add this device to the zdev_list */
-	/* Revisit: locking this list */
-	list_add(&zdev->uu_node, uu->zdev_list);
-
-	/* match with driver and call probe if a match is found */
-	return 0;
-}
-
-int genz_driver_uuid_remove(struct genz_driver *zdrv)
-{
-	/* Revisit: free zaux ++ */
-	return 0;
-}
-
-int genz_driver_uuid_add(struct genz_driver *zdrv)
-{
-	int ret = 0;
-	int status = 0;
-	struct uuid_tracker *uu;
-	struct genz_device_id *zid;
-	struct genz_driver_aux *zaux;
-	int count = 0;
-
-	for (zid = zdrv->id_table; zid != NULL; zid++) {
-		count++;
-	}
-	pr_debug("id_table count=%d\n", count);
-	zdrv->zaux = kzalloc(sizeof(*zdrv->zaux)*count, GFP_KERNEL);
-	if (!zdrv->zaux) {
-		return -ENOMEM;
-	}
-	for (zid = zdrv->id_table, zaux = zdrv->zaux; zid != NULL;
-				zid++, zaux++) {
-		ret = uuid_parse(zid->uuid_str, &zaux->uuid);
-		zaux->zdrv = zdrv;
-		zaux->zid = zid;
-		pr_debug("found driver uuid %pUb\n", &zaux->uuid);
-		if (ret) {
-			pr_debug("%pUb uuid_parse failed in genz_driver_uuid_add\n", zid->uuid_str);
-			continue;
-		}
-		/* Revisit: validate uuid is set */
-		uu = genz_uuid_tracker_alloc(&zaux->uuid, UUID_TYPE_ZDRIVER,
-					     GFP_KERNEL, &status);
-		if (status) {
-			return status;
-		}
-	
-		uu = genz_uuid_tracker_insert(uu, &status);
-		if (status) {
-			return status;
-		}
-		/* add this device to the zdrv_list */
-		/* Revisit: locking this list */
-		list_add(&zaux->uu_node, uu->zdrv_list);
-	}
-
-	/* match with driver and call probe if a match is found */
-	return 0;
-}
-
 static int call_probe (struct genz_dev *zdev,
 		struct genz_driver *zdrv,
-		struct genz_device_id *zid)
+		const struct genz_device_id *zid)
 {
 	int ret = 0;
 
@@ -560,54 +618,3 @@ static int call_probe (struct genz_dev *zdev,
 	}
 	return ret;
 }
-
-int genz_match_driver_uuid(struct genz_driver *zdrv)
-{
-	struct uuid_tracker *uu;
-	struct genz_device_id *zid;
-	struct genz_dev *zdev;
-	struct genz_driver_aux *zaux;
-	int ret = 0;
-
-	for (zid = zdrv->id_table, zaux = zdrv->zaux; zid != NULL;
-				zid++, zaux++) {
-		uu = genz_uuid_search(&zaux->uuid);
-		if (!uu) {
-			dev_warn(&zdev->dev, "%pUb zdev uuid not in uuid tracker\n",
-					&zaux->uuid);
-			continue;
-		}
-		/* uuid tracker has a list of devices */
-		list_for_each_entry(zdev, uu->zdev_list, uu_node) {
-			/* call driver probe */
-			ret = call_probe(zdev, zdrv, zid);
-			/* Revisit better message with driver name */
-			dev_dbg(&zdev->dev, "Driver probe function returned %d\n", ret);
-		}
-	}
-	/* Revisit: what should it return? Maybe be a void function? */
-	return 0;
-}
-
-int genz_match_device_uuid(struct genz_dev *zdev)
-{
-	struct uuid_tracker *uu;
-	struct genz_driver_aux *zaux;
-	int ret = 0;
-
-	/* for each driver look for match of this zdev->uuid */
-	uu = genz_uuid_search(&zdev->uuid);
-	if (!uu) {
-		dev_warn(&zdev->dev, "%pUb zdev uuid not in uuid tracker\n",
-				&zdev->uuid);
-		return -EINVAL;
-	}
-	list_for_each_entry(zaux, uu->zdrv_list, uu_node) {
-		ret = call_probe(zdev, zaux->zdrv, zaux->zid);
-		/* Revisit better message with driver name */
-		dev_dbg(&zdev->dev, "Driver probe function returned %d\n", ret);
-	}
-	/* Revisit: what should it return? Maybe be a void function? */
-	return 0;
-}
-

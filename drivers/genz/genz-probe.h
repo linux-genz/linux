@@ -44,7 +44,4 @@ void genz_free_component(struct kref *kref);
 struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric);
 int genz_device_add(struct genz_dev *zdev);
 struct genz_subnet *genz_find_subnet(uint32_t sid, struct genz_fabric *f);
-int genz_match_device_uuid(struct genz_dev *zdev);
-int genz_match_driver_uuid(struct genz_driver *zdrv);
-int genz_device_uuid_add(struct genz_dev *zdev);
-int genz_driver_uuid_add(struct genz_driver *zdrv);
+int genz_device_probe(struct device *dev);

@@ -83,7 +83,7 @@ struct genz_dev {
 
 struct genz_driver {
 	const char			*name;
-	struct genz_device_id		*id_table; /* Null terminated array */
+	struct genz_device_id		*id_table; /* terminated by entry with NULL values */
 	int (*probe)(struct genz_dev *zdev, const struct genz_device_id *id);
 	int (*remove)(struct genz_dev *zdev);  /* Revisit: pci returns void */
 	int (*suspend)(struct genz_dev *zdev);
@@ -373,9 +373,7 @@ enum uuid_type {
     UUID_TYPE_LOCAL    = 0x1,
     UUID_TYPE_REMOTE   = 0x2,
     UUID_TYPE_LOOPBACK = 0x4,
-    UUID_TYPE_ZDEVICE  = 0x8,
-    UUID_TYPE_ZDRIVER  = 0x10,
-    UUID_TYPE_ZBRIDGE  = 0x11
+    UUID_TYPE_ZBRIDGE  = 0x8
 };
 
 #define UUID_TYPE_REMOTE_LOCAL (UUID_TYPE_REMOTE | UUID_TYPE_LOCAL)
@@ -405,8 +403,6 @@ struct uuid_tracker {
     enum uuid_type		uutype;
     struct uuid_tracker_remote  *remote;
     struct uuid_tracker_local   *local;
-    struct list_head 		*zdev_list;
-    struct list_head 		*zdrv_list;
     struct list_head 		*zbr_list;
 };
 
