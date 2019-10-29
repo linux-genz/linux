@@ -204,7 +204,6 @@ int __genz_register_driver(struct genz_driver *driver, struct module *module,
 				const char *mod_name)
 {
 	int ret;
-	struct genz_device_id *zid;
 
 	if (genz_disabled())
 		return -ENODEV;

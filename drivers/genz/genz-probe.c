@@ -315,7 +315,7 @@ struct genz_component *genz_alloc_component(void)
 	kref_init(&zcomp->kref);
         INIT_LIST_HEAD(&zcomp->control_zres_list);
         INIT_LIST_HEAD(&zcomp->data_zres_list);
-	return(zcomp);
+	return zcomp;
 }
 
 void genz_free_comp(struct device *dev)
@@ -357,7 +357,7 @@ int genz_init_component(struct genz_component *zcomp,
 	/* Revisit: add the fab_comp_node to the fabric component list */
 	kref_init(&zcomp->kref);
 	genz_create_component_files(&zcomp->dev);
-	return(ret);
+	return ret;
 }
 
 struct genz_component *genz_find_component(struct genz_subnet *s,
@@ -468,17 +468,15 @@ int genz_device_uuid_add(struct genz_dev *zdev)
 	struct uuid_tracker *uu;
 
 	/* Revisit: validate uuid is set */
-	uu = genz_uuid_tracker_alloc(&zdev->uuid,
-			UUID_TYPE_ZDEVICE,
-			GFP_KERNEL,
-			&status);
+	uu = genz_uuid_tracker_alloc(&zdev->uuid, UUID_TYPE_ZDEVICE,
+				     GFP_KERNEL, &status);
 	if (status) {
-		return(status);
+		return status;
 	}
 
 	uu = genz_uuid_tracker_insert(uu, &status);
 	if (status) {
-		return(status);
+		return status;
 	}
 	/* add this device to the zdev_list */
 	/* Revisit: locking this list */
@@ -506,6 +504,7 @@ int genz_driver_uuid_add(struct genz_driver *zdrv)
 	for (zid = zdrv->id_table; zid != NULL; zid++) {
 		count++;
 	}
+	pr_debug("id_table count=%d\n", count);
 	zdrv->zaux = kzalloc(sizeof(*zdrv->zaux)*count, GFP_KERNEL);
 	if (!zdrv->zaux) {
 		return -ENOMEM;
@@ -515,23 +514,21 @@ int genz_driver_uuid_add(struct genz_driver *zdrv)
 		ret = uuid_parse(zid->uuid_str, &zaux->uuid);
 		zaux->zdrv = zdrv;
 		zaux->zid = zid;
-
+		pr_debug("found driver uuid %pUb\n", &zaux->uuid);
 		if (ret) {
 			pr_debug("%pUb uuid_parse failed in genz_driver_uuid_add\n", zid->uuid_str);
 			continue;
 		}
 		/* Revisit: validate uuid is set */
-		uu = genz_uuid_tracker_alloc(&zaux->uuid,
-				UUID_TYPE_ZDEVICE,
-				GFP_KERNEL,
-				&status);
+		uu = genz_uuid_tracker_alloc(&zaux->uuid, UUID_TYPE_ZDRIVER,
+					     GFP_KERNEL, &status);
 		if (status) {
-			return(status);
+			return status;
 		}
 	
 		uu = genz_uuid_tracker_insert(uu, &status);
 		if (status) {
-			return(status);
+			return status;
 		}
 		/* add this device to the zdrv_list */
 		/* Revisit: locking this list */
