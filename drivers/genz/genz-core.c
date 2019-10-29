@@ -139,7 +139,7 @@ static struct genz_core_structure * genz_read_core(struct device *dev)
 
 static int genz_match_device(struct device *dev, struct device_driver *drv)
 {
-        struct genz_driver *driver = to_genz_driver(drv);
+        struct genz_driver *zdrv = to_genz_driver(drv);
 	struct genz_core_structure *core;
 	int match;
 
@@ -151,7 +151,7 @@ static int genz_match_device(struct device *dev, struct device_driver *drv)
         if (!is_genz_device(core))
                 return 0;
 
-        match = genz_match_id(dev, core, driver->id_table);
+        match = genz_match_id(dev, core, zdrv->id_table);
         if (match)
                 return 1;
         return 0;
@@ -191,19 +191,9 @@ struct bus_type genz_bus_type = {
 };
 EXPORT_SYMBOL(genz_bus_type);
 
-static int genz_probe(struct device *dev)
-{
-	return 0;
-}
-
-static int genz_remove(struct device *dev)
-{
-	return 0;
-}
-
 /**
  * __genz_register_driver - register a new Gen-Z driver
- * @struct genz_driver *driver: the driver structure to register
+ * @struct genz_driver *zdrv: the driver structure to register
  * @struct module *module: owner module of the driver
  * @const char *mod_name: module name string
  *
@@ -214,7 +204,7 @@ static int genz_remove(struct device *dev)
  */
 
 /* Revisit: change driver to zdrv */
-int __genz_register_driver(struct genz_driver *driver, struct module *module, 
+int __genz_register_driver(struct genz_driver *zdrv, struct module *module, 
 				const char *mod_name)
 {
 	int ret;
@@ -223,15 +213,13 @@ int __genz_register_driver(struct genz_driver *driver, struct module *module,
 	if (genz_disabled())
 		return -ENODEV;
 
-        driver->driver.name = driver->name;
-        driver->driver.bus = &genz_bus_type;
-        driver->driver.probe = genz_probe;
-        driver->driver.remove = genz_remove;
-        driver->driver.owner = module;
-        driver->driver.mod_name = mod_name;
+        zdrv->driver.name = zdrv->name;
+        zdrv->driver.bus = &genz_bus_type;
+        zdrv->driver.owner = module;
+        zdrv->driver.mod_name = mod_name;
 
 	/* Initialize the uuid_t in the genz_device_id list */
-	zids = driver->id_table;
+	zids = zdrv->id_table;
         if (zids) {
                 while (!uuid_is_null(&zids->uuid) ||
 		     	(zids->uuid_str && uuid_is_valid(zids->uuid_str))) {
@@ -241,30 +229,30 @@ int __genz_register_driver(struct genz_driver *driver, struct module *module,
                 }
         }
 
-	ret = driver_register(&driver->driver);
+	ret = driver_register(&zdrv->driver);
 	if (ret) {
 		/* Revisit: undo the uuid_add too */
 		pr_debug( "driver_register for genz driver %s failed with %d\n",
-			driver->name, ret);
+			zdrv->name, ret);
 		return ret;
 	}
 
-	pr_info("Registered new genz driver %s\n", driver->name);
+	pr_info("Registered new genz driver %s\n", zdrv->name);
 	return 0;
 }
 EXPORT_SYMBOL(__genz_register_driver);
 
 /**
  * __genz_unregister_driver - register a Gen-Z driver
- * @struct genz_driver *driver: the driver structure to unregister
+ * @struct genz_driver *zdrv: the driver structure to unregister
  *
  * Deletes the driver structure from the list of registered Gen-Z drivers.
  * The driver's remove function will be called for each device it was
  * responsible for. Those devices are then marked as driverless.
  */
-void __genz_unregister_driver(struct genz_driver *driver)
+void __genz_unregister_driver(struct genz_driver *zdrv)
 {
-        driver_unregister(&driver->driver);
+        driver_unregister(&zdrv->driver);
 }
 EXPORT_SYMBOL(__genz_unregister_driver);
 
@@ -305,7 +293,7 @@ LIST_HEAD(genz_bridge_list);
 /**
  * genz_register_bridge - register a new Gen-Z bridge driver
  * @struct device *dev: the device structure to register
- * @struct genz_driver *driver: the Gen-Z driver structure to register
+ * @struct genz_driver *zbdrv: the Gen-Z driver structure to register
  * @void *driver_data: pointer to private driver data
  *
  * A driver calls genz_register_bridge() during probe of a device that
