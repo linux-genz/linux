@@ -183,10 +183,10 @@ struct uuid_tracker *genz_uuid_tracker_alloc(uuid_t *uuid,
 
  done:
 	*status = ret;
-	pr_debug("alloc uuid=%pUb, refcount=%u, local=%px, remote=%px, zbr_list=%px, ret=%d\n",
+	pr_debug("alloc uuid=%pUb, refcount=%u, local=%px, remote=%px, zbr_list=%px, fabric=%px, ret=%d\n",
 		 &uu->uuid,
 		 kref_read(&uu->refcount), uu->local, uu->remote,
-		 uu->zbr_list, ret);
+		 uu->zbr_list, uu->fabric, ret);
 
 	return uu;
  error:
@@ -574,8 +574,11 @@ struct uuid_tracker *genz_fabric_uuid_tracker_alloc_and_insert(
 	if (uu) {
 		prev = genz_uuid_tracker_insert(uu, &status);
 		if (prev == uu) { /* New uuid_tracker */
+			pr_debug("tracker insert prev == uu so new mgr_uuid\n");
 			uu->fabric->fabric_num = get_new_fabric_number();
 			uu->fabric->fabric = genz_find_fabric(uu->fabric->fabric_num);
+		} else {
+			pr_debug("tracker insert prev != uu already in the tracker mgr_uuid\n");
 		}
 	}
 	return uu;
