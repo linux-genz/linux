@@ -61,3 +61,8 @@ int genz_map_control_table(struct genz_dev *zdev,
 int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev);
 int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev);
 void genz_remove_uuid_file(struct genz_dev *zdev);
+int genz_control_read_structure(struct genz_dev *zdev,
+		void *buf, off_t cs_offset,
+		off_t field_offset, size_t field_size);
+void * genz_control_structure_buffer_alloc(
+		enum genz_control_structure_type stype, int flags);

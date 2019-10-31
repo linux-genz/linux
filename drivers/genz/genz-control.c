@@ -1095,67 +1095,107 @@ static int traverse_control_pointers(struct genz_dev *zdev,
 	return 0;
 }
 
+void * genz_control_structure_buffer_alloc(
+		enum genz_control_structure_type stype,
+		int flags)
+{
+	void * buf;
+	int sbytes;
+
+	/* Revisit: validate stype */
+	sbytes = genz_struct_type_to_ptrs[stype].struct_bytes;
+	if (!sbytes)
+		return NULL;
+
+	buf = kzalloc(sbytes, flags);
+	return buf;
+}
+
+int genz_control_read_structure(struct genz_dev *zdev,
+		void *buf, off_t cs_offset,
+		off_t field_offset, size_t field_size)
+{
+	int ret;
+        struct genz_bridge_dev *zbdev;
+        struct genz_bridge_driver *zbdrv;
+
+        if (zdev == NULL) {
+                pr_debug("%s: zdev is NULL\n", __func__);
+                return -EINVAL;
+        }
+        zbdev = zdev->zbdev;
+        if (!zdev_is_local_bridge(zdev)) {
+                pr_debug("%s: zbdev not a bridge\n", __func__);
+                return -EINVAL;
+        }
+        zbdrv = zbdev->zbdrv;
+        if (zbdrv == NULL) {
+                pr_debug("%s: zbdrv is NULL\n", __func__);
+                return -EINVAL;
+        }
+        if (zbdrv->control_read == NULL) {
+                pr_debug("%s: missing control_read()\n", __func__);
+                return -EINVAL;
+        }
+	if (buf == NULL) {
+                pr_debug("%s: buf is NULL\n", __func__);
+                return -EINVAL;
+	}
+	if (field_size == 0) {
+                pr_debug("%s: field_size is 0\n", __func__);
+                return -EINVAL;
+	}
+	ret = zbdrv->control_read(zdev, cs_offset+field_offset, field_size, buf, 0);
+	if (ret) {
+		pr_debug("%s: control read failed with %d\n",
+			__func__, ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+
 /**
  * genz_bridge_create_control_files() - read control space for a local bridge
  */
+#define MAX_GENZ_NAME	16
 int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 {
 	int ret;
 	struct genz_control_structure_header hdr;
 	struct genz_control_info *ci;
 	struct genz_control_ptr_info *cpi;
-	struct kobject *control_dir, *attribs_dir;
+	struct kobject *control_dir;
 	struct genz_dev *zdev;
-	struct genz_bridge_driver *zbdrv;
+	char fab_name[MAX_GENZ_NAME];
 
-	if (zbdev == NULL) {
-                pr_debug("%s: zbdev is NULL\n", __func__);
-		return -EINVAL;
-	}
-
+	/* Read the core header at offset 0 of control space */
 	zdev = &zbdev->zdev;
-	if (!zdev_is_local_bridge(zdev)) {
-                pr_debug("%s: zbdev not a bridge\n", __func__);
-		return -EINVAL;
-	}
-
-	zbdrv = zbdev->zbdrv;
-	/* A bridge must have control_read function */
-	if (zbdrv->control_read == NULL) {
-                pr_debug("%s: missing control_read()\n", __func__);
-		return -EINVAL;
-	}
-
-	/* Start at offset 0 for the core structure */
-	ret = zbdrv->control_read(zdev, 0, sizeof(hdr), (void *)&hdr, 0);
+	ret = genz_control_read_structure(zdev, &hdr, 0, 0,
+			sizeof(hdr));
 	if (ret) {
-		pr_debug("%s: initial control read of core structure failed with %d\n",
-			__func__, ret);
+		pr_debug("%s: failed to read core control structure header %d\n", __func__, ret);
 		return ret;
 	}
 
-	pr_debug("control_read of Core Structure header: type=%u, size=0x%x, vers=%u\n",
-		hdr.type, hdr.size, hdr.vers);
-	cpi = &genz_struct_type_to_ptrs[0];
+	cpi = &genz_struct_type_to_ptrs[GENZ_CORE_STRUCTURE];
 
-	/* Validate this is the expected structure type */
-	if (hdr.type != GENZ_CORE_STRUCTURE) {
-		pr_debug("%s: control offset 0 is not core structure. Type is %d\n", __func__, hdr.type);
-		return -EINVAL;
-	}
+        /* Validate this is the expected structure type */
+        if (hdr.type != GENZ_CORE_STRUCTURE) {
+                pr_debug("%s: control_read of structure %s header is not expected type: %d expected %d\n", __func__, cpi->name, hdr.type, GENZ_CORE_STRUCTURE);
+                return -EINVAL;
+        }
 
-	/* Validate the core structure size. 
-	   Revisit: Could get the structure from the ptr_type and then compare
-	   to the sizeof(struct...). Would need to be version aware. Could
-	   have ptr_type that say it is fixed size or variable size minimum. */
-	if (hdr.size == 0) {
-		pr_debug("%s: core structure size is 0.\n", __func__);
-		return -EINVAL;
-	}
+        /* Validate the structure size */
+        if (hdr.size != cpi->struct_bytes) {
+                pr_debug("%s: control_read of structure %s header is not expected size: %d expected %ld\n", __func__, cpi->name, hdr.size, cpi->struct_bytes);
+                return -EINVAL;
+        }
 
-	/* Validate the version. */
+	/* Validate the version */
 	if (hdr.vers != cpi->vers) {
-		pr_debug("%s: core structure version mismatch expected %d but found %d.\n", __func__, hdr.vers, cpi->vers);
+		pr_debug("%s: control_read of structure %s version mismatch expected %d but found %d.\n", __func__, cpi->name, cpi->vers, hdr.vers);
 		return -EINVAL;
 	}
 
@@ -1170,28 +1210,20 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	 * Create kobject hierarchy under the local bridge device for
 	 * <device>/genzN/attribs and <device>/genzN/control
 	 */
-	/* Revisit: use correct fabric number instead of hardcoded 0 in genz0 */
-	zdev->root_kobj = kobject_create_and_add("genz0",
+	snprintf(fab_name, MAX_GENZ_NAME, "genz%d", zbdev->fabric->number);
+	zdev->root_kobj = kobject_create_and_add(fab_name,
 						 &zbdev->bridge_dev->kobj);
 	if (zdev->root_kobj == NULL) {
-		pr_debug("failed to create kobject for genz0\n");
+		pr_debug("failed to create kobject for %s\n", fab_name);
 		return -ENOMEM;
 	}
 
 	control_dir = kobject_create_and_add("control", zdev->root_kobj);
 	if (control_dir == NULL) {
-		pr_debug("failed to create kobject for genz0/control\n");
+		pr_debug("failed to create kobject for %s/control\n", fab_name);
 		return -ENOMEM;
 	}
 
-	attribs_dir = kobject_create_and_add("attribs", zdev->root_kobj);
-	if (attribs_dir == NULL) {
-		pr_debug("failed to create kobject for genz0/attribs\n");
-		kobject_put(zdev->root_kobj);
-		kobject_put(control_dir);
-		return -ENOMEM;
-	}
-		
 	kobject_init(&ci->kobj, &control_info_ktype);
 	ret = kobject_add(&ci->kobj, control_dir, "%s",
 			genz_structure_name(hdr.type));
@@ -1200,7 +1232,6 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 		kfree(ci);
 		kobject_put(zdev->root_kobj);
 		kobject_put(control_dir);
-		kobject_put(attribs_dir);
 		return ret;
 	}
 

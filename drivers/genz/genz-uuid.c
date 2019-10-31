@@ -37,6 +37,7 @@
 #include <linux/slab.h>
 
 #include "genz.h"
+#include "genz-probe.h"
 
 static struct rb_root   uuid_rbtree = RB_ROOT;
 DEFINE_SPINLOCK(genz_uuid_rbtree_lock);
@@ -123,6 +124,8 @@ static inline void _uuid_tracker_free(struct uuid_tracker *uu)
 		kfree(uu->remote);
 	if (uu->zbr_list)
 		kfree(uu->zbr_list);
+	if (uu->fabric)
+		kfree(uu->fabric);
 	kfree(uu);
 }
 
@@ -168,6 +171,14 @@ struct uuid_tracker *genz_uuid_tracker_alloc(uuid_t *uuid,
 			goto error;
 		}
 		INIT_LIST_HEAD(uu->zbr_list);
+	}
+	if (type & UUID_TYPE_FABRIC) {
+		uu->fabric = kzalloc(sizeof(struct uuid_tracker_fabric),
+				     alloc_flags);
+		if (!uu->fabric) {
+			ret = -ENOMEM;
+			goto error;
+		}
 	}
 
  done:
@@ -545,6 +556,31 @@ struct uuid_node *genz_remote_uuid_alloc_and_insert(
 	return node;
 }
 EXPORT_SYMBOL(genz_remote_uuid_alloc_and_insert);
+
+static atomic_t __fabric_number = ATOMIC_INIT(0);
+static int get_new_fabric_number(void)
+{
+	return atomic_inc_return(&__fabric_number)-1;
+}
+
+struct uuid_tracker *genz_fabric_uuid_tracker_alloc_and_insert(
+		uuid_t *uuid)
+{
+	int status;
+	struct uuid_tracker *uu, *prev;
+
+	uu = genz_uuid_tracker_alloc(uuid, UUID_TYPE_FABRIC, GFP_KERNEL,
+			&status);
+	if (uu) {
+		prev = genz_uuid_tracker_insert(uu, &status);
+		if (prev == uu) { /* New uuid_tracker */
+			uu->fabric->fabric_num = get_new_fabric_number();
+			uu->fabric->fabric = genz_find_fabric(uu->fabric->fabric_num);
+		}
+	}
+	return uu;
+}
+EXPORT_SYMBOL(genz_fabric_uuid_tracker_alloc_and_insert);
 
 static inline bool uuid_tree_empty(void)
 {
