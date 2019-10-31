@@ -164,7 +164,6 @@ static int genz_uevent(struct device *dev, struct kobj_uevent_env *env)
 	/* Revisit: use this for hot-add/delete */
 	if (!dev)
 		return -ENODEV;
-	dev_dbg(dev, "entered\n");
 	zdev = to_genz_dev(dev);
 	if (add_uevent_var(env, "GENZ_UUID=%pUb", &zdev->uuid))
 		return -ENOMEM;
@@ -173,7 +172,9 @@ static int genz_uevent(struct device *dev, struct kobj_uevent_env *env)
 	if (add_uevent_var(env, "MODALIAS=genz:u%pUbc%04x", 
 		       	&zdev->uuid, zdev->class))
 		return -ENOMEM;
+	/*
 	dev_dbg(dev, "uuid=%pUb class=%u\n", &zdev->uuid, zdev->class);
+	*/
 	return 0;
 }
 

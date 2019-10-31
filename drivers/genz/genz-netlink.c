@@ -313,8 +313,35 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 	int ret = 0;
 	struct genz_fabric *f;
 	struct genz_subnet *s;
+	struct uuid_tracker *uu;
+	uuid_t mgr_uuid;
 
 	pr_debug("genz_add_os_component\n");
+	if (info->attrs[GENZ_A_MGR_UUID]) {
+		uint8_t * uuid_str;
+
+		uuid_str = nla_data(info->attrs[GENZ_A_MGR_UUID]);
+		bytes_to_uuid(&mgr_uuid, uuid_str);
+		pr_debug("\tMGR_UUID: %pUb\n", &mgr_uuid);
+	} else {
+		pr_debug("%s: missing required MGR_UUID\n", __FUNCTION__);
+		ret = -EINVAL;
+		goto err;
+	}
+        uu = genz_fabric_uuid_tracker_alloc_and_insert(&mgr_uuid);
+        if (!uu) {
+                return -ENOMEM;
+		goto err;
+        }
+        fabric_num = uu->fabric->fabric_num;
+        f = uu->fabric->fabric;
+	if (f == NULL) {
+		pr_debug("%s: fabric from uu_tracker is NULL\n", __FUNCTION__);
+		ret = -EINVAL;
+		goto err;
+	}
+
+	/*
 	if (info->attrs[GENZ_A_FABRIC_NUM]) {
 		fabric_num = nla_get_u32(info->attrs[GENZ_A_FABRIC_NUM]);
 		pr_debug("Port: %u\n\tFABRIC_NUM: %d",
@@ -327,12 +354,7 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		pr_debug("%s: fabric number is invalid\n", __FUNCTION__);
 		return -EINVAL;
 	}
-	f = genz_find_fabric(fabric_num);
-	if (f == NULL) {
-		pr_debug("%s: failed to find fabric %d\n", __FUNCTION__, fabric_num);
-		return -EINVAL;
-	}
-
+	*/
 	if (info->attrs[GENZ_A_GCID]) {
 		gcid = nla_get_u32(info->attrs[GENZ_A_GCID]);
 		pr_debug("\tGCID: %d ", gcid);
@@ -396,17 +418,6 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 	ret = genz_create_fru_uuid_file(&(zcomp->kobj));
 */
 
-	if (info->attrs[GENZ_A_MGR_UUID]) {
-		uint8_t * uuid;
-
-		uuid = nla_data(info->attrs[GENZ_A_MGR_UUID]);
-		bytes_to_uuid(&f->mgr_uuid, uuid);
-		pr_debug("\tFRU_UUID: %pUb\n", &f->mgr_uuid);
-	} else {
-		pr_debug("%s: missing required MGR_UUID\n", __FUNCTION__);
-		ret = -EINVAL;
-		goto err;
-	}
 	ret = genz_create_mgr_uuid_file(&f->dev);
 	if (ret) {
 		pr_debug("%s: genz_create_mgr_uuid_file failed\n", __FUNCTION__);
