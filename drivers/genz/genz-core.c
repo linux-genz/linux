@@ -228,6 +228,8 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 			    void *driver_data)
 {
 	struct genz_component *zcomp;
+	struct uuid_tracker *uu;
+	uuid_t mgr_uuid;
 
 	/* Allocate a genz_component */
 	zcomp = genz_alloc_component();
@@ -238,12 +240,19 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	zbdev->zbdrv = zbdrv;
 	zbdev->zdev.zdrv = &zbdrv->zdrv;
 	zbdev->zdev.zbdev = zbdev;
+	zbdev->bridge_dev = dev;
 	spin_lock_init(&zbdev->zmmu_lock);
 	dev_set_drvdata(&zbdev->zdev.dev, driver_data);
 
-	/* Revisit: How do we get the bridge's fabric number here? */
-	zbdev->fabric = genz_find_fabric(0);
-	zbdev->bridge_dev = dev;
+	genz_control_read_structure(&zbdev->zdev, &mgr_uuid, 0,
+			offsetof(struct genz_core_structure, mgr_uuid),
+			sizeof(((struct genz_core_structure *)0)->mgr_uuid));
+	uu = genz_fabric_uuid_tracker_alloc_and_insert(&mgr_uuid);
+	if (!uu) {
+		genz_free_component(&zcomp->kref);
+		return -ENOMEM;
+	}
+	zbdev->fabric = uu->fabric->fabric;
 
 	/* Revisit: locking */
 	list_add_tail(&zbdev->fab_bridge_node, &zbdev->fabric->bridges);
