@@ -79,7 +79,7 @@ const static struct nla_policy genz_genl_mem_region_policy[GENZ_A_MR_MAX + 1] = 
 	[GENZ_A_MR_RW_RKEY] = { .type = NLA_U32 },
 };
 
-static struct genz_resource * alloc_and_add_zres(struct genz_dev *zdev)
+static struct genz_resource *alloc_and_add_zres(struct genz_dev *zdev)
 {
 	struct genz_resource *zr;
 
@@ -103,7 +103,7 @@ static int setup_zres(struct genz_resource *zres,
 		struct genz_dev *zdev,
 		int cdtype, int iores_flags,
 		int str_len,
-		char * fmt,
+		char *fmt,
 		struct list_head *cd_zres_list)
 {
 	int ret = 0;
@@ -127,7 +127,7 @@ error:
 	return(ret);
 }
 
-static int parse_mr_list(struct genz_dev *zdev, const struct nlattr * mr_list)
+static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 {
 	struct nlattr *nested_attr;
 	struct nlattr *mr_attrs[GENZ_A_MR_MAX + 1];
@@ -220,7 +220,7 @@ static void bytes_to_uuid(uuid_t *uuid, uint8_t *ub)
 	return;
 }
 
-static int parse_resource_list(const struct nlattr * resource_list,
+static int parse_resource_list(const struct nlattr *resource_list,
 	struct genz_component *zcomp)
 {
 	struct nlattr *nested_attr;
@@ -254,7 +254,7 @@ static int parse_resource_list(const struct nlattr * resource_list,
 				 ret);
 		}
 		if (u_attrs[GENZ_A_U_UUID]) {
-			uint8_t * uuid;
+			uint8_t *uuid;
 
 			uuid = nla_data(u_attrs[GENZ_A_U_UUID]);
 			bytes_to_uuid(&zdev->uuid, uuid);
@@ -262,23 +262,27 @@ static int parse_resource_list(const struct nlattr * resource_list,
 		}
 		if (u_attrs[GENZ_A_U_CLASS]) {
 			int condensed_class;
+			const char *condensed_name;
 
 			zdev->class = nla_get_u16(u_attrs[GENZ_A_U_CLASS]);
 			pr_debug("\t\tClass = %d\n",
 				(uint32_t) zdev->class);
-			if (zdev->class >= GENZ_NUM_HARDWARE_TYPES) {
-				pr_debug("%s: hardware CLASS invalid %d\n",
-					 __FUNCTION__, zdev->class);
-				ret = -EINVAL;
-				goto error;
+			if (zdev->class < genz_hardware_classes_nelems) {
+				condensed_class =
+				      genz_hardware_classes[zdev->class].value;
+				condensed_name =
+				      genz_hardware_classes[zdev->class].condensed_name;
+			} else {
+				condensed_class = GENZ_NUM_HARDWARE_TYPES;
+				condensed_name = "unknown";
 			}
 			/*
-			 * The class is used as the device name along with 
-			 * the count of that type of class. e.g. "memory0"
+			 * The condensed class is used as the device name along
+			 * with the count of that class. e.g. "memory0"
 			 */
-			condensed_class = genz_hardware_classes[zdev->class].value;
-			dev_set_name(&zdev->dev, "%s%d",
-				genz_hardware_classes[zdev->class].condensed_name,
+			/* Revisit: locking or atomic_t */
+			/* Revisit: include fab#:gcid_str in dev name */
+			dev_set_name(&zdev->dev, "%s%d", condensed_name,
 				zdev->zcomp->resource_count[condensed_class]++);
 		} else {
 			pr_debug("%s: missing required CLASS\n", __FUNCTION__);
@@ -382,7 +386,7 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 */
 
 	if (info->attrs[GENZ_A_FRU_UUID]) {
-		uint8_t * uuid;
+		uint8_t *uuid;
 
 		uuid = nla_data(info->attrs[GENZ_A_FRU_UUID]);
 		bytes_to_uuid(&zcomp->fru_uuid, uuid);
@@ -397,11 +401,11 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 */
 
 	if (info->attrs[GENZ_A_MGR_UUID]) {
-		uint8_t * uuid;
+		uint8_t *uuid;
 
 		uuid = nla_data(info->attrs[GENZ_A_MGR_UUID]);
 		bytes_to_uuid(&f->mgr_uuid, uuid);
-		pr_debug("\tFRU_UUID: %pUb\n", &f->mgr_uuid);
+		pr_debug("\tMGR_UUID: %pUb\n", &f->mgr_uuid);
 	} else {
 		pr_debug("%s: missing required MGR_UUID\n", __FUNCTION__);
 		ret = -EINVAL;

@@ -52,15 +52,15 @@ uint64_t genz_zmmu_pte_addr(const struct genz_pte_info *info, uint64_t addr)
 	if (!pg)
 		return GENZ_BASE_ADDR_ERROR;
 
-	base_addr = pg->page_grid.pg_base_address;
+	base_addr = genz_pg_addr(pg);
 	ps = BIT_ULL(pg->page_grid.page_size);
 	pte_off = info->pte_index - pg->page_grid.base_pte_index;
 	return base_addr + (pte_off * ps) + (addr - info->addr_aligned);
 }
 EXPORT_SYMBOL(genz_zmmu_pte_addr);
 
-static void zmmu_clear_pg_info(struct genz_page_grid_info *pgi, uint entries,
-                               bool free_radix_tree)
+static void zmmu_clear_pg_info(struct genz_page_grid_info *pgi,
+			       uint pte_entries, bool free_radix_tree)
 {
 	struct radix_tree_iter iter;
 	void **slot;
@@ -77,9 +77,10 @@ static void zmmu_clear_pg_info(struct genz_page_grid_info *pgi, uint entries,
 	bitmap_zero(pgi->pg_bitmap, PAGE_GRID_ENTRIES);
 	bitmap_zero(pgi->pg_cpu_visible_ps_bitmap, 64);
 	bitmap_zero(pgi->pg_non_visible_ps_bitmap, 64);
-	pgi->pte_entries = entries;
+	pgi->pte_entries = pte_entries;
 	pgi->base_pte_tree = RB_ROOT;
 	pgi->base_addr_tree = RB_ROOT;
+	pgi->humongous_pg = NULL;
 }
 
 void genz_zmmu_clear_all(struct genz_bridge_dev *br, bool free_radix_tree)
@@ -89,9 +90,9 @@ void genz_zmmu_clear_all(struct genz_bridge_dev *br, bool free_radix_tree)
 	pr_debug("br=%px, free_radix_tree=%u\n", br, free_radix_tree);
 	spin_lock_irqsave(&br->zmmu_lock, flags);
 	zmmu_clear_pg_info(&br->zmmu_info.req_zmmu_pg,
-			   br->br_info.nr_req_page_grids, free_radix_tree);
+			   br->br_info.nr_req_ptes, free_radix_tree);
 	zmmu_clear_pg_info(&br->zmmu_info.rsp_zmmu_pg,
-			   br->br_info.nr_rsp_page_grids, free_radix_tree);
+			   br->br_info.nr_rsp_ptes, free_radix_tree);
 	spin_unlock_irqrestore(&br->zmmu_lock, flags);
 }
 
@@ -267,25 +268,25 @@ static int zmmu_find_pg_addr_range(struct genz_page_grid_info *pgi,
 	uint64_t max_addr   = (cpu_visible) ?
 		bri->max_cpuvisible_addr : bri->max_nonvisible_addr;
 	uint64_t ret        = GENZ_BASE_ADDR_ERROR;
-	uint64_t base_addr, next_addr;
+	uint64_t base_addr, next_addr, pg_addr;
 	uint64_t prev_base = 0; /* Revisit: debug */
 
 	/* caller must hold bridge dev zmmu lock */
 
-	pr_debug("pg[%d]:page_size=%llu, "
-		 "page_count=%llu, cpu_visible=%d, min_addr=0x%llx, max_addr=0x%llx\n",
-		 pg_index, page_size, page_count,
-		 cpu_visible, min_addr, max_addr);
+	pr_debug("pg[%d]:page_size=%llu, page_count=%llu, cpu_visible=%d, "
+		 "min_addr=0x%llx, max_addr=0x%llx\n",
+		 pg_index, page_size, page_count, cpu_visible,
+		 min_addr, max_addr);
 
 	for (rb = rb_first(&pgi->base_addr_tree); rb; rb = rb_next(rb)) {
 		pg = container_of(rb, struct genz_page_grid, base_addr_node);
-		if (pg->page_grid.pg_base_address < prev_base)  /* Revisit: debug */
+		pg_addr = genz_pg_addr(pg);
+		if (pg_addr < prev_base)  /* Revisit: debug */
 			pr_debug("base_addr out of order (0x%llx < 0x%llx)\n",
-				 (uint64_t)pg->page_grid.pg_base_address, prev_base);
-		prev_base = pg->page_grid.pg_base_address;
-		base_addr = ROUND_DOWN_PAGE(pg->page_grid.pg_base_address,
-					    page_size);
-		next_addr = ROUND_UP_PAGE(pg->page_grid.pg_base_address +
+				 pg_addr, prev_base);
+		prev_base = pg_addr;
+		base_addr = ROUND_DOWN_PAGE(pg_addr, page_size);
+		next_addr = ROUND_UP_PAGE(pg_addr +
 					  (pg->page_grid.page_count *
 					   BIT_ULL(pg->page_grid.page_size)),
 					  page_size);
@@ -293,8 +294,7 @@ static int zmmu_find_pg_addr_range(struct genz_page_grid_info *pgi,
 			 "next_addr=0x%llx\n",
 			 BIT_ULL(pg->page_grid.page_size),
 			 pg->page_grid.page_count,
-			 (uint64_t)pg->page_grid.pg_base_address,
-			 base_addr, next_addr);
+			 pg_addr, base_addr, next_addr);
 		if (base_addr < min_addr) {
 			if (min_addr < next_addr)
 				min_addr = next_addr;
@@ -309,7 +309,8 @@ static int zmmu_find_pg_addr_range(struct genz_page_grid_info *pgi,
 
 	if ((max_addr - min_addr + 1) >= range) {  /* found a range */
 		/* set base_addr */
-		pgi->pg[pg_index].page_grid.pg_base_address = min_addr;
+		pgi->pg[pg_index].page_grid.pg_base_address =
+			min_addr >> GENZ_PAGE_GRID_MIN_PAGESIZE;
 		/* add genz_pg to rbtree */
 		ret = zmmu_base_addr_insert(pgi, pg_index);
 		if (ret == 0)
@@ -497,12 +498,16 @@ int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
 	/* call bridge driver to write page grid entry */
 	err = br->zbdrv->req_page_grid_write(br, pg_index,
 					     br->zmmu_info.req_zmmu_pg.pg);
-	/* Revisit: error handling */
+	if (err < 0) {
+		dev_dbg(br->bridge_dev, "req_page_grid_write failed, err=%d\n",
+			err);
+		/* Revisit: error handling */
+	}
 
 	pr_debug("pg[%d]:addr=0x%llx-0x%llx, page_size=%u, page_count=%u, "
 		 "base_pte_index=%u, cpu_visible=%d, humongous=%d\n",
-		 pg_index, (uint64_t)req_pg->page_grid.pg_base_address,
-		 req_pg->page_grid.pg_base_address +
+		 pg_index, genz_pg_addr(req_pg),
+		 genz_pg_addr(req_pg) +
 		 (BIT_ULL(req_pg->page_grid.page_size) *
 		  req_pg->page_grid.page_count) - 1,
 		 req_pg->page_grid.page_size, req_pg->page_grid.page_count,
@@ -591,13 +596,18 @@ int genz_rsp_page_grid_alloc(struct genz_bridge_dev *br,
 	radix_tree_preload_end();
 
 	/* call bridge driver to write page grid entry */
-	br->zbdrv->rsp_page_grid_write(br, pg_index,
-				       br->zmmu_info.rsp_zmmu_pg.pg);
+	err = br->zbdrv->rsp_page_grid_write(br, pg_index,
+					     br->zmmu_info.rsp_zmmu_pg.pg);
+	if (err < 0) {
+		dev_dbg(br->bridge_dev, "rsp_page_grid_write failed, err=%d\n",
+			err);
+		/* Revisit: error handling */
+	}
 
-	pr_debug("pg[%d]:addr=0x%llx-0x%llx, page_size=%u, "
-		 "page_count=%u, base_pte_index=%u, humongous=%d\n",
-		 pg_index, (uint64_t)rsp_pg->page_grid.pg_base_address,
-		 rsp_pg->page_grid.pg_base_address +
+	pr_debug("pg[%d]:addr=0x%llx-0x%llx, page_size=%u, page_count=%u, "
+		 "base_pte_index=%u, humongous=%d\n",
+		 pg_index, genz_pg_addr(rsp_pg),
+		 genz_pg_addr(rsp_pg) +
 		 (BIT_ULL(rsp_pg->page_grid.page_size) *
 		  rsp_pg->page_grid.page_count) - 1,
 		 rsp_pg->page_grid.page_size, rsp_pg->page_grid.page_count,

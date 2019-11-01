@@ -253,6 +253,8 @@ struct func1_bar0 {
 
 #define WILDCAT_MIN_CPUVISIBLE_ADDR  (GB(4)+TB(1))
 #define WILDCAT_MAX_CPUVISIBLE_ADDR  (WILDCAT_MIN_CPUVISIBLE_ADDR+TB(250)-1ull)
+#define WILDCAT_MIN_NONVISIBLE_ADDR  TB(256)
+#define WILDCAT_MAX_NONVISIBLE_ADDR  (-1ull)
 
 struct slice {
 	struct func1_bar0   *bar;        /* kernel mapping of BAR */

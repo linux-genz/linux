@@ -517,6 +517,8 @@ int wildcat_bind_iommu(struct genz_bridge_dev *gzbr,
 	struct pci_dev *pdev;
 	struct bridge  *br = wildcat_gzbr_to_br(gzbr);
 
+	if (gzbr == NULL || br == NULL)
+		return -EINVAL;
 	spin_lock(io_lock);
 	for (s=0; s<SLICES; s++) {
 		if (!SLICE_VALID(&(br->slice[s])))
@@ -1001,6 +1003,8 @@ static struct genz_bridge_info wildcat_br_info = {
 	.nr_rsp_ptes         = WILDCAT_RSP_ZMMU_ENTRIES,
 	.min_cpuvisible_addr = WILDCAT_MIN_CPUVISIBLE_ADDR,
 	.max_cpuvisible_addr = WILDCAT_MAX_CPUVISIBLE_ADDR,
+	.min_nonvisible_addr = WILDCAT_MIN_NONVISIBLE_ADDR,
+	.max_nonvisible_addr = WILDCAT_MAX_NONVISIBLE_ADDR,
 };
 
 static int wildcat_bridge_info(struct genz_dev *zdev,
@@ -1267,16 +1271,6 @@ static int __init wildcat_init(void)
 	int                 ret;
 	char                *argv[] = { helper_path, NULL };
 	char                *envp[] = { NULL };
-#ifdef OLD_ZHPE
-	int                 i;
-	struct wildcat_attr default_attr = {
-		.max_tx_queues      = 1024,
-		.max_rx_queues      = 1024,
-		.max_hw_qlen        = 65535,
-		.max_sw_qlen        = 65535,
-		.max_dma_len        = (1U << 31),
-	};
-#endif
 	struct subprocess_info *helper_info;
 	uint                sl;
 
@@ -1287,22 +1281,6 @@ static int __init wildcat_init(void)
 		goto err_out;
 	}
 	ret = -ENOMEM;
-#ifdef OLD_ZHPE
-	global_shared_zpage = wildcat_shared_zpage_alloc(
-		sizeof(*global_shared_data), GLOBAL_SHARED_PAGE);
-	if (!global_shared_zpage) {
-		pr_warning("%s:%s:queue_zpages_alloc failed.\n",
-			   wildcat_driver_name, __func__);
-		goto err_out;
-	}
-	global_shared_data = global_shared_zpage->queue.pages[0];
-	global_shared_data->magic = WILDCAT_MAGIC;
-	global_shared_data->version = WILDCAT_GLOBAL_SHARED_VERSION;
-	global_shared_data->debug_flags = wildcat_debug_flags;
-	global_shared_data->default_attr = default_attr;
-	for (i = 0; i < MAX_IRQ_VECTORS; i++)
-		global_shared_data->triggered_counter[i] = 0;
-#endif
 	wildcat_bridge.gcid = genz_gcid;
 	spin_lock_init(&wildcat_bridge.zmmu_lock);
 	mutex_init(&wildcat_bridge.csr_mutex);

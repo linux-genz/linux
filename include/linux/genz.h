@@ -287,7 +287,7 @@ union genz_zmmu_info {
 		struct genz_page_grid_info req_zmmu_pg;
 		struct genz_page_grid_info rsp_zmmu_pg;
 	};
-	/* struct genz_pt_info;  Revisit: define this */
+	/* struct genz_page_table_info;  Revisit: define this */
 };
 
 struct genz_bridge_dev {
@@ -336,6 +336,12 @@ extern uint32_t genz_unused_rkey;
 #define GENZ_PAGE_GRID_MAX_PAGESIZE  64
 #define GENZ_BASE_ADDR_ERROR         (-1ull)
 
+static inline uint64_t genz_pg_addr(struct genz_page_grid *genz_pg)
+{
+	return genz_pg->page_grid.pg_base_address_0 <<
+		GENZ_PAGE_GRID_MIN_PAGESIZE;
+}
+
 #define GCID_STRING_LEN              8
 
 #define GENZ_MR_GET             ((uint32_t)1 << 0)
@@ -372,8 +378,8 @@ enum space_type {
 enum uuid_type {
     UUID_TYPE_LOCAL    = 0x1,
     UUID_TYPE_REMOTE   = 0x2,
-    UUID_TYPE_LOOPBACK = 0x4,
-    UUID_TYPE_ZBRIDGE  = 0x8
+    UUID_TYPE_LOOPBACK = (UUID_TYPE_LOCAL | UUID_TYPE_REMOTE),
+    UUID_TYPE_ZBRIDGE  = 0x4
 };
 
 #define UUID_TYPE_REMOTE_LOCAL (UUID_TYPE_REMOTE | UUID_TYPE_LOCAL)

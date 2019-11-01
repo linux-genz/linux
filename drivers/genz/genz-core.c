@@ -110,48 +110,14 @@ int genz_validate_structure_type(int type)
 }
 EXPORT_SYMBOL_GPL(genz_validate_structure_type);
 
-static int is_genz_device(struct genz_core_structure *core)
+static int genz_bus_match(struct device *dev, struct device_driver *drv)
 {
-	/* Check that the Z-UUID is the Gen-Z spec value */
-	if (core == NULL)
-		return 0;
-	/* return (core->z_uuid == GENZ_Z_UUID);  */
-	return 1;
-}
-
-static int genz_match_id(
-	struct device *dev,
-	struct genz_core_structure *core,
-	struct genz_device_id *id)
-{
-	/*
-	 * Compare the device's C-UUID and any Service-UUIDs to the
-	 * list of UUID's in the genz_divice_id table
-	 */
-
-	return 0;
-}
-
-static struct genz_core_structure * genz_read_core(struct device *dev)
-{
-	return (struct genz_core_structure *) NULL;
-}
-
-static int genz_match_device(struct device *dev, struct device_driver *drv)
-{
+        struct genz_dev    *zdev = to_genz_dev(dev);
         struct genz_driver *zdrv = to_genz_driver(drv);
-	struct genz_core_structure *core;
-	int match;
+	const struct genz_device_id *match;
 
-	pr_debug( "%s: entered\n", __func__);
-	core = genz_read_core(dev);
-	if (core == 0)
-                return 0;
-
-        if (!is_genz_device(core))
-                return 0;
-
-        match = genz_match_id(dev, core, zdrv->id_table);
+	pr_debug("entered\n");
+        match = genz_match_device(zdrv, zdev);
         if (match)
                 return 1;
         return 0;
@@ -164,27 +130,27 @@ static int genz_uevent(struct device *dev, struct kobj_uevent_env *env)
 	/* Revisit: use this for hot-add/delete */
 	if (!dev)
 		return -ENODEV;
-	dev_dbg(dev, "entered\n");
 	zdev = to_genz_dev(dev);
 	if (add_uevent_var(env, "GENZ_UUID=%pUb", &zdev->uuid))
 		return -ENOMEM;
 	if (add_uevent_var(env, "GENZ_CLASS=%04x", zdev->class))
 		return -ENOMEM;
-	if (add_uevent_var(env, "MODALIAS=genz:u%pUbc%04x", 
-		       	&zdev->uuid, zdev->class))
+	if (add_uevent_var(env, "MODALIAS=genz:%pUb", &zdev->uuid))
 		return -ENOMEM;
-	dev_dbg(dev, "uuid=%pUb class=%u\n", &zdev->uuid, zdev->class);
+	/* Revisit */
+	//dev_dbg(dev, "uuid=%pUb class=%u\n", &zdev->uuid, zdev->class);
 	return 0;
 }
 
 static void genz_shutdown(struct device *dev)
 {
-	pr_debug( "%s: entered\n", __func__);
+	dev_dbg(dev, "entered\n");
+	/* Revisit: finish this */
 }
 
 struct bus_type genz_bus_type = {
 	.name = 	"genz",
-	.match =	genz_match_device,
+	.match =	genz_bus_match,
 	.uevent =	genz_uevent,
 	.probe =	genz_device_probe,
 	.shutdown =	genz_shutdown,
@@ -340,8 +306,10 @@ int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv,
 		goto out; /* Revisit: properly undo stuff */
 
 	ret = genz_bridge_zmmu_setup(zbdev);
-	if (ret < 0)
+	if (ret < 0) {
+		pr_debug("genz_bridge_zmmu_setup failed, ret=%d\n", ret);
 		goto out; /* Revisit: properly undo stuff */
+	}
 
 	ret = genz_bridge_create_control_files(zbdev);
 	/* Revisit: handle errors */
@@ -396,6 +364,25 @@ int genz_unregister_bridge(struct device *dev)
 }
 EXPORT_SYMBOL(genz_unregister_bridge);
 
+struct genz_bridge_dev *genz_find_bridge(struct genz_dev *zdev)
+{
+	struct genz_bridge_dev *zbdev = NULL;
+	struct genz_fabric *fabric;
+
+	fabric = zdev->zcomp->subnet->fabric;
+	dev_dbg(&zdev->dev, "fabric=%px\n", fabric);
+
+	/* Revisit: do something smarter than "first_entry" */
+	if (fabric && !list_empty(&fabric->bridges)) {
+		zbdev = list_first_entry(&fabric->bridges,
+					 struct genz_bridge_dev,
+					 fab_bridge_node);
+	}
+
+	dev_dbg(&zdev->dev, "zbdev=%px\n", zbdev);
+	return zbdev;
+}
+
 static struct genz_page_grid req_parse_pg[PAGE_GRID_ENTRIES];
 static struct genz_page_grid rsp_parse_pg[PAGE_GRID_ENTRIES];
 static uint req_pg_cnt, rsp_pg_cnt;
@@ -425,7 +412,11 @@ static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br)
 			for (pg = 0; pg < req_pg_cnt; pg++) {
 				pg_index = genz_req_page_grid_alloc(
 					br, &req_parse_pg[pg]);
-				/* Revisit: error handling */
+				if (pg_index < 0) {
+					pr_debug("genz_req_page_grid_alloc failed, ret=%d\n",
+						 pg_index);
+					err = (err == 0) ? pg_index : err;
+				}
 			}
 		}
 		/* Revisit: add page table support */
@@ -439,7 +430,11 @@ static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br)
 			for (pg = 0; pg < rsp_pg_cnt; pg++) {
 				pg_index = genz_rsp_page_grid_alloc(
 					br, &rsp_parse_pg[pg]);
-				/* Revisit: error handling */
+				if (pg_index < 0) {
+					pr_debug("genz_rsp_page_grid_alloc failed, ret=%d\n",
+						 pg_index);
+					err = (err == 0) ? pg_index : err;
+				}
 			}
 		}
 		/* Revisit: add page table support */

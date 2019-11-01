@@ -45,3 +45,5 @@ struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric);
 int genz_device_add(struct genz_dev *zdev);
 struct genz_subnet *genz_find_subnet(uint32_t sid, struct genz_fabric *f);
 int genz_device_probe(struct device *dev);
+const struct genz_device_id *genz_match_device(struct genz_driver *zdrv,
+					       struct genz_dev *zdev);

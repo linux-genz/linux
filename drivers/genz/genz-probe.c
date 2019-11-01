@@ -125,7 +125,7 @@ const struct genz_device_id *genz_match_id(const struct genz_device_id *zids,
 EXPORT_SYMBOL(genz_match_id);
 
 /**
- * match_device - Tell if a Gen-Z device structure has a matching Gen-Z device id structure
+ * genz_match_device - Tell if a Gen-Z device structure has a matching Gen-Z device id structure
  * @zdrv: the Gen-Z driver to match against
  * @zdev: the Gen-Z device structure to match against
  *
@@ -133,8 +133,8 @@ EXPORT_SYMBOL(genz_match_id);
  * system is in its list of supported devices.  Returns the matching
  * genz_device_id structure or %NULL if there is no match.
  */
-static const struct genz_device_id *match_device(struct genz_driver *zdrv,
-                                                    struct genz_dev *zdev)
+const struct genz_device_id *genz_match_device(struct genz_driver *zdrv,
+					       struct genz_dev *zdev)
 {
         const struct genz_device_id *found_zid = NULL;
 
@@ -160,7 +160,7 @@ static int __genz_device_probe(struct genz_driver *zdrv, struct genz_dev *zdev)
         if (!zdev->zdrv && zdrv->probe) {
                 ret = -ENODEV;
 
-                zid = match_device(zdrv, zdev);
+                zid = genz_match_device(zdrv, zdev);
                 if (zid)
                         ret = call_probe(zdev, zdrv, zid);
         }
@@ -180,7 +180,6 @@ int genz_device_probe(struct device *dev)
 	}
 	return ret;
 }
-
 
 static struct genz_fabric *genz_alloc_fabric(void)
 {
@@ -284,6 +283,7 @@ out:
 
 }
 
+/* Revisit: never called - delete? */
 struct genz_fabric *genz_dev_to_fabric(struct device *dev)
 {
 	struct genz_fabric *fab;
@@ -578,6 +578,7 @@ struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric)
         list_add_tail(&zdev->fab_dev_node, &fabric->devices);
         zdev->dev.type = &genz_dev_type;
         INIT_LIST_HEAD(&zdev->zres_list);
+	pr_debug("fabric=%px, zdev=%px\n", fabric, zdev);
 
         return zdev;
 }
@@ -589,6 +590,7 @@ int genz_device_add(struct genz_dev *zdev)
         zdev->dev.bus = &genz_bus_type;
 	zdev->dev.parent = &zdev->zcomp->dev;
 	zdev->dev.release = genz_release_dev;
+	zdev->zbdev = genz_find_bridge(zdev);
 	device_initialize(&zdev->dev);
 
 	ret = device_add(&zdev->dev);

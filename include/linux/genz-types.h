@@ -4662,6 +4662,7 @@ struct genz_hardware_classes_meta {
 };
 
 extern struct genz_hardware_classes_meta genz_hardware_classes[];
+extern size_t genz_hardware_classes_nelems;
 
 struct genz_core_structure {
     uint64_t type                                 : 12;

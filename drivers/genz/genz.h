@@ -137,7 +137,7 @@ struct genz_component {
 	struct list_head	control_zres_list; /* head of zres list */
 	struct list_head	data_zres_list;    /* head of zres list */
 	struct kref		kref;
-	int resource_count[GENZ_NUM_HARDWARE_TYPES];
+	int resource_count[GENZ_NUM_HARDWARE_TYPES+1]; /* +1 for "unknown" */
 };
 #define dev_to_genz_component(x) container_of(x, struct genz_component, dev)
 
@@ -250,4 +250,5 @@ int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
 int genz_rsp_page_grid_alloc(struct genz_bridge_dev *br,
 			     struct genz_page_grid *grid);
 void genz_uuid_exit(void);
+struct genz_bridge_dev *genz_find_bridge(struct genz_dev *zdev);
 #endif /* DRIVERS_GENZ_H */

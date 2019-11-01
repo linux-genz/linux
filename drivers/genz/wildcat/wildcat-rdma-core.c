@@ -441,7 +441,7 @@ static int alloc_map_shared_data(struct file_data *fdata)
 		wildcat_shared_zpage_alloc(sizeof(*local_shared_data),
 					   LOCAL_SHARED_PAGE);
 	if (!fdata->local_shared_zpage) {
-		pr_debug("queue_zpages_alloc failed.\n");
+		pr_debug("local shared page alloc failed.\n");
 		ret = -ENOMEM;
 		goto done;
 	}
@@ -899,7 +899,8 @@ int wildcat_req_RQALLOC(struct wildcat_rdma_req_RQALLOC *req,
 	ret = wildcat_register_rdm_interrupt(sl, queue,
 			wildcat_rdma_rdm_interrupt_handler, br);
 	if (ret != 0) {
-		pr_debug("zhpe_register_rdm_interrupt failed with %d\n", ret);
+		pr_debug("wildcat_register_rdm_interrupt failed with %d\n",
+			 ret);
 		goto free_cmplq_zmap;
 	}
 
@@ -1017,7 +1018,7 @@ static void release_owned_xdm_queues(struct file_data *fdata)
 		queue = bit % XDM_QUEUES_PER_SLICE;
 		ret = wildcat_xqueue_free(br, slice, queue);
 		if (ret) {
-			pr_debug("zhpe_release_owed_xdm_queues failed to free queue %d on slice %d\n",
+			pr_debug("failed to free queue %d on slice %d\n",
 				 queue, slice);
 		}
 		clear_bit(bit, fdata->xdm_queues);
@@ -1044,7 +1045,7 @@ static void release_owned_rdm_queues(struct file_data *fdata)
 		queue = bit % RDM_QUEUES_PER_SLICE;
 		ret = wildcat_rqueue_free(br, slice, queue);
 		if (ret) {
-			pr_debug("zhpe_release_owed_rdm_queues failed to free queue %d on slice %d\n",
+			pr_debug("failed to free queue %d on slice %d\n",
 				 queue, slice);
 		}
 		clear_bit(bit, fdata->rdm_queues);
@@ -1392,13 +1393,17 @@ static int wildcat_rdma_open(struct inode *inode, struct file *file)
 		goto done;
 	}
 	ret = genz_pasid_alloc(&fdata->pasid);
-	if (ret < 0)
+	if (ret < 0) {
+		pr_debug("genz_pasid_alloc:failed with ret=%d\n", ret);
 		goto free_shared_data;
+	}
 	/* Bind the task to the PASID on the device, if there is an IOMMU. */
 	ret = wildcat_bind_iommu(fdata->rstate->zdev->zbdev,
 				 &fdata->io_lock, fdata->pasid);
-	if (ret < 0)
+	if (ret < 0) {
+		pr_debug("wildcat_bind_iommu:failed with ret=%d\n", ret);
 		goto free_pasid;
+	}
 
 	/* Add this fdata to the bridge's fdata_list */
 	spin_lock(&fdata->rstate->fdata_lock);
@@ -1842,9 +1847,32 @@ static struct genz_driver wildcat_rdma_genz_driver = {
 
 static int __init wildcat_rdma_init(void)
 {
-	int                 ret;
+	int i, ret;
+	struct wildcat_attr default_attr = {
+		.max_tx_queues    = 1024,
+		.max_rx_queues    = 1024,
+		.max_hw_qlen      = 65535,
+		.max_sw_qlen      = 65535,
+		.max_dma_len      = (1U << 31),
+	};
 
 	pr_debug("init\n");
+	global_shared_zpage = wildcat_shared_zpage_alloc(
+		sizeof(*global_shared_data), GLOBAL_SHARED_PAGE);
+	if (!global_shared_zpage) {
+		pr_warn("%s:%s:wildcat_shared_zpage_alloc failed.\n",
+		       wildcat_rdma_driver_name, __func__);
+		ret = -ENOMEM;
+		goto out;
+	}
+	global_shared_data = global_shared_zpage->queue.pages[0];
+	global_shared_data->magic = WILDCAT_MAGIC;
+	global_shared_data->version = WILDCAT_GLOBAL_SHARED_VERSION;
+
+	global_shared_data->default_attr = default_attr;
+	for (i = 0; i < MAX_IRQ_VECTORS; i++)
+		global_shared_data->triggered_counter[i] = 0;
+
 	ret = genz_register_driver(&wildcat_rdma_genz_driver);
 	if (ret < 0) {
 		pr_warning("%s:%s:genz_register_driver returned %d\n",
