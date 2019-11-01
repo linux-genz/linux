@@ -1155,7 +1155,57 @@ int genz_control_read_structure(struct genz_dev *zdev,
 	return 0;
 }
 
+int genz_control_read_cid0(struct genz_dev *zdev, uint16_t *cid0)
+{
 
+	int ret;
+	uint32_t buf;
+
+	/* CID0 is 16 bits in the middle of a word. The word starts
+	 * with the CV field. So read 32 bits and mask off the CID0 */
+	ret = genz_control_read_structure(zdev, &buf, 0,
+			0xC0, /* Revisit: how to get offsets better */
+			sizeof(buf));
+	if (ret)
+		return ret;
+	*cid0 = ((buf >> 8) & 0xFFF);
+	pr_debug("%s: 0x%x\n", __func__, *cid0);
+	return ret;
+}
+
+int genz_control_read_sid(struct genz_dev *zdev, uint16_t *sid)
+{
+	int ret;
+
+	ret = genz_control_read_structure(zdev, sid, 0,
+			0xB8, /* Revisit: how to get offsets better */
+			sizeof(*sid));
+	pr_debug("%s: 0x%x\n", __func__, *sid);
+	return ret;
+}
+
+
+int genz_control_read_cclass(struct genz_dev *zdev, uint16_t *cclass)
+{
+	int ret;
+
+	ret = genz_control_read_structure(zdev, cclass, 0, 
+			0x18, /* Revisit: how to get offsets better */
+			sizeof(*cclass));
+	pr_debug("%s: 0x%x\n", __func__, *cclass);
+	return ret;
+}
+
+int genz_control_read_fru_uuid(struct genz_dev *zdev, uuid_t *fru_uuid)
+{
+	int ret;
+
+	ret = genz_control_read_structure(zdev, fru_uuid, 0,
+			0x1F0, /* Revisit: how to get offsets better */
+			sizeof(*fru_uuid));
+	pr_debug("%s: %pUb\n", __func__, fru_uuid);
+	return ret;
+}
 /**
  * genz_bridge_create_control_files() - read control space for a local bridge
  */

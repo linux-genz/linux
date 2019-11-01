@@ -130,7 +130,7 @@ struct genz_fru_attribute {
 struct genz_component {
 	uint32_t		cid;
 	struct device		dev;  /* /sys/devices/genz<N>/SID/CID */
-	uint8_t			cclass;
+	uint16_t		cclass;
 	uuid_t			fru_uuid;
 	struct genz_subnet	*subnet;
 	struct list_head	fab_comp_node; /* Node in the per-fabric list */
