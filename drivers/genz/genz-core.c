@@ -230,6 +230,9 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	struct genz_component *zcomp;
 	struct uuid_tracker *uu;
 	uuid_t mgr_uuid;
+	uint16_t sid, cid;
+	int ret = 0;
+	struct genz_subnet *s;
 
 	/* Allocate a genz_component */
 	zcomp = genz_alloc_component();
@@ -253,12 +256,45 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 		return -ENOMEM;
 	}
 	zbdev->fabric = uu->fabric->fabric;
-
 	/* Revisit: locking */
 	list_add_tail(&zbdev->fab_bridge_node, &zbdev->fabric->bridges);
 	list_add_tail(&zbdev->zdev.fab_dev_node, &zbdev->fabric->devices);
 
-	return 0;
+	ret = genz_control_read_sid(&zbdev->zdev, &sid);
+	if (ret) {
+		pr_debug("genz_control_read_sid returned %d\n", ret);
+		goto error;
+	}
+        s = genz_find_subnet(sid, zbdev->fabric);
+        if (s == NULL) {
+                pr_debug("%s: genz_find_subnet failed\n", __FUNCTION__);
+		ret = -ENOMEM;
+		goto error;
+        }
+	ret = genz_control_read_cid0(&zbdev->zdev, &cid);
+	if (ret) {
+		pr_debug("genz_control_read_cid returned %d\n", ret);
+		goto error;
+	}
+        zcomp = genz_find_component(s, cid);
+        if (zcomp == NULL) {
+                pr_debug("%s: genz_find_component failed\n", __FUNCTION__);
+                ret = -ENOMEM;
+		goto error;
+        }
+	ret = genz_control_read_cclass(&zbdev->zdev, &zcomp->cclass);
+	if (ret) {
+		pr_debug("genz_control_read_cclass returned %d\n", ret);
+		goto error;
+	}
+	ret = genz_control_read_fru_uuid(&zbdev->zdev, &zcomp->fru_uuid);
+	if (ret) {
+		pr_debug("genz_control_read_fru_uuid returned %d\n", ret);
+		goto error;
+	}
+
+error:
+	return ret;
 }
 
 static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br);
