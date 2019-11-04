@@ -579,7 +579,7 @@ struct uuid_tracker *genz_fabric_uuid_tracker_alloc_and_insert(
 			uu->fabric->fabric = genz_find_fabric(uu->fabric->fabric_num);
 			memcpy(&uu->fabric->fabric->mgr_uuid, uuid, UUID_SIZE);
 		} else { /* -EEXIST */
-			pr_debug("tracker insert existing mgr_uuid\n");
+			pr_debug("tracker insert prev != uu already in the tracker mgr_uuid\n");
 		}
 		pr_debug("fabric_num=%d, fabric=%px\n",
 			 uu->fabric->fabric_num, uu->fabric->fabric);

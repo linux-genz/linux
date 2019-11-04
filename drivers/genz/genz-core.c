@@ -517,7 +517,6 @@ static void force_dev_cleanup(void)
 {
 	struct genz_fabric *f, *f_tmp;
 	struct genz_bridge_dev *cur, *cur_tmp;
-	unsigned long flags;
 
 	pr_debug("in force_dev_cleanup\n");
 	/* go through each bridge */
