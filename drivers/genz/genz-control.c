@@ -54,7 +54,7 @@ static ssize_t uuid_show(struct kobject *kobj,
 		pr_debug("zdev is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad zdev\n"));
 	}
-	return(snprintf(buf, PAGE_SIZE, "%pUb\n", &zdev->uuid));
+	return(snprintf(buf, PAGE_SIZE, "%pUb\n", &zdev->class_uuid));
 }
 
 static struct kobj_attribute uuid_attribute =
@@ -1313,7 +1313,20 @@ EXPORT_SYMBOL_GPL(genz_bridge_create_control_files);
  */
 int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev)
 {
-	dev_dbg(zbdev->bridge_dev, "function unimplemented");
+	struct genz_dev *zdev;
+	struct genz_control_info *ci;
+
+	dev_dbg(zbdev->bridge_dev, "genz_bridge_remove_control_files");
+	zdev = &zbdev->zdev;
+	if (zdev == NULL)
+		return -EINVAL;
+	ci = zdev->root_control_info;
+	if (ci == NULL)
+		return -EINVAL;
+	sysfs_remove_bin_file(&ci->kobj, &ci->battr);
+	kobject_put(&ci->kobj);
+	kobject_put(zdev->root_kobj);
+	kfree(ci);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(genz_bridge_remove_control_files);

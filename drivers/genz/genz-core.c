@@ -131,11 +131,13 @@ static int genz_uevent(struct device *dev, struct kobj_uevent_env *env)
 	if (!dev)
 		return -ENODEV;
 	zdev = to_genz_dev(dev);
-	if (add_uevent_var(env, "GENZ_UUID=%pUb", &zdev->uuid))
+	if (add_uevent_var(env, "GENZ_CLASS_UUID=%pUb", &zdev->class_uuid))
+		return -ENOMEM;
+	if (add_uevent_var(env, "GENZ_INSTANCE_UUID=%pUb", &zdev->instance_uuid))
 		return -ENOMEM;
 	if (add_uevent_var(env, "GENZ_CLASS=%04x", zdev->class))
 		return -ENOMEM;
-	if (add_uevent_var(env, "MODALIAS=genz:%pUb", &zdev->uuid))
+	if (add_uevent_var(env, "MODALIAS=genz:%pUb", &zdev->class_uuid))
 		return -ENOMEM;
 	/* Revisit */
 	//dev_dbg(dev, "uuid=%pUb class=%u\n", &zdev->uuid, zdev->class);
@@ -501,13 +503,26 @@ static int genz_bridge_zmmu_clear(struct genz_bridge_dev *br)
 static void force_dev_cleanup(void)
 {
 	struct genz_fabric *f, *f_tmp;
+	struct genz_bridge_dev *cur, *cur_tmp;
 
 	pr_debug("in force_dev_cleanup\n");
+	/* go through each bridge */
+	list_for_each_entry_safe(cur, cur_tmp, &genz_bridge_list, bridge_node) {
+		genz_fabric_uuid_tracker_free(&cur->fabric->mgr_uuid);
+		genz_bridge_remove_control_files(cur);
+		genz_bridge_zmmu_clear(cur);
+		device_unregister(&cur->zdev.dev);
+		list_del(&cur->bridge_node);
+		kfree(cur);
+	}
 	/* go through each fabric */
         list_for_each_entry_safe(f, f_tmp, &genz_fabrics, node) {
 		struct genz_dev *zdev, *zdev_tmp;
 		struct genz_component *zcomp, *zcomp_tmp;
 		struct genz_subnet *zsub, *zsub_tmp;
+
+		if (&f->mgr_uuid)
+			genz_fabric_uuid_tracker_free(&f->mgr_uuid);
 
 		/* remove each genz_dev */
         	list_for_each_entry_safe(zdev, zdev_tmp, &f->devices,

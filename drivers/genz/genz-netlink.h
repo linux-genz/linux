@@ -58,7 +58,8 @@ enum {
 /* Resource Structure */
 enum {
 	GENZ_A_U_UNSPEC,
-	GENZ_A_U_UUID,
+	GENZ_A_U_CLASS_UUID,
+	GENZ_A_U_INSTANCE_UUID,
 	GENZ_A_U_CLASS,
 	GENZ_A_U_MRL,
 	__GENZ_A_U_MAX,

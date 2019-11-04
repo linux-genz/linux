@@ -577,6 +577,7 @@ struct uuid_tracker *genz_fabric_uuid_tracker_alloc_and_insert(
 			pr_debug("tracker insert prev == uu so new mgr_uuid\n");
 			uu->fabric->fabric_num = get_new_fabric_number();
 			uu->fabric->fabric = genz_find_fabric(uu->fabric->fabric_num);
+			memcpy(&uu->fabric->fabric->mgr_uuid, uuid, UUID_SIZE);
 		} else {
 			pr_debug("tracker insert prev != uu already in the tracker mgr_uuid\n");
 		}
@@ -584,6 +585,24 @@ struct uuid_tracker *genz_fabric_uuid_tracker_alloc_and_insert(
 	return uu;
 }
 EXPORT_SYMBOL(genz_fabric_uuid_tracker_alloc_and_insert);
+
+void genz_fabric_uuid_tracker_free(uuid_t *uuid)
+{
+	struct uuid_tracker *uu;
+	int gone;
+
+	pr_debug("tracker free of fabric_uuid %pUb\n", uuid);
+	uu = genz_uuid_search(uuid);
+	/* genz_uuid_search gets the refcount, so we need to put it */
+	gone = kref_put(&uu->refcount, genz_uuid_tracker_free);
+	if (gone)
+		pr_debug("freed uuid=%pUb\n", &uu->uuid);
+	else
+		pr_debug("removed uuid=%pUb, refcount=%u\n", &uu->uuid,
+			 kref_read(&uu->refcount));
+	genz_uuid_remove(uu);
+	return;
+}
 
 static inline bool uuid_tree_empty(void)
 {
