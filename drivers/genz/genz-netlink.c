@@ -195,13 +195,13 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 			}
 			ret = genz_create_attr(zdev, zres);
 			if (ret) {
-				pr_debug("%s: genz_create_attr failed with %d\n", __FUNCTION__, ret);
+				pr_debug("genz_create_attr failed with %d\n", ret);
 				goto error;
 			}
 			/* Revisit: how to get the parent resource?
 			ret = insert_resource(&zres->res, &zdev->parent_res);
 			if (ret < 0) {
-				pr_debug("%s: insert_resource failed with %d\n", __FUNCTION__, ret);
+				pr_debug("insert_resource failed with %d\n", ret);
 			}
 			*/
 			/* Add this resource to the genz_dev's list */
@@ -285,7 +285,7 @@ static int parse_resource_list(const struct nlattr *resource_list,
 			dev_set_name(&zdev->dev, "%s%d", condensed_name,
 				zdev->zcomp->resource_count[condensed_class]++);
 		} else {
-			pr_debug("%s: missing required CLASS\n", __FUNCTION__);
+			pr_debug("missing required CLASS\n");
 			ret = -EINVAL;
 			goto error;
 		}
@@ -328,7 +328,7 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		bytes_to_uuid(&mgr_uuid, uuid_str);
 		pr_debug("\tMGR_UUID: %pUb\n", &mgr_uuid);
 	} else {
-		pr_debug("%s: missing required MGR_UUID\n", __FUNCTION__);
+		pr_debug("missing required MGR_UUID\n");
 		ret = -EINVAL;
 		goto err;
 	}
@@ -340,7 +340,8 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
         fabric_num = uu->fabric->fabric_num;
         f = uu->fabric->fabric;
 	if (f == NULL) {
-		pr_debug("%s: fabric from uu_tracker is NULL\n", __FUNCTION__);
+		pr_debug("fabric %d pointer from uu_tracker is NULL\n",
+			fabric_num);
 		ret = -EINVAL;
 		goto err;
 	}
@@ -351,11 +352,11 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		pr_debug("Port: %u\n\tFABRIC_NUM: %d",
 			info->snd_portid, fabric_num);
 	} else {
-		pr_debug("%s: missing required fabric number\n", __FUNCTION__);
+		pr_debug("missing required fabric number\n");
 		return -EINVAL;
 	}
 	if (fabric_num > MAX_FABRIC_NUM) {
-		pr_debug("%s: fabric number is invalid\n", __FUNCTION__);
+		pr_debug("fabric number is invalid\n");
 		return -EINVAL;
 	}
 	*/
@@ -363,29 +364,29 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		gcid = nla_get_u32(info->attrs[GENZ_A_GCID]);
 		pr_debug("\tGCID: %d ", gcid);
 	} else {
-		pr_debug("%s: missing required GCID\n", __FUNCTION__);
+		pr_debug("missing required GCID\n");
 		return -EINVAL;
 	}
 	/* validate the GCID */
 	if (gcid > MAX_GCID) {
-		pr_debug("%s: GCID is invalid.\n", __FUNCTION__);
+		pr_debug("GCID is invalid.\n");
 		return -EINVAL;
 	}
 	s = genz_find_subnet(genz_get_sid(gcid), f);
 	if (s == NULL) {
-		pr_debug("%s: genz_find_subnet failed\n", __FUNCTION__);
+		pr_debug("genz_find_subnet failed\n");
 		return -ENOMEM;
 	}
 	zcomp = genz_find_component(s, genz_get_cid(gcid));
 	if (zcomp == NULL) {
-		pr_debug("%s: genz_find_component failed\n", __FUNCTION__);
+		pr_debug("genz_find_component failed\n");
 		return -ENOMEM;
 	}
 /*
 	ret = genz_create_gcid_file(&(zcomp->kobj));
 */
 	if (ret) {
-		pr_debug("%s: genz_create_gcid_file failed\n", __FUNCTION__);
+		pr_debug("genz_create_gcid_file failed\n");
 		return -EINVAL;
 	}
 
@@ -394,12 +395,12 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		pr_debug("\tC-Class = %d\n",
 			(uint32_t) zcomp->cclass);
 	} else {
-		pr_debug("%s: missing required CCLASS\n", __FUNCTION__);
+		pr_debug("missing required CCLASS\n");
 		ret = -EINVAL;
 		goto err;
 	}
 	if (zcomp->cclass > GENZ_NUM_HARDWARE_TYPES) {
-		pr_debug("%s: CCLASS invalid\n", __FUNCTION__);
+		pr_debug("CCLASS invalid\n");
 		ret = -EINVAL;
 		goto err;
 	}
@@ -414,7 +415,7 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		bytes_to_uuid(&zcomp->fru_uuid, uuid);
 		pr_debug("\tFRU_UUID: %pUb\n", &zcomp->fru_uuid);
 	} else {
-		pr_debug("%s: missing required FRU_UUID\n", __FUNCTION__);
+		pr_debug("missing required FRU_UUID\n");
 		ret = -EINVAL;
 		goto err;
 	}
@@ -424,7 +425,7 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 
 	ret = genz_create_mgr_uuid_file(&f->dev);
 	if (ret) {
-		pr_debug("%s: genz_create_mgr_uuid_file failed\n", __FUNCTION__);
+		pr_debug("genz_create_mgr_uuid_file failed\n");
 		return -EINVAL;
 	}
 	if (info->attrs[GENZ_A_RESOURCE_LIST]) {
@@ -433,7 +434,7 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		if (ret < 0) 
 			goto err;
 	} else {
-		pr_debug("%s: Must supply at least one resource\n", __FUNCTION__);
+		pr_debug("Must supply at least one resource\n");
 		ret = -EINVAL;
 		goto err;
 	}
@@ -495,7 +496,7 @@ int genz_nl_init(void)
 {
 	int ret;
 
-	pr_debug("Entering: %s\n",__FUNCTION__);
+	pr_debug("Entering\n");
 	ret = genl_register_family(&genz_gnl_family);
 	if (ret != 0) {
 		pr_debug("genl_register_family returned %d\n", ret);

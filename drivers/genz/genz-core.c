@@ -249,13 +249,18 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 
 	genz_control_read_structure(&zbdev->zdev, &mgr_uuid, 0,
 			offsetof(struct genz_core_structure, mgr_uuid),
-			sizeof(((struct genz_core_structure *)0)->mgr_uuid));
+			sizeof(mgr_uuid));
 	uu = genz_fabric_uuid_tracker_alloc_and_insert(&mgr_uuid);
 	if (!uu) {
 		genz_free_component(&zcomp->kref);
 		return -ENOMEM;
 	}
 	zbdev->fabric = uu->fabric->fabric;
+	if (zbdev->fabric == NULL) {
+		pr_debug("zbdev->fabric is NULL\n");
+		ret = -ENODEV;
+		goto error;
+	}
 	/* Revisit: locking */
 	list_add_tail(&zbdev->fab_bridge_node, &zbdev->fabric->bridges);
 	list_add_tail(&zbdev->zdev.fab_dev_node, &zbdev->fabric->devices);

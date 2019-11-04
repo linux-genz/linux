@@ -1126,9 +1126,6 @@ static int wildcat_probe(struct pci_dev *pdev,
 	sl->valid = true;
 
 	wildcat_zmmu_clear_slice(sl);
-#ifdef OLD_ZHPE
-	wildcat_zmmu_setup_slice(sl);
-#endif
 	wildcat_xqueue_init(sl);
 	if (wildcat_clear_xdm_qcm(sl->bar->xdm)) {
 		dev_dbg(&pdev->dev, "wildcat_clear_xdm_qcm failed\n");
@@ -1250,15 +1247,6 @@ static void wildcat_helper_exit(void)
 	/* Revisit: finish this */
 }
 
-#ifdef OLD_ZHPE
-static struct miscdevice miscdev = {
-	.name               = wildcat_driver_name,
-	.fops               = &wildcat_fops,
-	.minor              = MISC_DYNAMIC_MINOR,
-	.mode               = 0600,
-};
-#endif
-
 static struct pci_driver wildcat_pci_driver = {
 	.name      = DRIVER_NAME,
 	.id_table  = wildcat_id_table,
@@ -1288,15 +1276,10 @@ static int __init wildcat_init(void)
 		spin_lock_init(&wildcat_bridge.slice[sl].zmmu_lock);
 	}
 
-#ifdef OLD_ZHPE
-	/* Create 128 polling devices for interrupt notification to userspace */
-	if (wildcat_setup_poll_devs() != 0)
-		goto err_zpage_free;
-#endif
 	/* Create msg workqueue */
 	wildcat_bridge.wildcat_msg_workq = create_workqueue("wildcat_wq");
 	if (!wildcat_bridge.wildcat_msg_workq)
-		goto err_cleanup_poll_devs;
+		goto err_out;
 
 	/* Initiate call to wildcat_probe() for each wildcat PCI function */
 	ret = pci_register_driver(&wildcat_pci_driver);
@@ -1314,7 +1297,7 @@ static int __init wildcat_init(void)
 		pr_warning("%s:%s:call_usermodehelper_setup(%s) returned NULL\n",
 			   wildcat_driver_name, __func__, helper_path);
 		ret = -ENOMEM;
-		goto err_misc_deregister;
+		goto err_pci_unregister_driver;
 	}
 	ret = call_usermodehelper_exec(helper_info, UMH_WAIT_EXEC);
 	if (ret < 0) {
@@ -1332,8 +1315,6 @@ static int __init wildcat_init(void)
 err_wildcat_helper_exit:
 	wildcat_helper_exit();
 
-err_misc_deregister:
-
 err_pci_unregister_driver:
 	/* Initiate call to wildcat_remove() for each wildcat PCI function */
 	pci_unregister_driver(&wildcat_pci_driver);
@@ -1341,37 +1322,12 @@ err_pci_unregister_driver:
 err_delete_workq:
 	destroy_workqueue(wildcat_bridge.wildcat_msg_workq);
 
-err_cleanup_poll_devs:
-#ifdef OLD_ZHPE
-	wildcat_cleanup_poll_devs();
-#endif
-
-#ifdef OLD_ZHPE
-err_zpage_free:
-	if (global_shared_zpage) {
-		wildcat_queue_zpages_free(global_shared_zpage);
-		kfree(global_shared_zpage);
-	}
-#endif
-
 err_out:
 	return ret;
 }
 
 static void wildcat_exit(void)
 {
-#ifdef OLD_ZHPE
-    if (miscdev.minor != MISC_DYNAMIC_MINOR)
-        misc_deregister(&miscdev);
-
-    wildcat_cleanup_poll_devs();
-
-    /* free shared data page. */
-    if (global_shared_zpage) {
-        wildcat_queue_zpages_free(global_shared_zpage);
-        kfree(global_shared_zpage);
-    }
-#endif
     destroy_workqueue(wildcat_bridge.wildcat_msg_workq);
 
     /* Initiate call to wildcat_remove() for each wildcat PCI function */

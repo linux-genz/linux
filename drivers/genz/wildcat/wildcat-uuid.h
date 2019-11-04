@@ -37,13 +37,6 @@
 #ifndef _WILDCAT_UUID_H_
 #define _WILDCAT_UUID_H_
 
-/* Revisit: fix these */
-#ifdef OLD_ZHPE
-int zhpe_user_req_UUID_IMPORT(struct io_entry *entry);
-int zhpe_kernel_UUID_IMPORT(struct genz_mem_data *mdata, uuid_t *uuid,
-                            uint32_t uu_flags, gfp_t alloc_flags);
-int zhpe_user_req_UUID_FREE(struct io_entry *entry);
-#endif
 void wildcat_generate_uuid(struct bridge *bridge, uuid_t *uuid);
 uint32_t wildcat_gcid_from_uuid(const uuid_t *uuid);
 void wildcat_notify_remote_uuids(struct genz_mem_data *mdata);
@@ -52,6 +45,8 @@ int wildcat_common_UUID_IMPORT(struct genz_mem_data *mdata, uuid_t *uuid,
 			       gfp_t alloc_flags);
 int wildcat_common_UUID_FREE(struct genz_mem_data *mdata, uuid_t *uuid,
 			     uint32_t *uu_flags, bool *local);
+int wildcat_kernel_UUID_IMPORT(struct genz_mem_data *mdata, uuid_t *uuid,
+                            uint32_t uu_flags, gfp_t alloc_flags);
 
 static inline int wildcat_uuid_cmp(const uuid_t *u1, const uuid_t *u2)
 {

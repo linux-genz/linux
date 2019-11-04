@@ -47,7 +47,6 @@
 
 #define SLICES                        4
 #define VECTORS_PER_SLICE             32
-#define MAX_IRQ_VECTORS               (VECTORS_PER_SLICE * SLICES)
 
 struct xdm_qcm_header {
 	uint64_t cmd_q_base_addr  : 64; /* byte 0 */
@@ -361,13 +360,7 @@ struct bridge {
 	struct xdm_info         msg_xdm;
 	struct rdm_info         msg_rdm;
 	struct mutex            csr_mutex;  /* protect CSR mailbox */
-#ifdef OLD_ZHPE
-	struct page_grid_info   req_zmmu_pg;
-	struct page_grid_info   rsp_zmmu_pg;
-	struct zhpe_core_info   core_info;
-#endif
 	struct workqueue_struct *wildcat_msg_workq;
-	wait_queue_head_t       wildcat_poll_wq[MAX_IRQ_VECTORS];
 };
 
 enum {

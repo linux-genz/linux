@@ -102,9 +102,10 @@ enum {
 };
 
 /* WILDCAT_MAGIC == 'WILD' */
-#define WILDCAT_MAGIC      (0x57494C44)
-
-#define WILDCAT_ENTRY_LEN  (64U)
+#define WILDCAT_MAGIC                 (0x57494C44)
+#define WILDCAT_ENTRY_LEN             (64U)
+#define WILDCAT_GLOBAL_SHARED_VERSION (1)
+#define MAX_IRQ_VECTORS               (VECTORS_PER_SLICE * SLICES)
 
 struct wildcat_info {
 	uint32_t            qlen;
@@ -121,6 +122,9 @@ struct wildcat_rdma_state {
 	spinlock_t              fdata_lock;  /* protects fdata_list */
 	struct list_head        fdata_list;
 	wait_queue_head_t       rdma_poll_wq[MAX_IRQ_VECTORS];
+	int                     min_irq_index;
+	int                     max_irq_index;
+	struct list_head        rstate_node;
 };
 #define to_wildcat_rdma_state(n) container_of(n, struct wildcat_rdma_state, \
 					      miscdev)
@@ -391,11 +395,6 @@ union wildcat_rdma_op {
 	union wildcat_rdma_req  req;
 	union wildcat_rdma_rsp  rsp;
 };
-
-#define WILDCAT_GLOBAL_SHARED_VERSION (1)
-#define SLICES                         4
-#define VECTORS_PER_SLICE              32
-#define MAX_IRQ_VECTORS                (VECTORS_PER_SLICE * SLICES)
 
 struct wildcat_global_shared_data {
 	uint                magic;

@@ -243,7 +243,7 @@ struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
 	struct genz_fabric *f, *found = NULL;
 	int ret = 0;
 	
-	pr_debug( "entering %s", __func__);
+	pr_debug( "entering");
 	list_for_each_entry(f, &genz_fabrics, node) {
 		if (f->number == fabric_num) {
 			found = f;
@@ -265,7 +265,7 @@ struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
 		/* Revisit: add a flag that is it initialized. Set to UNINIT in the alloc call. take lock and add to list. do init_fabric. Take lock, Set to INITED in init_fabric, release lock.  */
 		found = genz_alloc_fabric();
 		if (!found) {
-			pr_debug( "genz_alloc_fabric returned %d\n", ret);
+			pr_debug( "genz_alloc_fabric returned NULL\n");
 			goto out;
 		}
 		ret = genz_init_fabric(found, fabric_num);

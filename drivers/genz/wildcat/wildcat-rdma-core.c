@@ -37,6 +37,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/fs.h>
+#include <linux/cdev.h>
 #include <linux/miscdevice.h>
 #include <linux/poll.h>
 #include <linux/mm.h>
@@ -362,8 +363,8 @@ static void file_data_free(const char *callf, uint line, void *ptr)
 	kfree(ptr);
 }
 
-struct file_data *wildcat_rdma_pid_to_fdata(struct wildcat_rdma_state *rstate,
-					    pid_t pid)
+static struct file_data *pid_to_fdata(struct wildcat_rdma_state *rstate,
+				      pid_t pid)
 {
 	struct file_data *cur, *ret = NULL;
 
@@ -536,6 +537,270 @@ static int dma_alloc_zpage_and_zmap(
 		}
 	}
 	return ret;
+}
+
+#define POLL_DEV_NAME	"wildcat_rdma_poll"
+static dev_t wildcat_rdma_poll_dev;
+static struct cdev *poll_cdev;
+static struct class *poll_class;
+static int wildcat_rdma_poll_dev_major;
+LIST_HEAD(rstate_list);
+
+static struct slice *wildcat_rdma_irq_index_to_slice(struct file_data *fdata,
+					      int irq_index)
+{
+	struct bridge *br = wildcat_gzbr_to_br(fdata->md.bridge);
+	int           slice_id;
+
+	slice_id = irq_index / VECTORS_PER_SLICE;
+	return (&br->slice[slice_id]);
+}
+
+static struct wildcat_rdma_state *irq_index_to_rstate(int irq_index)
+{
+	struct wildcat_rdma_state *rstate;
+
+	/* Revisit: locking */
+	list_for_each_entry(rstate, &rstate_list, rstate_node) {
+		if (irq_index >= rstate->min_irq_index &&
+		    irq_index <= rstate->max_irq_index)
+			goto out;
+	}
+
+	rstate = NULL;
+
+out:
+	return rstate;
+}
+
+static int wildcat_rdma_poll_open(struct inode *inode, struct file *file)
+{
+	struct file_data *fdata;
+	pid_t  pid = task_pid_nr(current);
+	struct slice *sl;
+	int irq_index = iminor(inode);
+	struct wildcat_rdma_state *rstate = irq_index_to_rstate(irq_index);
+	struct list_head *pos;
+	struct rdm_vector_list *entry;
+	int found_queue = 0;
+	int vector;
+
+	/* Find the fdata associated with this open's pid */
+	fdata = pid_to_fdata(rstate, pid);
+	if (fdata == NULL) {
+		pr_debug("Failed to match poll open pid (%d) to fdata pid\n",
+			 pid);
+		return -ENOENT;
+	}
+
+	/* check that this pid owns an rqueue in this irq_index */
+	sl = wildcat_rdma_irq_index_to_slice(fdata, irq_index);
+	vector = irq_index % VECTORS_PER_SLICE; /* per slice vector */
+	pr_debug("slice=%d, irq_index=%d, vector=%d\n",
+		 sl->id, irq_index, vector);
+	list_for_each(pos, &(sl->irq_vectors[vector])) {
+		entry = list_entry(pos, struct rdm_vector_list, list);
+		pr_debug("entry->irq_index=%d\n", entry->irq_index);
+		if (entry->irq_index == irq_index) {
+			found_queue = 1;
+			break;
+		}
+	}
+	if (!found_queue) {
+		pr_debug("trying to open a file without owning a queue on that vector %d\n",
+			 vector);
+		return -ENXIO;
+	}
+	file->private_data = fdata;
+	return 0;
+}
+
+static int wildcat_rdma_poll_close(struct inode *inode, struct file *file)
+{
+	return 0;
+}
+
+static unsigned int wildcat_rdma_poll_poll(struct file *file,
+					   struct poll_table_struct *wait)
+{
+	struct file_data *fdata = file->private_data;
+	int irq_index = iminor(file_inode(file));
+	int handled, triggered;
+	struct wildcat_local_shared_data *local_shared_data;
+	struct wildcat_rdma_state *rstate;
+
+	if (fdata == NULL) {
+		pr_debug("fdata is NULL\n");
+		return 0;
+	}
+
+	rstate = fdata->rstate;
+	poll_wait(file, &(rstate->rdma_poll_wq[irq_index]), wait);
+
+	/* Compare trigggered to handled */
+	local_shared_data = (struct wildcat_local_shared_data *)
+		fdata->local_shared_zpage->queue.pages[0];
+	handled = READ_ONCE(local_shared_data->handled_counter[irq_index]);
+	triggered = READ_ONCE(global_shared_data->triggered_counter[irq_index]);
+
+	if (triggered != handled)
+		return (POLLIN | POLLRDNORM);
+	return 0;
+}
+
+int wildcat_rdma_poll_devices_create(struct wildcat_rdma_state *rstate)
+{
+	struct device *dev;
+	int minor, err = 0;
+
+	for (minor = rstate->min_irq_index;
+	     minor <= rstate->max_irq_index; minor++) {
+		pr_debug("device create for /dev/wildcat_rdma_poll_%d class=%px, major=%d, minor=%d\n",
+			 minor, poll_class, wildcat_rdma_poll_dev_major, minor);
+
+		dev = device_create(poll_class, NULL,
+				    MKDEV(wildcat_rdma_poll_dev_major, minor),
+				    rstate, "wildcat_rdma_poll_%d", minor);
+		if (IS_ERR(dev)) {
+			err = PTR_ERR(dev);
+			pr_debug("device_create failed with %d\n", err);
+			goto destroy_devices;
+		}
+	}
+
+	return 0;
+
+ destroy_devices:
+	for (; minor >= rstate->min_irq_index; minor--) {
+		device_destroy(poll_class,
+			       MKDEV(wildcat_rdma_poll_dev_major, minor));
+	}
+	return err;
+}
+
+static int __match_devt(struct device *dev, const void *data)
+{
+        const dev_t *devt = data;
+
+        return dev->devt == *devt;
+}
+
+void wildcat_rdma_poll_devices_destroy(struct wildcat_rdma_state *rstate)
+{
+        int minor;
+	struct device *dev;
+	dev_t poll_devt;
+
+        if (rstate == NULL)
+		return;
+	for (minor = rstate->min_irq_index;
+	     minor <= rstate->max_irq_index; minor++) {
+		poll_devt = MKDEV(wildcat_rdma_poll_dev_major, minor);
+		dev = class_find_device(poll_class, NULL, &poll_devt,
+					__match_devt);
+		pr_debug("device destroy for /dev/wildcat_rdma_poll_%d class=%px, major=%d, minor=%d\n",
+			 minor, poll_class, wildcat_rdma_poll_dev_major, minor);
+                device_destroy(poll_class,
+			       MKDEV(wildcat_rdma_poll_dev_major, minor));
+	}
+	return;
+}
+
+void wildcat_rdma_poll_init_waitqueues(struct wildcat_rdma_state *rstate)
+{
+	int i;
+
+	/* Initialize wait queues for each poll device */
+	for (i = 0; i < MAX_IRQ_VECTORS; i++) {
+		init_waitqueue_head(&(rstate->rdma_poll_wq[i]));
+	}
+}
+
+static char *poll_devnode(struct device *dev, umode_t *mode)
+{
+        if (!mode)
+                return NULL;
+        *mode = 0666;
+        return NULL;
+}
+
+static const struct file_operations wildcat_rdma_poll_fops = {
+    .owner      = THIS_MODULE,
+    .open       = wildcat_rdma_poll_open,
+    .release    = wildcat_rdma_poll_close,
+    .poll       = wildcat_rdma_poll_poll,
+};
+
+int wildcat_rdma_setup_poll_devs(void)
+{
+	int ret = -1;
+
+	ret = alloc_chrdev_region(&wildcat_rdma_poll_dev, 0, MAX_IRQ_VECTORS,
+				  POLL_DEV_NAME);
+	if (ret != 0) {
+		pr_debug("alloc_chrdev_region failed, ret=%d\n", ret);
+		return ret;
+	}
+
+	wildcat_rdma_poll_dev_major = MAJOR(wildcat_rdma_poll_dev);
+	pr_debug("wildcat_rdma_poll_dev_major=%d\n",
+		 wildcat_rdma_poll_dev_major);
+	poll_class = class_create(THIS_MODULE, POLL_DEV_NAME);
+	if (IS_ERR(poll_class)) {
+		pr_debug("class_create failed\n");
+		goto unreg_region;
+	}
+	poll_class->devnode = poll_devnode;
+	pr_debug("poll_class=%px\n", poll_class);
+	poll_cdev = cdev_alloc();
+	if (poll_cdev == NULL) {
+		pr_debug("cdev_alloc failed\n");
+		goto destroy_class;
+	}
+	cdev_init(poll_cdev, &wildcat_rdma_poll_fops);
+
+	ret = cdev_add(poll_cdev, wildcat_rdma_poll_dev, MAX_IRQ_VECTORS);
+	if (ret < 0) {
+		pr_debug("cdev_add failed, ret=%d\n", ret);
+		goto del_cdev;
+	}
+
+	ret = 0;
+	goto done;
+
+del_cdev:
+	cdev_del(poll_cdev);
+
+destroy_class:
+	class_destroy(poll_class);
+
+unreg_region:
+	unregister_chrdev_region(wildcat_rdma_poll_dev, MAX_IRQ_VECTORS);
+
+done:
+	return ret;
+}
+
+void wildcat_rdma_cleanup_poll_devs(void)
+{
+	cdev_del(poll_cdev);
+	class_destroy(poll_class);
+        unregister_chrdev_region(wildcat_rdma_poll_dev, MAX_IRQ_VECTORS);
+}
+
+int wildcat_rdma_trigger(int irq_index, int *triggered)
+{
+	/* Update the triggered count in the shared page */
+	if (irq_index < 0 || irq_index >= MAX_IRQ_VECTORS) {
+		pr_debug("out of range irq_index %d\n", irq_index);
+		return -1;
+	}
+
+	/* Use atomic fetch and add. */
+	*triggered = __sync_add_and_fetch(
+		&global_shared_data->triggered_counter[irq_index], 1);
+
+	return 0;
 }
 
 int wildcat_req_XQALLOC(
@@ -784,24 +1049,27 @@ static int wildcat_rdma_rqueue_free(
 
 irqreturn_t wildcat_rdma_rdm_interrupt_handler(int irq_index, void *data)
 {
-	struct genz_dev *zdev = (struct genz_dev *)data;
-	struct wildcat_rdma_state *rstate;
+	struct wildcat_rdma_state *rstate = (struct wildcat_rdma_state *)data;
+	struct genz_dev *zdev;
+	int wq_index;
 
+	if (rstate == NULL) {
+		pr_debug("rstate is NULL\n");
+		return IRQ_NONE;
+	}
+
+	zdev = rstate->zdev;
 	if (zdev == NULL) {
 		pr_debug("zdev is NULL\n");
 		return IRQ_NONE;
 	}
 
-	dev_dbg(&zdev->dev, "irq_index %d\n", irq_index);
-	rstate = genz_get_drvdata(zdev);
-	if (rstate == NULL) {
-		dev_dbg(&zdev->dev, "rstate is NULL\n");
-		return IRQ_NONE;
-	}
+	wq_index = irq_index - rstate->min_irq_index;
+	dev_dbg(&zdev->dev, "irq_index=%d, wq_index=%d\n",
+		irq_index, wq_index);
 
 	/* wake up the wait queue to process the interrupt */
-	wake_up_interruptible_all(&(rstate->rdma_poll_wq[irq_index]));
-
+	wake_up_interruptible_all(&(rstate->rdma_poll_wq[wq_index]));
 	return IRQ_HANDLED;
 }
 
@@ -897,7 +1165,7 @@ int wildcat_req_RQALLOC(struct wildcat_rdma_req_RQALLOC *req,
 
 	/* Register the rdm second level interrupt handler */
 	ret = wildcat_register_rdm_interrupt(sl, queue,
-			wildcat_rdma_rdm_interrupt_handler, br);
+			wildcat_rdma_rdm_interrupt_handler, fdata->rstate);
 	if (ret != 0) {
 		pr_debug("wildcat_register_rdm_interrupt failed with %d\n",
 			 ret);
@@ -1382,7 +1650,7 @@ static int wildcat_rdma_open(struct inode *inode, struct file *file)
 	spin_lock_init(&fdata->rdm_queue_lock);
 	bitmap_zero(fdata->rdm_queues, RDM_QUEUES_PER_SLICE*SLICES);
 	/* we only allow one open per pid */
-	if (wildcat_rdma_pid_to_fdata(fdata->rstate, fdata->pid)) {
+	if (pid_to_fdata(fdata->rstate, fdata->pid)) {
 		ret = -EBUSY;
 		goto done;
 	}
@@ -1791,7 +2059,7 @@ static int wildcat_rdma_probe(struct genz_dev *zdev,
 			      const struct genz_device_id *zdev_id)
 {
 	struct wildcat_rdma_state *rstate;
-	int ret = 0;
+	int ret = 0, vecs;
 
 	/* allocate & initialize state structure */
 	dev_dbg(&zdev->dev, "allocating rstate\n");
@@ -1806,6 +2074,8 @@ static int wildcat_rdma_probe(struct genz_dev *zdev,
 	INIT_LIST_HEAD(&rstate->fdata_list);
 	rstate->zdev = zdev;
 	genz_set_drvdata(zdev, rstate);
+	/* Revisit: locking */
+	list_add_tail(&rstate->rstate_node, &rstate_list);
 
 	/* Create device. */
 	dev_dbg(&zdev->dev, "creating device %s\n", rstate->miscdev.name);
@@ -1815,13 +2085,28 @@ static int wildcat_rdma_probe(struct genz_dev *zdev,
 			 wildcat_rdma_driver_name, __func__, ret);
 		goto free_rstate;
 	}
-#ifdef OLD_ZHPE
-	wildcat_poll_init_waitqueues(&wildcat_bridge);
-#endif
- out:
+	wildcat_rdma_poll_init_waitqueues(rstate);
+	vecs = wildcat_intr_vectors_count(zdev->zbdev);
+	if (vecs < 0) {
+		ret = vecs;
+		goto misc_dereg;
+	}
+	/* Revisit: MultiBridge */
+	rstate->min_irq_index = 0;
+	rstate->max_irq_index = vecs - 1;
+	ret = wildcat_rdma_poll_devices_create(rstate);
+	if (ret < 0)
+		goto misc_dereg;
+
+out:
 	return ret;
 
+misc_dereg:
+	misc_deregister(&rstate->miscdev);
+
 free_rstate:
+	/* Revisit: locking */
+	list_del(&rstate->rstate_node);
 	genz_set_drvdata(zdev, NULL);
 	kfree(rstate);
 	goto out;
@@ -1832,6 +2117,7 @@ static int wildcat_rdma_remove(struct genz_dev *zdev)
 	struct wildcat_rdma_state *rstate;
 
 	rstate = genz_get_drvdata(zdev);
+	wildcat_rdma_poll_devices_destroy(rstate);
 	misc_deregister(&rstate->miscdev);
 	/* Revisit: finish this */
 	kfree(rstate);
@@ -1847,7 +2133,7 @@ static struct genz_driver wildcat_rdma_genz_driver = {
 
 static int __init wildcat_rdma_init(void)
 {
-	int i, ret;
+	int i, ret = 0;
 	struct wildcat_attr default_attr = {
 		.max_tx_queues    = 1024,
 		.max_rx_queues    = 1024,
@@ -1857,6 +2143,7 @@ static int __init wildcat_rdma_init(void)
 	};
 
 	pr_debug("init\n");
+	/* Revisit: MultiBridge */
 	global_shared_zpage = wildcat_shared_zpage_alloc(
 		sizeof(*global_shared_data), GLOBAL_SHARED_PAGE);
 	if (!global_shared_zpage) {
@@ -1873,19 +2160,49 @@ static int __init wildcat_rdma_init(void)
 	for (i = 0; i < MAX_IRQ_VECTORS; i++)
 		global_shared_data->triggered_counter[i] = 0;
 
+	if (wildcat_register_rdm_trigger(wildcat_rdma_trigger) < 0)
+		goto err_zpage_free;
+
+	/* Create 128 polling devices for interrupt notification to userspace */
+	if (wildcat_rdma_setup_poll_devs() != 0)
+		goto err_unregister_trigger;
+
 	ret = genz_register_driver(&wildcat_rdma_genz_driver);
 	if (ret < 0) {
 		pr_warning("%s:%s:genz_register_driver returned %d\n",
 		       wildcat_rdma_driver_name, __func__, ret);
-		goto out;
+		goto err_cleanup_poll_devs;
 	}
 
 out:
 	return ret;
+
+err_cleanup_poll_devs:
+	wildcat_rdma_cleanup_poll_devs();
+
+err_unregister_trigger:
+	wildcat_unregister_rdm_trigger(wildcat_rdma_trigger);
+
+err_zpage_free:
+	if (global_shared_zpage) {
+		wildcat_queue_zpages_free(global_shared_zpage);
+		kfree(global_shared_zpage);
+	}
+
+	goto out;
 }
 
 static void wildcat_rdma_exit(void)
 {
 	genz_unregister_driver(&wildcat_rdma_genz_driver);
+	wildcat_rdma_cleanup_poll_devs();
+	wildcat_unregister_rdm_trigger(wildcat_rdma_trigger);
+
+	/* free shared data page. */
+	/* Revisit: MultiBridge */
+	if (global_shared_zpage) {
+		wildcat_queue_zpages_free(global_shared_zpage);
+		kfree(global_shared_zpage);
+	}
 	/* Revisit: finish this */
 }

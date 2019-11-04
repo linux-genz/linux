@@ -1169,7 +1169,7 @@ int genz_control_read_cid0(struct genz_dev *zdev, uint16_t *cid0)
 	if (ret)
 		return ret;
 	*cid0 = ((buf >> 8) & 0xFFF);
-	pr_debug("%s: 0x%x\n", __func__, *cid0);
+	pr_debug("0x%x\n", *cid0);
 	return ret;
 }
 
@@ -1180,7 +1180,7 @@ int genz_control_read_sid(struct genz_dev *zdev, uint16_t *sid)
 	ret = genz_control_read_structure(zdev, sid, 0,
 			0xB8, /* Revisit: how to get offsets better */
 			sizeof(*sid));
-	pr_debug("%s: 0x%x\n", __func__, *sid);
+	pr_debug("0x%x\n", *sid);
 	return ret;
 }
 
@@ -1192,7 +1192,7 @@ int genz_control_read_cclass(struct genz_dev *zdev, uint16_t *cclass)
 	ret = genz_control_read_structure(zdev, cclass, 0, 
 			0x18, /* Revisit: how to get offsets better */
 			sizeof(*cclass));
-	pr_debug("%s: 0x%x\n", __func__, *cclass);
+	pr_debug("0x%x\n", *cclass);
 	return ret;
 }
 
@@ -1203,9 +1203,10 @@ int genz_control_read_fru_uuid(struct genz_dev *zdev, uuid_t *fru_uuid)
 	ret = genz_control_read_structure(zdev, fru_uuid, 0,
 			0x1F0, /* Revisit: how to get offsets better */
 			sizeof(*fru_uuid));
-	pr_debug("%s: %pUb\n", __func__, fru_uuid);
+	pr_debug("%pUb\n", fru_uuid);
 	return ret;
 }
+
 /**
  * genz_bridge_create_control_files() - read control space for a local bridge
  */
@@ -1225,7 +1226,8 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	ret = genz_control_read_structure(zdev, &hdr, 0, 0,
 			sizeof(hdr));
 	if (ret) {
-		pr_debug("%s: failed to read core control structure header %d\n", __func__, ret);
+		pr_debug("failed to read core control structure header %d\n",
+			 ret);
 		return ret;
 	}
 
@@ -1233,26 +1235,29 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 
         /* Validate this is the expected structure type */
         if (hdr.type != GENZ_CORE_STRUCTURE) {
-                pr_debug("%s: control_read of structure %s header is not expected type: %d expected %d\n", __func__, cpi->name, hdr.type, GENZ_CORE_STRUCTURE);
+                pr_debug("control_read of structure %s header is not expected type: %d expected %d\n",
+			 cpi->name, hdr.type, GENZ_CORE_STRUCTURE);
                 return -EINVAL;
         }
 
         /* Validate the structure size */
-        if (hdr.size != cpi->struct_bytes) {
-                pr_debug("%s: control_read of structure %s header is not expected size: %d expected %ld\n", __func__, cpi->name, hdr.size, cpi->struct_bytes);
+        if (hdr.size * GENZ_CONTROL_SIZE_UNIT != cpi->struct_bytes) {
+                pr_debug("control_read of structure %s header is not expected size: %d expected %ld\n",
+			 cpi->name, hdr.size, cpi->struct_bytes);
                 return -EINVAL;
         }
 
 	/* Validate the version */
 	if (hdr.vers != cpi->vers) {
-		pr_debug("%s: control_read of structure %s version mismatch expected %d but found %d.\n", __func__, cpi->name, cpi->vers, hdr.vers);
+		pr_debug("control_read of structure %s version mismatch expected %d but found %d.\n",
+			 cpi->name, cpi->vers, hdr.vers);
 		return -EINVAL;
 	}
 
 	/* Allocate the genz_control_info that contains the kobject */
 	ci = alloc_control_info(zdev, &hdr, 0, NULL);
 	if (ci == NULL) {
-		pr_debug("%s: failed to allocate control_info\n", __func__);
+		pr_debug("failed to allocate control_info\n");
 		return -ENOMEM;
 	}
 
@@ -1306,7 +1311,6 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(genz_bridge_create_control_files);
-
 
 /**
  * genz_bridge_remove_control_files() - remove sysfs files for a local bridge

@@ -45,17 +45,8 @@ irqreturn_t wildcat_rdm_interrupt_handler(int irq_index, void *data);
 int wildcat_register_rdm_interrupt(struct slice *sl, int queue,
 	irqreturn_t (*intr_handler)(int, void *), void *data);
 void wildcat_unregister_rdm_interrupt(struct slice *sl, int queue);
-#ifdef OLD_ZHPE
-/* Revisit: fix these */
-int zhpe_setup_poll_devs(void);
-void zhpe_cleanup_poll_devs(void);
-int zhpe_poll_device_create(struct slice *sl, int num_vectors);
-void zhpe_poll_device_destroy(struct slice *sl);
-wait_queue_head_t * zhpe_poll_get_wq(int irq_index);
-int zhpe_trigger(int irq_index, int * triggered);
-int zhpe_read_handled(struct file_data *fdata, struct slice *sl, int queue,
-    int *handled);
-void zhpe_poll_init_waitqueues(struct bridge *br);
-#endif
+int wildcat_intr_vectors_count(struct genz_bridge_dev *gzbr);
+int wildcat_register_rdm_trigger(int (*rdm_trigger)(int, int *));
+void wildcat_unregister_rdm_trigger(int (*rdm_trigger)(int, int *));
 
 #endif /* _WILDCAT_INTR_H_ */
