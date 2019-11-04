@@ -67,7 +67,8 @@ struct genz_driver_aux;
 
 struct genz_dev {
 	struct list_head	fab_dev_node; /* Node in the per-fabric list */
-	uuid_t 			uuid;      /* component/service/virtual UUID */
+	uuid_t 			class_uuid;      /* component/service/virtual UUID */
+	uuid_t 			instance_uuid;
 	uint16_t		class;
 	struct list_head	zres_list;
 	struct list_head	uu_node;   /* list of zdevs with same UUID */
@@ -556,6 +557,7 @@ struct uuid_tracker *genz_uuid_tracker_alloc_and_insert(
 	uuid_t *uuid, uint type, uint32_t uu_flags, struct genz_mem_data *mdata,
 	gfp_t alloc_flags, int *status);
 struct uuid_tracker *genz_fabric_uuid_tracker_alloc_and_insert(uuid_t *uuid);
+void genz_fabric_uuid_tracker_free(uuid_t *uuid);
 struct uuid_node *genz_remote_uuid_alloc_and_insert(
 	struct uuid_tracker *uu, spinlock_t *lock, struct rb_root *root,
 	gfp_t alloc_flags, int *status);
