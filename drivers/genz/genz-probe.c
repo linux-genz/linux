@@ -95,7 +95,9 @@ static inline const struct genz_device_id *
 genz_match_one_device(const struct genz_device_id *zid,
 		const struct genz_dev *zdev)
 {
-        if (uuid_equal(&zid->uuid, &zdev->uuid))
+        if (uuid_equal(&zid->uuid, &zdev->class_uuid))
+                return zid;
+        if (uuid_equal(&zid->uuid, &zdev->instance_uuid))
                 return zid;
         return NULL;
 }

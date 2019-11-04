@@ -62,7 +62,9 @@ const static struct nla_policy genz_genl_uuid_list_policy[GENZ_A_UL_MAX + 1] = {
 };
 
 const static struct nla_policy genz_genl_resource_policy[GENZ_A_U_MAX + 1] = {
-	[GENZ_A_U_UUID] = { .len = UUID_LEN },
+	[GENZ_A_U_CLASS_UUID] = { .len = UUID_LEN },
+	[GENZ_A_U_INSTANCE_UUID] = { .len = UUID_LEN },
+	/* Revisit: add serial number? */
 	[GENZ_A_U_CLASS] = { .type = NLA_U16 },
 	[GENZ_A_U_MRL] = { .type = NLA_NESTED },
 };
@@ -253,12 +255,19 @@ static int parse_resource_list(const struct nlattr *resource_list,
 			pr_debug("nla_parse_nested of UUID list returned %d\n",
 				 ret);
 		}
-		if (u_attrs[GENZ_A_U_UUID]) {
+		if (u_attrs[GENZ_A_U_CLASS_UUID]) {
 			uint8_t *uuid;
 
-			uuid = nla_data(u_attrs[GENZ_A_U_UUID]);
-			bytes_to_uuid(&zdev->uuid, uuid);
-			pr_debug("\t\tUUID: %pUb\n", (void *) uuid);
+			uuid = nla_data(u_attrs[GENZ_A_U_CLASS_UUID]);
+			bytes_to_uuid(&zdev->class_uuid, uuid);
+			pr_debug("\t\tCLASS_UUID: %pUb\n", (void *) uuid);
+		}
+		if (u_attrs[GENZ_A_U_INSTANCE_UUID]) {
+			uint8_t *uuid;
+
+			uuid = nla_data(u_attrs[GENZ_A_U_INSTANCE_UUID]);
+			bytes_to_uuid(&zdev->instance_uuid, uuid);
+			pr_debug("\t\tINSTANCE_UUID: %pUb\n", (void *) uuid);
 		}
 		if (u_attrs[GENZ_A_U_CLASS]) {
 			int condensed_class;
