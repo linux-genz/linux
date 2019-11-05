@@ -70,10 +70,13 @@ struct genz_fabric {
 	uint32_t number;		/* fabric_number */
 	uuid_t mgr_uuid;
 	struct list_head devices;	/* List of devices on this fabric */
+	spinlock_t devices_lock;	/* protects devices list */
 	struct list_head components;	/* List of components on this fabric */
-	struct rw_semaphore subnet_sem; /* protects subnets list */
+	spinlock_t components_lock;	/* protects components list */
 	struct list_head subnets;	/* List of subnets on this fabric */
+	spinlock_t subnets_lock;	/* protects subnets list */
 	struct list_head bridges;	/* List of local bridges on fabric */
+	spinlock_t bridges_lock;	/* protects bridges list */
 	struct kref	kref;
 	struct device   dev;		/* /sys/devices/genz<N> */
 };
@@ -235,6 +238,7 @@ struct genz_driver_aux {
 
 /* Global Variables */
 extern struct list_head genz_fabrics;
+extern spinlock_t genz_fabrics_lock;
 
 /* Function Prototypes */
 void genz_lock_rescan_remove(void);

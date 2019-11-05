@@ -43,9 +43,9 @@
 #include "genz-netlink.h"
 #include "genz-control.h"
 
-/* Global list of struct genz_fabric. Protected by semaphore genz_fabrics_sem */
+/* Global list of struct genz_fabric. Protected by spinlock genz_fabrics_lock */
 LIST_HEAD(genz_fabrics);
-DECLARE_RWSEM(genz_fabrics_sem);
+DEFINE_SPINLOCK(genz_fabrics_lock);
 
 static int call_probe(struct genz_dev *zdev, struct genz_driver *zdrv, const struct genz_device_id *zid);
 
@@ -195,6 +195,10 @@ static struct genz_fabric *genz_alloc_fabric(void)
         INIT_LIST_HEAD(&f->components);
         INIT_LIST_HEAD(&f->devices);
         INIT_LIST_HEAD(&f->bridges);
+	spin_lock_init(&f->devices_lock);
+	spin_lock_init(&f->components_lock);
+	spin_lock_init(&f->subnets_lock);
+	spin_lock_init(&f->bridges_lock);
 
         return f;
 }
@@ -233,28 +237,35 @@ static int genz_init_fabric(struct genz_fabric *f,
 void genz_free_fabric(struct device *dev)
 {
 	struct genz_fabric *f;
+	unsigned long flags;
 
 	f = container_of(dev, struct genz_fabric, dev);
 
 	pr_debug("genz_free_fabric %s\n", dev_name(dev));
+	spin_lock_irqsave(&genz_fabrics_lock, flags);
 	list_del(&f->node);
+	spin_unlock_irqrestore(&genz_fabrics_lock, flags);
 }
 
 struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
 {
 	struct genz_fabric *f, *found = NULL;
 	int ret = 0;
+	unsigned long flags;
 	
 	pr_debug( "entering %s", __func__);
+	spin_lock_irqsave(&genz_fabrics_lock, flags);
 	list_for_each_entry(f, &genz_fabrics, node) {
 		if (f->number == fabric_num) {
 			found = f;
 			break;
 		}
 	}
+	spin_unlock_irqrestore(&genz_fabrics_lock, flags);
 	if (!found) {
 		pr_debug( "fabric_num %d is not in the list\n", fabric_num);
 		/* make sure this has not already been added. */
+		spin_lock_irqsave(&genz_fabrics_lock, flags);
 		list_for_each_entry(f, &genz_fabrics, node) {
 			if (f->number == fabric_num) {
 				/* Already got added */
@@ -262,6 +273,7 @@ struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
 				goto out;
 			}
 		}
+		spin_unlock_irqrestore(&genz_fabrics_lock, flags);
 		pr_debug( "fabric_num %d is still not in the list\n", fabric_num);
 		/* Allocate a new genz_fabric and add to list */
 		/* Revisit: add a flag that is it initialized. Set to UNINIT in the alloc call. take lock and add to list. do init_fabric. Take lock, Set to INITED in init_fabric, release lock.  */
@@ -277,7 +289,9 @@ struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
 			found = NULL;
 			goto out;
 		}
+		spin_lock_irqsave(&genz_fabrics_lock, flags);
 		list_add_tail(&found->node, &genz_fabrics);
+		spin_unlock_irqrestore(&genz_fabrics_lock, flags);
 	}
 	return found;
 out:
@@ -289,12 +303,15 @@ out:
 struct genz_fabric *genz_dev_to_fabric(struct device *dev)
 {
 	struct genz_fabric *fab;
+	unsigned long flags;
 
+	spin_lock_irqsave(&genz_fabrics_lock, flags);
 	list_for_each_entry(fab, &genz_fabrics, node) {
 		if (&fab->dev == dev) {
 			return fab;
 		}
 	}
+	spin_unlock_irqrestore(&genz_fabrics_lock, flags);
 	return NULL;
 }
 
@@ -348,14 +365,18 @@ struct genz_subnet *genz_find_subnet(uint32_t sid, struct genz_fabric *f)
 {
 	struct genz_subnet *s, *found = NULL;
 	int ret = 0;
+	unsigned long flags;
 	
 	pr_debug( "in %s\n", __func__);
+
+	spin_lock_irqsave(&f->subnets_lock, flags);
 	list_for_each_entry(s, &f->subnets, node) {
 		if (s->sid == sid) {
 			found = s;
 			break;
 		}
 	}
+	spin_unlock_irqrestore(&f->subnets_lock, flags);
 	pr_debug( "sid %d is not in the subnets list yet\n", sid);
 	if (!found) {
 		/* Allocate a new genz_subnet and add to list */
@@ -370,7 +391,9 @@ struct genz_subnet *genz_find_subnet(uint32_t sid, struct genz_fabric *f)
 			pr_debug( "init_subnet failed\n");
 			return NULL;
 		}
+		spin_lock_irqsave(&f->subnets_lock, flags);
 		list_add_tail(&found->node, &f->subnets);
+		spin_unlock_irqrestore(&f->subnets_lock, flags);
 		pr_debug( "added to the subnet list\n");
 	}
 	return found;
@@ -458,12 +481,15 @@ struct genz_component *genz_alloc_component(void)
 void genz_free_comp(struct device *dev)
 {
 	struct genz_component *c;
+	unsigned long flags;
 
 	pr_debug("genz_free_comp %s\n", dev_name(dev));
 
 	c = container_of(dev, struct genz_component, dev);
 
+	spin_lock_irqsave(&c->subnet->fabric->components_lock, flags);
 	list_del(&c->fab_comp_node);
+	spin_unlock_irqrestore(&c->subnet->fabric->components_lock, flags);
 	kfree(c);
 }
 
@@ -490,44 +516,47 @@ int genz_init_component(struct genz_component *zcomp,
 	}
 	pr_debug("component kobj is %px\n", &(zcomp->dev.kobj));
 	pr_debug("subnet kobj is %px\n", &(s->dev.kobj));
-
-	/* Revisit: add the fab_comp_node to the fabric component list */
 	kref_init(&zcomp->kref);
 	genz_create_component_files(&zcomp->dev);
 	return ret;
 }
 
 struct genz_component *genz_find_component(struct genz_subnet *s,
-               uint32_t cid)
+		uint32_t cid)
 {
-       struct genz_component *c, *found = NULL;
-       int ret = 0;
-       
-       pr_debug( "in %s\n", __func__);
-       list_for_each_entry(c, &s->fabric->components, fab_comp_node) {
-               if (c->cid == cid) {
-                       found = c;
-                       break;
-               }
-       }
-       pr_debug( "cid %d is not in the components list yet\n", cid);
-       if (!found) {
-               /* Allocate a new genz_component and add to list */
-               found = genz_alloc_component();
-               if (!found) {
-                       pr_debug( "alloc_componenet failed\n");
-                       return found;
-               }
-               ret = genz_init_component(found, s, cid);
-               if (ret) {
-               /* make sure this has not already been added. */
-                       pr_debug( "init_component failed\n");
-                       return NULL;
-               }
-               list_add_tail(&found->fab_comp_node, &s->fabric->components);
-               pr_debug( "added to the component list\n");
-       }
-       return found;
+	struct genz_component *c, *found = NULL;
+	int ret = 0;
+	unsigned long flags;
+
+	pr_debug( "in %s\n", __func__);
+	spin_lock_irqsave(&s->fabric->components_lock, flags);
+	list_for_each_entry(c, &s->fabric->components, fab_comp_node) {
+		if (c->cid == cid) {
+			found = c;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&s->fabric->components_lock, flags);
+	pr_debug( "cid %d is not in the components list yet\n", cid);
+	if (!found) {
+		/* Allocate a new genz_component and add to list */
+		found = genz_alloc_component();
+		if (!found) {
+			pr_debug( "alloc_componenet failed\n");
+			return found;
+		}
+		ret = genz_init_component(found, s, cid);
+		if (ret) {
+			/* make sure this has not already been added. */
+			pr_debug( "init_component failed\n");
+			return NULL;
+		}
+		spin_lock_irqsave(&s->fabric->components_lock, flags);
+		list_add_tail(&found->fab_comp_node, &s->fabric->components);
+		spin_unlock_irqrestore(&s->fabric->components_lock, flags);
+		pr_debug( "added to the component list\n");
+	}
+	return found;
 }
 
 void genz_free_component(struct kref *kref)
@@ -549,14 +578,33 @@ void genz_free_component(struct kref *kref)
 static void genz_release_dev(struct device *dev)
 {
         struct genz_dev *zdev;
+	unsigned long flags;
+	struct genz_fabric *f;
 
 	pr_debug("genz_release_dev %s\n", dev_name(dev));
         zdev = to_genz_dev(dev);
-	if (zdev == NULL)
+	if (zdev == NULL) {
+		pr_debug("zdev is NULL\n");
 		return;
+	}
+	if (zdev->zcomp == NULL) {
+		pr_debug("zdev->zcomp is NULL\n");
+		return;
+	}
+	if (zdev->zcomp->subnet == NULL) {
+		pr_debug("zdev->zcomp->subnet is NULL\n");
+		return;
+	}
+	f = zdev->zcomp->subnet->fabric;
+	if (f == NULL) {
+		pr_debug("zdev->zcomp->subnet->fabric is NULL\n");
+		return;
+	}
 
 	/* remove from the list of devices in the genz_fabric */
+	spin_lock_irqsave(&f->devices_lock, flags);
         list_del(&zdev->fab_dev_node);
+	spin_unlock_irqrestore(&f->devices_lock, flags);
 
         kfree(zdev);
 }
@@ -565,6 +613,7 @@ struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric)
 {
         struct genz_dev *zdev;
         struct genz_component *zcomp;
+	unsigned long flags;
 
         zdev = kzalloc(sizeof(*zdev), GFP_KERNEL);
         if (!zdev)
@@ -577,7 +626,9 @@ struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric)
                 return NULL;
         }
         zdev->zcomp = zcomp;
+	spin_lock_irqsave(&fabric->devices_lock, flags);
         list_add_tail(&zdev->fab_dev_node, &fabric->devices);
+	spin_unlock_irqrestore(&fabric->devices_lock, flags);
         zdev->dev.type = &genz_dev_type;
         INIT_LIST_HEAD(&zdev->zres_list);
 	pr_debug("fabric=%px, zdev=%px\n", fabric, zdev);
@@ -593,6 +644,9 @@ int genz_device_add(struct genz_dev *zdev)
 	zdev->dev.parent = &zdev->zcomp->dev;
 	zdev->dev.release = genz_release_dev;
 	zdev->zbdev = genz_find_bridge(zdev);
+	if (zdev->zbdev == NULL) {
+		pr_debug("genz_device_add failed to find a bridge\n");
+	}
 	device_initialize(&zdev->dev);
 
 	ret = device_add(&zdev->dev);
