@@ -235,6 +235,8 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	uint16_t sid, cid;
 	int ret = 0;
 	struct genz_subnet *s;
+	unsigned long flags;
+	struct genz_fabric *f;
 
 	/* Allocate a genz_component */
 	zcomp = genz_alloc_component();
@@ -257,22 +259,25 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 		genz_free_component(&zcomp->kref);
 		return -ENOMEM;
 	}
-	zbdev->fabric = uu->fabric->fabric;
-	if (zbdev->fabric == NULL) {
+	f = zbdev->fabric = uu->fabric->fabric;
+	if (f == NULL) {
 		pr_debug("zbdev->fabric is NULL\n");
 		ret = -ENODEV;
 		goto error;
 	}
-	/* Revisit: locking */
-	list_add_tail(&zbdev->fab_bridge_node, &zbdev->fabric->bridges);
-	list_add_tail(&zbdev->zdev.fab_dev_node, &zbdev->fabric->devices);
+	spin_lock_irqsave(&f->bridges_lock, flags);
+	list_add_tail(&zbdev->fab_bridge_node, &f->bridges);
+	spin_unlock_irqrestore(&f->bridges_lock, flags);
+	spin_lock_irqsave(&f->devices_lock, flags);
+	list_add_tail(&zbdev->zdev.fab_dev_node, &f->devices);
+	spin_unlock_irqrestore(&f->devices_lock, flags);
 
 	ret = genz_control_read_sid(&zbdev->zdev, &sid);
 	if (ret) {
 		pr_debug("genz_control_read_sid returned %d\n", ret);
 		goto error;
 	}
-        s = genz_find_subnet(sid, zbdev->fabric);
+        s = genz_find_subnet(sid, f);
         if (s == NULL) {
                 pr_debug("%s: genz_find_subnet failed\n", __FUNCTION__);
 		ret = -ENOMEM;
@@ -420,16 +425,19 @@ struct genz_bridge_dev *genz_find_bridge(struct genz_dev *zdev)
 {
 	struct genz_bridge_dev *zbdev = NULL;
 	struct genz_fabric *fabric;
+	unsigned long flags;
 
 	fabric = zdev->zcomp->subnet->fabric;
 	dev_dbg(&zdev->dev, "fabric=%px\n", fabric);
 
 	/* Revisit: do something smarter than "first_entry" */
+	spin_lock_irqsave(&fabric->bridges_lock, flags);
 	if (fabric && !list_empty(&fabric->bridges)) {
 		zbdev = list_first_entry(&fabric->bridges,
 					 struct genz_bridge_dev,
 					 fab_bridge_node);
 	}
+	spin_unlock_irqrestore(&fabric->bridges_lock, flags);
 
 	dev_dbg(&zdev->dev, "zbdev=%px\n", zbdev);
 	return zbdev;
@@ -509,6 +517,7 @@ static void force_dev_cleanup(void)
 {
 	struct genz_fabric *f, *f_tmp;
 	struct genz_bridge_dev *cur, *cur_tmp;
+	unsigned long flags;
 
 	pr_debug("in force_dev_cleanup\n");
 	/* go through each bridge */
@@ -526,6 +535,7 @@ static void force_dev_cleanup(void)
 		struct genz_component *zcomp, *zcomp_tmp;
 		struct genz_subnet *zsub, *zsub_tmp;
 
+		/* Each fabric has a reference to the mgr_uuid */
 		if (&f->mgr_uuid)
 			genz_fabric_uuid_tracker_free(&f->mgr_uuid);
 
@@ -534,6 +544,7 @@ static void force_dev_cleanup(void)
 				fab_dev_node) {
 			device_unregister(&zdev->dev);
 		}
+
 		/* remove each component */
         	list_for_each_entry_safe(zcomp, zcomp_tmp, &f->components,
 				fab_comp_node) {
