@@ -110,4 +110,4 @@ enum {
 
 int genz_nl_init(void);
 void genz_nl_exit(void);
-void genz_free_zres(struct genz_dev *zdev, struct genz_resource *zres);
+void genz_free_zres(struct genz_dev *zdev, struct genz_zres *zres);

@@ -473,8 +473,6 @@ struct genz_component *genz_alloc_component(void)
 		return NULL;
 
 	kref_init(&zcomp->kref);
-        INIT_LIST_HEAD(&zcomp->control_zres_list);
-        INIT_LIST_HEAD(&zcomp->data_zres_list);
 	return zcomp;
 }
 
