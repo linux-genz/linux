@@ -513,11 +513,53 @@ static int genz_bridge_zmmu_clear(struct genz_bridge_dev *br)
 	return 0;
 }
 
+struct genz_resource * genz_get_first_resource(struct genz_dev *zdev)
+{
+	struct genz_zres *zres;
+
+	if (zdev == NULL)
+		return NULL;
+	zres = list_first_entry(&zdev->zres_list, struct genz_zres, zres_node);
+	if (zres == NULL)
+		return NULL;
+	return(&zres->zres);
+}
+
+struct genz_resource * genz_get_next_resource(struct genz_dev *zdev,
+		struct genz_resource *res)
+{
+	struct genz_zres *pos, *zres;
+
+	pos = to_genz_res(res);
+	if (pos == NULL) {
+		pr_debug("genz_get_next_resource to_genz_res failed\n");
+		return NULL;
+	}
+	zres = list_next_entry(pos, zres_node);
+	if (zres == NULL)
+		return NULL;
+	return(&zres->zres);
+}
+
+bool genz_is_data_resource(struct genz_resource *res)
+{
+	return(!(res->res.flags & IORESOURCE_GENZ_CONTROL));
+}
+
+bool genz_is_control_resource(struct genz_resource *res)
+{
+	return(res->res.flags & IORESOURCE_GENZ_CONTROL);
+}
+
+const char *genz_resource_name(struct genz_resource *res)
+{
+	return res->res.name;
+}
+
 static void force_dev_cleanup(void)
 {
 	struct genz_fabric *f, *f_tmp;
 	struct genz_bridge_dev *cur, *cur_tmp;
-	unsigned long flags;
 
 	pr_debug("in force_dev_cleanup\n");
 	/* go through each bridge */

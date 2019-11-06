@@ -59,7 +59,7 @@ static ssize_t genz_write_control(struct file * file,
 	return 0;
 }
 
-int genz_create_attr(struct genz_dev *zdev, struct genz_resource *zres)
+int genz_create_attr(struct genz_dev *zdev, struct genz_zres *zres)
 {
 	struct bin_attribute *res_attr;
 	int ret;
@@ -68,9 +68,9 @@ int genz_create_attr(struct genz_dev *zdev, struct genz_resource *zres)
 
 	sysfs_bin_attr_init(res_attr);
 
-	res_attr->attr.name = zres->res.name;
+	res_attr->attr.name = zres->zres.res.name;
 	res_attr->attr.mode = (S_IRUSR | S_IWUSR);
-	res_attr->size = zres->res.end - zres->res.start + 1;
+	res_attr->size = zres->zres.res.end - zres->zres.res.start + 1;
 	res_attr->private = zres;
 	res_attr->read = genz_read_control;
 	res_attr->write = genz_write_control;
@@ -82,7 +82,7 @@ int genz_create_attr(struct genz_dev *zdev, struct genz_resource *zres)
 	return ret;
 }
 
-void genz_remove_attr(struct genz_dev *zdev, struct genz_resource *zres)
+void genz_remove_attr(struct genz_dev *zdev, struct genz_zres *zres)
 {
 	sysfs_remove_bin_file(&zdev->dev.kobj, &zres->res_attr);
 }

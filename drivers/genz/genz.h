@@ -54,15 +54,12 @@ extern struct bus_type genz_bus_type;
  * Gen-Z resources can be control or data space in the struct resources 
  * IORESOURCE_BITS.
  */
-struct genz_resource {
-	struct list_head component_list;
-	struct list_head zres_list; 	/* per genz_dev */
-	struct resource res;
-	uint32_t ro_rkey;
-	uint32_t rw_rkey;
+struct genz_zres { /* subsystem private version of genz_resource */
+	struct genz_resource zres;
+	struct list_head zres_node;
 	struct bin_attribute res_attr;
 };
-#define to_genz_res(n) container_of(n, struct genz_resource, res)
+#define to_genz_res(n) container_of(n, struct genz_zres, zres)
 
 struct genz_fabric {
 	struct list_head node;  	/* node in list of fabrics */
@@ -136,8 +133,6 @@ struct genz_component {
 	uuid_t			fru_uuid;
 	struct genz_subnet	*subnet;
 	struct list_head	fab_comp_node; /* Node in the per-fabric list */
-	struct list_head	control_zres_list; /* head of zres list */
-	struct list_head	data_zres_list;    /* head of zres list */
 	struct kref		kref;
 	int resource_count[GENZ_NUM_HARDWARE_TYPES+1]; /* +1 for "unknown" */
 };

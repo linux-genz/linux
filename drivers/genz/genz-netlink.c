@@ -81,27 +81,26 @@ const static struct nla_policy genz_genl_mem_region_policy[GENZ_A_MR_MAX + 1] = 
 	[GENZ_A_MR_RW_RKEY] = { .type = NLA_U32 },
 };
 
-static struct genz_resource *alloc_and_add_zres(struct genz_dev *zdev)
+static struct genz_zres *alloc_and_add_zres(struct genz_dev *zdev)
 {
-	struct genz_resource *zr;
+	struct genz_zres *zr;
 
 	zr = kzalloc(sizeof(*zr), GFP_KERNEL);
 	if (!zr)
 		return NULL;
-	list_add_tail(&zr->zres_list, &zdev->zres_list);
+	list_add_tail(&zr->zres_node, &zdev->zres_list);
 	return(zr);
 }
 
-void genz_free_zres(struct genz_dev *zdev, struct genz_resource *zres)
+void genz_free_zres(struct genz_dev *zdev, struct genz_zres *zres)
 {
 	genz_remove_attr(zdev, zres);
-	list_del(&zres->zres_list);
-	list_del(&zres->component_list);
-	kfree(zres->res.name);
+	list_del(&zres->zres_node);
+	kfree(zres->zres.res.name);
 	kfree(zres);
 }
 
-static int setup_zres(struct genz_resource *zres,
+static int setup_zres(struct genz_zres *zres,
 		struct genz_dev *zdev,
 		int cdtype, int iores_flags,
 		int str_len,
@@ -111,7 +110,7 @@ static int setup_zres(struct genz_resource *zres,
 	int ret = 0;
 	char *name;
 
-	zres->res.flags = iores_flags;
+	zres->zres.res.flags = iores_flags;
 	name = kzalloc(str_len, GFP_KERNEL);
 	if (name == NULL) {
 		/* Revisit: clean up and exit */
@@ -121,10 +120,7 @@ static int setup_zres(struct genz_resource *zres,
 	}
 	snprintf(name, GENZ_CONTROL_STR_LEN, fmt,
 		zdev->resource_count[cdtype]++);
-	zres->res.name = name;
-
-	list_add_tail(&zres->component_list, cd_zres_list);
-
+	zres->zres.res.name = name;
 error:
 	return(ret);
 }
@@ -142,7 +138,7 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 	uint32_t ro_rkey = -1U;
 	uint32_t rw_rkey = -1U;
 	struct netlink_ext_ack extack;
-	struct genz_resource *zres;
+	struct genz_zres *zres;
 
 	pr_debug("\t\tMemory Region List:\n");
 	/* Go through the nested list of memory region structures */
@@ -171,27 +167,27 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 		}
 		zres = alloc_and_add_zres(zdev);
 		if (zres != NULL) {
-			zres->res.start = mem_start;
-			zres->res.end = mem_start + mem_len -1;
-			zres->res.desc = IORES_DESC_NONE;
-			zres->ro_rkey = ro_rkey;
-			zres->rw_rkey = rw_rkey;
+			zres->zres.res.start = mem_start;
+			zres->zres.res.end = mem_start + mem_len -1;
+			zres->zres.res.desc = IORES_DESC_NONE;
+			zres->zres.ro_rkey = ro_rkey;
+			zres->zres.rw_rkey = rw_rkey;
 			if (mem_type == GENZ_CONTROL) {
 				ret = setup_zres(zres, zdev, GENZ_CONTROL,
-					(zres->res.flags | IORESOURCE_GENZ_CONTROL),
+					(zres->zres.res.flags | IORESOURCE_GENZ_CONTROL),
 					GENZ_CONTROL_STR_LEN,
 					"control%d",
-					&zdev->zcomp->control_zres_list);
+					&zdev->zres_list);
 				if (ret)
 					goto error;
 
 			}
 			else if (mem_type == GENZ_DATA) {
 				ret = setup_zres(zres, zdev, GENZ_DATA,
-					(zres->res.flags & ~IORESOURCE_GENZ_CONTROL),
+					(zres->zres.res.flags & ~IORESOURCE_GENZ_CONTROL),
 					GENZ_DATA_STR_LEN,
 					"data%d",
-					&zdev->zcomp->data_zres_list);
+					&zdev->zres_list);
 				if (ret)
 					goto error;
 			}
@@ -207,7 +203,7 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 			}
 			*/
 			/* Add this resource to the genz_dev's list */
-			list_add_tail(&zres->zres_list, &zdev->zres_list);
+			list_add_tail(&zres->zres_node, &zdev->zres_list);
 		}	
 		pr_debug("\t\t\tMR_START: 0x%llx\n\t\t\t\tMR_LENGTH: %lld\n\t\t\t\tMR_TYPE: %s\n\t\t\t\tRO_RKEY: 0x%x\n\t\t\t\tRW_KREY 0x%x\n", mem_start, mem_len, (mem_type == GENZ_DATA ? "DATA":"CONTROL"), ro_rkey, rw_rkey);
 	}

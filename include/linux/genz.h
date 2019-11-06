@@ -54,6 +54,7 @@ struct genz_bridge_dev;
 struct genz_component;
 struct genz_pte_info;
 struct genz_driver_aux;
+struct genz_driver_aux;
 
 /**
  * GENZ_DEVICE - macro used to describe a specific GENZ device
@@ -70,7 +71,7 @@ struct genz_dev {
 	uuid_t 			class_uuid;      /* component/service/virtual UUID */
 	uuid_t 			instance_uuid;
 	uint16_t		class;
-	struct list_head	zres_list;
+	struct list_head	zres_list;  /* head of zres list */
 	struct list_head	uu_node;   /* list of zdevs with same UUID */
 	struct genz_control_info *root_control_info;
 	struct kobject		*root_kobj; /* kobj for /sys/devices/genz<N> */
@@ -93,6 +94,19 @@ struct genz_driver {
 	struct genz_driver_aux		*zaux;
 };
 #define to_genz_driver(d) container_of(d, struct genz_driver, driver)
+
+struct genz_resource {
+	struct resource res;
+	uint32_t ro_rkey;
+	uint32_t rw_rkey;
+};
+
+struct genz_resource *genz_get_first_resource(struct genz_dev *zdev);
+struct genz_resource *genz_get_next_resource(struct genz_dev *zdev,
+		struct genz_resource *res);
+bool genz_is_data_resource(struct genz_resource *res);
+bool genz_is_control_resource(struct genz_resource *res);
+const char *genz_resource_name(struct genz_resource *res);
 
 /*
  * Use these macros so that KBUILD_MODNAME and THIS_MODULE can be expanded
