@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
  * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
@@ -79,17 +80,28 @@ const static struct nla_policy genz_genl_mem_region_policy[GENZ_A_MR_MAX + 1] = 
 	[GENZ_A_MR_TYPE] = { .type = NLA_U8 },
 	[GENZ_A_MR_RO_RKEY] = { .type = NLA_U32 },
 	[GENZ_A_MR_RW_RKEY] = { .type = NLA_U32 },
+	/* Revisit: add GENZ_A_MR_SHARED_COMPONENTS list */
 };
 
-static struct genz_zres *alloc_and_add_zres(struct genz_dev *zdev)
+struct genz_zres *genz_alloc_and_add_zres(struct genz_dev *zdev)
 {
-	struct genz_zres *zr;
+	struct genz_zres *zres;
 
-	zr = kzalloc(sizeof(*zr), GFP_KERNEL);
-	if (!zr)
+	pr_debug("%s: zdev is %px\n", __func__, zdev);
+
+	if (zdev == NULL) {
+		pr_debug("%s: passed a NULL zdev\n", __func__);
 		return NULL;
-	list_add_tail(&zr->zres_node, &zdev->zres_list);
-	return(zr);
+	}
+	zres = kzalloc(sizeof(struct genz_zres), GFP_KERNEL);
+	pr_debug("%s:kzalloc of zres %px\n", __func__, zres);
+	if (zres == NULL)
+		return NULL;
+	pr_debug("%s:&(zres->zres_node) %px\n", __func__, &(zres->zres_node));
+	pr_debug("%s:&zdev->zres_list %px\n", __func__, &(zdev->zres_list));
+	list_add_tail(&(zres->zres_node), &(zdev->zres_list));
+	pr_debug("%s: after list_add_tail\n", __func__);
+	return(zres);
 }
 
 void genz_free_zres(struct genz_dev *zdev, struct genz_zres *zres)
@@ -100,7 +112,7 @@ void genz_free_zres(struct genz_dev *zdev, struct genz_zres *zres)
 	kfree(zres);
 }
 
-static int setup_zres(struct genz_zres *zres,
+int genz_setup_zres(struct genz_zres *zres,
 		struct genz_dev *zdev,
 		int cdtype, int iores_flags,
 		int str_len,
@@ -165,7 +177,7 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 		if (mr_attrs[GENZ_A_MR_RW_RKEY]) {
 			rw_rkey = nla_get_u32(mr_attrs[GENZ_A_MR_RW_RKEY]);
 		}
-		zres = alloc_and_add_zres(zdev);
+		zres = genz_alloc_and_add_zres(zdev);
 		if (zres != NULL) {
 			zres->zres.res.start = mem_start;
 			zres->zres.res.end = mem_start + mem_len -1;
@@ -173,7 +185,7 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 			zres->zres.ro_rkey = ro_rkey;
 			zres->zres.rw_rkey = rw_rkey;
 			if (mem_type == GENZ_CONTROL) {
-				ret = setup_zres(zres, zdev, GENZ_CONTROL,
+				ret = genz_setup_zres(zres, zdev, GENZ_CONTROL,
 					(zres->zres.res.flags | IORESOURCE_GENZ_CONTROL),
 					GENZ_CONTROL_STR_LEN,
 					"control%d",
@@ -183,7 +195,7 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 
 			}
 			else if (mem_type == GENZ_DATA) {
-				ret = setup_zres(zres, zdev, GENZ_DATA,
+				ret = genz_setup_zres(zres, zdev, GENZ_DATA,
 					(zres->zres.res.flags & ~IORESOURCE_GENZ_CONTROL),
 					GENZ_DATA_STR_LEN,
 					"data%d",
@@ -229,10 +241,10 @@ static int parse_resource_list(const struct nlattr *resource_list,
 	struct genz_fabric *fabric;
 	struct genz_dev *zdev;
 
-	fabric = genz_find_fabric(zcomp->subnet->fabric->number);
+	fabric = zcomp->subnet->fabric;
 	if (!fabric)  {
-		pr_debug("genz_find_fabric failed\n");
-		return -ENOMEM;
+		pr_debug("zcomp->subnet doesn't have a fabric yet\n");
+		return -ENOENT;
 	}
 	pr_debug("\tRESOURCE_LIST:\n");
 	/* Go through the nested list of UUID structures */
@@ -289,11 +301,7 @@ static int parse_resource_list(const struct nlattr *resource_list,
 			/* Revisit: include fab#:gcid_str in dev name */
 			dev_set_name(&zdev->dev, "%s%d", condensed_name,
 				zdev->zcomp->resource_count[condensed_class]++);
-		} else {
-			pr_debug("missing required CLASS\n");
-			ret = -EINVAL;
-			goto error;
-		}
+		} 
 		ret = genz_device_add(zdev);
 		if (ret) {
 			pr_debug("\tgenz_device_add failed with %d\n", ret);
@@ -310,7 +318,6 @@ static int parse_resource_list(const struct nlattr *resource_list,
 		}
 	}
 	pr_debug("\tend of RESOURCE_LIST\n");
-error:
 	return ret;
 }
 
@@ -344,6 +351,7 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
         }
         fabric_num = uu->fabric->fabric_num;
         f = uu->fabric->fabric;
+	print_components(f);
 	if (f == NULL) {
 		pr_debug("fabric %d pointer from uu_tracker is NULL\n",
 			fabric_num);
@@ -428,11 +436,13 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 	ret = genz_create_fru_uuid_file(&(zcomp->kobj));
 */
 
+	/*
 	ret = genz_create_mgr_uuid_file(&f->dev);
 	if (ret) {
 		pr_debug("genz_create_mgr_uuid_file failed\n");
 		return -EINVAL;
 	}
+	*/
 	if (info->attrs[GENZ_A_RESOURCE_LIST]) {
 		ret = parse_resource_list(info->attrs[GENZ_A_RESOURCE_LIST],
 			zcomp);

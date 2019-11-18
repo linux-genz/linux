@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
  * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
@@ -371,14 +372,17 @@ struct genz_subnet *genz_find_subnet(uint32_t sid, struct genz_fabric *f)
 
 	spin_lock_irqsave(&f->subnets_lock, flags);
 	list_for_each_entry(s, &f->subnets, node) {
+		pr_debug("subnets list genz_subnet %px\n", s);
+		pr_debug("\tsubnet fabric is %px \n", s->fabric);
+		pr_debug("\ts->sid is %d looking for sid %d\n", s->sid, sid);
 		if (s->sid == sid) {
 			found = s;
 			break;
 		}
 	}
 	spin_unlock_irqrestore(&f->subnets_lock, flags);
-	pr_debug( "sid %d is not in the subnets list yet\n", sid);
 	if (!found) {
+		pr_debug( "sid %d is not in the subnets list yet\n", sid);
 		/* Allocate a new genz_subnet and add to list */
 		found = genz_alloc_subnet();
 		if (!found) {
@@ -519,6 +523,19 @@ int genz_init_component(struct genz_component *zcomp,
 	return ret;
 }
 
+void print_components(struct genz_fabric *f)
+{
+	struct genz_component *c;
+	int i = 0;
+
+	pr_debug("components list dump for fabric %px\n", f);
+	list_for_each_entry(c, &f->components, fab_comp_node) {
+		pr_debug("components list item %d: genz_component %px\n", i++, c);
+		pr_debug("\t subnet is %px gcid is %d:%d cclass is %d fru_uuid is %pUb\n", c->subnet, c->subnet->sid, c->cid, c->cclass, &c->fru_uuid);
+	}
+
+}
+
 struct genz_component *genz_find_component(struct genz_subnet *s,
 		uint32_t cid)
 {
@@ -526,17 +543,16 @@ struct genz_component *genz_find_component(struct genz_subnet *s,
 	int ret = 0;
 	unsigned long flags;
 
-	pr_debug( "in %s\n", __func__);
 	spin_lock_irqsave(&s->fabric->components_lock, flags);
 	list_for_each_entry(c, &s->fabric->components, fab_comp_node) {
-		if (c->cid == cid) {
+		if (c->cid == cid && s->sid == c->subnet->sid) {
 			found = c;
 			break;
 		}
 	}
 	spin_unlock_irqrestore(&s->fabric->components_lock, flags);
-	pr_debug( "cid %d is not in the components list yet\n", cid);
 	if (!found) {
+		pr_debug( "cid %d is not in the components list yet\n", cid);
 		/* Allocate a new genz_component and add to list */
 		found = genz_alloc_component();
 		if (!found) {
@@ -552,7 +568,7 @@ struct genz_component *genz_find_component(struct genz_subnet *s,
 		spin_lock_irqsave(&s->fabric->components_lock, flags);
 		list_add_tail(&found->fab_comp_node, &s->fabric->components);
 		spin_unlock_irqrestore(&s->fabric->components_lock, flags);
-		pr_debug( "added to the component list\n");
+		pr_debug( "added component %px to the component list\n", found);
 	}
 	return found;
 }
@@ -607,28 +623,35 @@ static void genz_release_dev(struct device *dev)
         kfree(zdev);
 }
 
-struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric)
+int genz_init_dev(struct genz_dev *zdev, struct genz_fabric *fabric)
 {
-        struct genz_dev *zdev;
         struct genz_component *zcomp;
 	unsigned long flags;
 
-        zdev = kzalloc(sizeof(*zdev), GFP_KERNEL);
-        if (!zdev)
-                return NULL;
-
-        /* Allocate a genz_component */
-        zcomp = genz_alloc_component();
-        if (zcomp == NULL) {
-		kfree(zdev);
-                return NULL;
-        }
-        zdev->zcomp = zcomp;
 	spin_lock_irqsave(&fabric->devices_lock, flags);
         list_add_tail(&zdev->fab_dev_node, &fabric->devices);
 	spin_unlock_irqrestore(&fabric->devices_lock, flags);
         zdev->dev.type = &genz_dev_type;
+	pr_debug("INIT_LIST_HEAD(&zdev->zres_list) for zdev %px\n", zdev);
         INIT_LIST_HEAD(&zdev->zres_list);
+
+	return 0;
+}
+
+struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric)
+{
+        struct genz_dev *zdev;
+	int ret;
+
+        zdev = kzalloc(sizeof(*zdev), GFP_KERNEL);
+        if (!zdev)
+                return NULL;
+	ret = genz_init_dev(zdev, fabric);
+	if (ret) {
+		kfree(zdev);
+		return NULL;
+	}
+
 	pr_debug("fabric=%px, zdev=%px\n", fabric, zdev);
 
         return zdev;

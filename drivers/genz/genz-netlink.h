@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
  * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
@@ -111,3 +112,7 @@ enum {
 int genz_nl_init(void);
 void genz_nl_exit(void);
 void genz_free_zres(struct genz_dev *zdev, struct genz_zres *zres);
+int genz_setup_zres(struct genz_zres *zres, struct genz_dev *zdev,
+		int cdtype, int iores_flags, int str_len,
+		char *fmt, struct list_head *cd_zres_list);
+struct genz_zres *genz_alloc_and_add_zres(struct genz_dev *zdev);

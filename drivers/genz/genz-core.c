@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
  * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
@@ -64,7 +65,7 @@ MODULE_PARM_DESC(rsp_page_grid, "responder page grid allocations - page_sz{^:}pa
  *
  * The Gen-Z sub-system can abe disabled through a module parameter
  * called "no_genz". This function returns the state of that parameter.
- * 
+ *
  * Return:
  * 0 - Gen-Z is enabled
  * 1 - Gen-Z is disabled
@@ -77,11 +78,11 @@ EXPORT_SYMBOL_GPL(genz_disabled);
 
 char *genz_gcid_str(const uint32_t gcid, char *str, const size_t len)
 {
-    snprintf(str, len, "%04x", gcid >> 12);
-    if (len > 4)
-        str[4] = ':';
-    snprintf(str+5, len-5, "%03x", gcid & 0xfff);
-    return str;
+	snprintf(str, len, "%04x", gcid >> 12);
+	if (len > 4)
+		str[4] = ':';
+	snprintf(str+5, len-5, "%03x", gcid & 0xfff);
+	return str;
 }
 EXPORT_SYMBOL_GPL(genz_gcid_str);
 
@@ -90,9 +91,9 @@ EXPORT_SYMBOL_GPL(genz_gcid_str);
  * @int type: the structure type field
  *
  * The Gen-Z control space structures contains a 12 bit type field
- * at bit 0. The type identifies the Gen-Z control structure. 
+ * at bit 0. The type identifies the Gen-Z control structure.
  * This function validates that the type field is a known value.
- * 
+ *
  * Return:
  * 0 - the given type is invalid
  * 1 - the given type is valid
@@ -112,15 +113,15 @@ EXPORT_SYMBOL_GPL(genz_validate_structure_type);
 
 static int genz_bus_match(struct device *dev, struct device_driver *drv)
 {
-        struct genz_dev    *zdev = to_genz_dev(dev);
-        struct genz_driver *zdrv = to_genz_driver(drv);
+	struct genz_dev    *zdev = to_genz_dev(dev);
+	struct genz_driver *zdrv = to_genz_driver(drv);
 	const struct genz_device_id *match;
 
 	pr_debug("entered\n");
-        match = genz_match_device(zdrv, zdev);
-        if (match)
-                return 1;
-        return 0;
+	match = genz_match_device(zdrv, zdev);
+	if (match)
+		return 1;
+	return 0;
 }
 
 static int genz_uevent(struct device *dev, struct kobj_uevent_env *env)
@@ -133,7 +134,8 @@ static int genz_uevent(struct device *dev, struct kobj_uevent_env *env)
 	zdev = to_genz_dev(dev);
 	if (add_uevent_var(env, "GENZ_CLASS_UUID=%pUb", &zdev->class_uuid))
 		return -ENOMEM;
-	if (add_uevent_var(env, "GENZ_INSTANCE_UUID=%pUb", &zdev->instance_uuid))
+	if (add_uevent_var(env, "GENZ_INSTANCE_UUID=%pUb",
+				&zdev->instance_uuid))
 		return -ENOMEM;
 	if (add_uevent_var(env, "GENZ_CLASS=%04x", zdev->class))
 		return -ENOMEM;
@@ -151,7 +153,7 @@ static void genz_shutdown(struct device *dev)
 }
 
 struct bus_type genz_bus_type = {
-	.name = 	"genz",
+	.name =	"genz",
 	.match =	genz_bus_match,
 	.uevent =	genz_uevent,
 	.probe =	genz_device_probe,
@@ -172,7 +174,7 @@ EXPORT_SYMBOL(genz_bus_type);
  */
 
 /* Revisit: change driver to zdrv */
-int __genz_register_driver(struct genz_driver *zdrv, struct module *module, 
+int __genz_register_driver(struct genz_driver *zdrv, struct module *module,
 				const char *mod_name)
 {
 	int ret;
@@ -181,26 +183,26 @@ int __genz_register_driver(struct genz_driver *zdrv, struct module *module,
 	if (genz_disabled())
 		return -ENODEV;
 
-        zdrv->driver.name = zdrv->name;
-        zdrv->driver.bus = &genz_bus_type;
-        zdrv->driver.owner = module;
-        zdrv->driver.mod_name = mod_name;
+	zdrv->driver.name = zdrv->name;
+	zdrv->driver.bus = &genz_bus_type;
+	zdrv->driver.owner = module;
+	zdrv->driver.mod_name = mod_name;
 
 	/* Initialize the uuid_t in the genz_device_id list */
 	zids = zdrv->id_table;
-        if (zids) {
-                while (!uuid_is_null(&zids->uuid) ||
-		     	(zids->uuid_str && uuid_is_valid(zids->uuid_str))) {
+	if (zids) {
+		while (!uuid_is_null(&zids->uuid) ||
+			(zids->uuid_str && uuid_is_valid(zids->uuid_str))) {
 			if (uuid_is_null(&zids->uuid))
 				uuid_parse(zids->uuid_str, &zids->uuid);
-                        zids++;
-                }
-        }
+			zids++;
+		}
+	}
 
 	ret = driver_register(&zdrv->driver);
 	if (ret) {
 		/* Revisit: undo the uuid_add too */
-		pr_debug( "driver_register for genz driver %s failed with %d\n",
+		pr_debug("driver_register for genz driver %s failed with %d\n",
 			zdrv->name, ret);
 		return ret;
 	}
@@ -220,7 +222,7 @@ EXPORT_SYMBOL(__genz_register_driver);
  */
 void __genz_unregister_driver(struct genz_driver *zdrv)
 {
-        driver_unregister(&zdrv->driver);
+	driver_unregister(&zdrv->driver);
 }
 EXPORT_SYMBOL(__genz_unregister_driver);
 
@@ -229,7 +231,6 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 			    struct genz_bridge_driver *zbdrv,
 			    void *driver_data)
 {
-	struct genz_component *zcomp;
 	struct uuid_tracker *uu;
 	uuid_t mgr_uuid;
 	uint16_t sid, cid;
@@ -238,12 +239,6 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	unsigned long flags;
 	struct genz_fabric *f;
 
-	/* Allocate a genz_component */
-	zcomp = genz_alloc_component();
-	if (zcomp == NULL) {
-		return -ENOMEM;
-	}
-	zbdev->zdev.zcomp = zcomp;
 	zbdev->zbdrv = zbdrv;
 	zbdev->zdev.zdrv = &zbdrv->zdrv;
 	zbdev->zdev.zbdev = zbdev;
@@ -256,7 +251,6 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 			sizeof(mgr_uuid));
 	uu = genz_fabric_uuid_tracker_alloc_and_insert(&mgr_uuid);
 	if (!uu) {
-		genz_free_component(&zcomp->kref);
 		return -ENOMEM;
 	}
 	f = zbdev->fabric = uu->fabric->fabric;
@@ -271,41 +265,60 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	spin_lock_irqsave(&f->devices_lock, flags);
 	list_add_tail(&zbdev->zdev.fab_dev_node, &f->devices);
 	spin_unlock_irqrestore(&f->devices_lock, flags);
-
 	ret = genz_control_read_sid(&zbdev->zdev, &sid);
 	if (ret) {
 		pr_debug("genz_control_read_sid returned %d\n", ret);
 		goto error;
 	}
-        s = genz_find_subnet(sid, f);
-        if (s == NULL) {
-                pr_debug("%s: genz_find_subnet failed\n", __FUNCTION__);
+	s = genz_find_subnet(sid, f);
+	if (s == NULL) {
+		pr_debug("%s: genz_find_subnet failed\n", __func__);
 		ret = -ENOMEM;
 		goto error;
-        }
+	}
 	ret = genz_control_read_cid0(&zbdev->zdev, &cid);
 	if (ret) {
 		pr_debug("genz_control_read_cid returned %d\n", ret);
 		goto error;
 	}
-        zcomp = genz_find_component(s, cid);
-        if (zcomp == NULL) {
-                pr_debug("%s: genz_find_component failed\n", __FUNCTION__);
-                ret = -ENOMEM;
+	zbdev->zdev.zcomp = genz_find_component(s, cid);
+	if (zbdev->zdev.zcomp == NULL) {
+		pr_debug("%s: genz_find_component failed\n", __func__);
+		ret = -ENOMEM;
 		goto error;
-        }
-	ret = genz_control_read_cclass(&zbdev->zdev, &zcomp->cclass);
+	}
+	ret = genz_init_dev(&zbdev->zdev, f);
+	if (ret) {
+		pr_debug("genz_init_dev failed %d\n", ret);
+		goto error;
+	}
+	/* Revisit: add the bridge number */
+	dev_set_name(&zbdev->zdev.dev, "bridge0");
+	ret = genz_device_add(&zbdev->zdev);
+	if (ret) {
+		pr_debug("genz_device_add failed %d\n", ret);
+		goto error;
+	}
+	ret = genz_control_read_cclass(&zbdev->zdev, &zbdev->zdev.zcomp->cclass);
 	if (ret) {
 		pr_debug("genz_control_read_cclass returned %d\n", ret);
 		goto error;
 	}
-	ret = genz_control_read_fru_uuid(&zbdev->zdev, &zcomp->fru_uuid);
+	ret = genz_control_read_fru_uuid(&zbdev->zdev, &zbdev->zdev.zcomp->fru_uuid);
 	if (ret) {
 		pr_debug("genz_control_read_fru_uuid returned %d\n", ret);
 		goto error;
 	}
-
+	/*
+	ret = genz_create_mgr_uuid_file(&f->dev);
+	if (ret) {
+		pr_debug("genz_create_mgr_uuid_file failed\n");
+		return -EINVAL;
+	}
+	*/
+	return ret;
 error:
+	genz_free_component(&zbdev->zdev.zcomp->kref);
 	return ret;
 }
 
@@ -353,9 +366,8 @@ int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv,
 
 	info = &zbdev->br_info;
 	ret = zbdrv->bridge_info(&zbdev->zdev, &zbdev->br_info);
-	dev_dbg(dev, "bridge_info: ret=%d, req_zmmu=%u, rsp_zmmu=%u, "
-		"xdm=%u, rdm=%u, nr_req_page_grids=%u, nr_rsp_page_grids=%u, "
-		"nr_req_ptes=%llu, nr_rsp_ptes=%llu\n",
+	dev_dbg(dev,
+		"bridge_info: ret=%d, req_zmmu=%u, rsp_zmmu=%u, xdm=%u, rdm=%u, nr_req_page_grids=%u, nr_rsp_page_grids=%u, nr_req_ptes=%llu, nr_rsp_ptes=%llu\n",
 		ret, info->req_zmmu, info->rsp_zmmu, info->xdm, info->rdm,
 		info->nr_req_page_grids, info->nr_rsp_page_grids,
 		info->nr_req_ptes, info->nr_rsp_ptes);
@@ -382,14 +394,15 @@ EXPORT_SYMBOL(genz_register_bridge);
 
 /**
  * genz_unregister_bridge - unregister a Gen-Z bridge driver
- * @struct device *dev: the native device originally passed to genz_register_bridge
+ * @struct device *dev: the native device originally passed to
+ *		genz_register_bridge
  *
  * A driver calls genz_unregister_bridge() to unregister a bridge
  * device with the Gen-Z sub-system. Typically a bridge device driver
  * is a PCI device (for example) and the driver is both a PCI driver and
  * a Gen-Z driver. The driver must call the appropriate native bus "unregister"
  * function after calling genz_unregister_bridge(), e.g.
- * pci_unregister_driver(). 
+ * pci_unregister_driver().
  *
  * Return:
  * Returns 0 on success. Returns a negative value on error.
@@ -426,6 +439,10 @@ struct genz_bridge_dev *genz_find_bridge(struct genz_dev *zdev)
 	struct genz_bridge_dev *zbdev = NULL;
 	struct genz_fabric *fabric;
 	unsigned long flags;
+
+	pr_debug("%s: zdev->zcomp is %px\n", __func__, zdev->zcomp);
+	pr_debug("%s: zdev->zcomp->subnet is %px\n", __func__, zdev->zcomp->subnet);
+	pr_debug("%s: zdev->zcomp->subnet->fabric is %px\n", __func__, zdev->zcomp->subnet->fabric);
 
 	fabric = zdev->zcomp->subnet->fabric;
 	dev_dbg(&zdev->dev, "fabric=%px\n", fabric);
@@ -484,9 +501,8 @@ static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br)
 
 	if (br->br_info.rsp_zmmu) {
 		if (br->br_info.nr_rsp_page_grids) {
-			if (!cleared) {
+			if (!cleared)
 				genz_zmmu_clear_all(br, false);
-			}
 			for (pg = 0; pg < rsp_pg_cnt; pg++) {
 				pg_index = genz_rsp_page_grid_alloc(
 					br, &rsp_parse_pg[pg]);
@@ -513,7 +529,7 @@ static int genz_bridge_zmmu_clear(struct genz_bridge_dev *br)
 	return 0;
 }
 
-struct genz_resource * genz_get_first_resource(struct genz_dev *zdev)
+struct genz_resource *genz_get_first_resource(struct genz_dev *zdev)
 {
 	struct genz_zres *zres;
 
@@ -522,23 +538,23 @@ struct genz_resource * genz_get_first_resource(struct genz_dev *zdev)
 	zres = list_first_entry(&zdev->zres_list, struct genz_zres, zres_node);
 	if (zres == NULL)
 		return NULL;
-	return(&zres->zres);
+	return &zres->zres;
 }
 
-struct genz_resource * genz_get_next_resource(struct genz_dev *zdev,
+struct genz_resource *genz_get_next_resource(struct genz_dev *zdev,
 		struct genz_resource *res)
 {
 	struct genz_zres *pos, *zres;
 
 	pos = to_genz_res(res);
 	if (pos == NULL) {
-		pr_debug("genz_get_next_resource to_genz_res failed\n");
+		pr_debug("%s to_genz_res failed\n", __func__);
 		return NULL;
 	}
 	zres = list_next_entry(pos, zres_node);
 	if (zres == NULL)
 		return NULL;
-	return(&zres->zres);
+	return &zres->zres;
 }
 
 bool genz_is_data_resource(struct genz_resource *res)
@@ -561,7 +577,7 @@ static void force_dev_cleanup(void)
 	struct genz_fabric *f, *f_tmp;
 	struct genz_bridge_dev *cur, *cur_tmp;
 
-	pr_debug("in force_dev_cleanup\n");
+	pr_debug("in %s\n", __func__);
 	/* go through each bridge */
 	list_for_each_entry_safe(cur, cur_tmp, &genz_bridge_list, bridge_node) {
 		genz_fabric_uuid_tracker_free(&cur->fabric->mgr_uuid);
@@ -572,7 +588,7 @@ static void force_dev_cleanup(void)
 		kfree(cur);
 	}
 	/* go through each fabric */
-        list_for_each_entry_safe(f, f_tmp, &genz_fabrics, node) {
+	list_for_each_entry_safe(f, f_tmp, &genz_fabrics, node) {
 		struct genz_dev *zdev, *zdev_tmp;
 		struct genz_component *zcomp, *zcomp_tmp;
 		struct genz_subnet *zsub, *zsub_tmp;
@@ -582,32 +598,32 @@ static void force_dev_cleanup(void)
 			genz_fabric_uuid_tracker_free(&f->mgr_uuid);
 
 		/* remove each genz_dev */
-        	list_for_each_entry_safe(zdev, zdev_tmp, &f->devices,
+		list_for_each_entry_safe(zdev, zdev_tmp, &f->devices,
 				fab_dev_node) {
 			device_unregister(&zdev->dev);
 		}
 
 		/* remove each component */
-        	list_for_each_entry_safe(zcomp, zcomp_tmp, &f->components,
+		list_for_each_entry_safe(zcomp, zcomp_tmp, &f->components,
 				fab_comp_node) {
 			device_unregister(&zcomp->dev);
 		}
 
 		/* remove each subnet */
-        	list_for_each_entry_safe(zsub, zsub_tmp, &f->subnets, node) {
+		list_for_each_entry_safe(zsub, zsub_tmp, &f->subnets, node) {
 			device_unregister(&zsub->dev);
 		}
 
 		/* finally remove the fabric device */
 		device_unregister(&f->dev);
-        }
+	}
 }
 
 static int __init genz_init(void)
 {
 	int ret = 0;
 
-	pr_debug("genz_init\n");
+	pr_debug("%s\n", __func__);
 
 	if (genz_disabled())
 		return -ENODEV;
@@ -638,7 +654,7 @@ module_init(genz_init);
 
 static void __exit genz_exit(void)
 {
-	pr_debug("in genz_exit\n");
+	pr_debug("in %s\n", __func__);
 	force_dev_cleanup();
 	bus_unregister(&genz_bus_type);
 	genz_nl_exit();
