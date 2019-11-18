@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
  * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
@@ -72,7 +73,7 @@ static ssize_t bridge_rescan_store(struct bus_type *bus, const char *buf,
 	}
 }
 
-static BUS_ATTR(rescan, (S_IWUSR|S_IWGRP), NULL, bridge_rescan_store);
+static BUS_ATTR(rescan, (0220), NULL, bridge_rescan_store);
 
 static struct attribute *genz_bridge_attrs[] = {
 	&bridge_attr_rescan.attr,
@@ -99,7 +100,7 @@ struct device_type genz_bridge_type = {
 };
 
 /* Increment the reference count on the bus device object */
-struct genz_bus * genz_bus_get(struct genz_bus *bus)
+struct genz_bus *genz_bus_get(struct genz_bus *bus)
 {
 	if (bus)
 		get_device(&bus->dev);

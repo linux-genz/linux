@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
  * Copyright (C) 2018-2019 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
@@ -38,6 +39,7 @@
 
 #include "genz.h"
 #include "genz-probe.h"
+#include "genz-control.h"
 
 static struct rb_root   uuid_rbtree = RB_ROOT;
 DEFINE_SPINLOCK(genz_uuid_rbtree_lock);
@@ -183,7 +185,7 @@ struct uuid_tracker *genz_uuid_tracker_alloc(uuid_t *uuid,
 
  done:
 	*status = ret;
-	pr_debug("alloc uuid=%pUb, refcount=%u, local=%px, remote=%px, zbr_list=%px, fabric=%px, ret=%d\n",
+	pr_debug("alloc uuid=%pUb, refcount=%u, local=%px, remote=%px, zbr_list=%px, tracker_fabric=%px, ret=%d\n",
 		 &uu->uuid,
 		 kref_read(&uu->refcount), uu->local, uu->remote,
 		 uu->zbr_list, uu->fabric, ret);
@@ -568,6 +570,7 @@ struct uuid_tracker *genz_fabric_uuid_tracker_alloc_and_insert(
 {
 	int status;
 	struct uuid_tracker *uu;
+	int ret;
 
 	uu = genz_uuid_tracker_alloc(uuid, UUID_TYPE_FABRIC, GFP_KERNEL,
 			&status);
@@ -578,6 +581,10 @@ struct uuid_tracker *genz_fabric_uuid_tracker_alloc_and_insert(
 			uu->fabric->fabric_num = get_new_fabric_number();
 			uu->fabric->fabric = genz_find_fabric(uu->fabric->fabric_num);
 			memcpy(&uu->fabric->fabric->mgr_uuid, uuid, UUID_SIZE);
+			ret = genz_create_mgr_uuid_file(&uu->fabric->fabric->dev);
+			if (ret) {
+				pr_debug("genz_create_mgr_uuid_file failed\n");
+			}
 		} else { /* -EEXIST */
 			pr_debug("tracker insert prev != uu already in the tracker mgr_uuid\n");
 		}

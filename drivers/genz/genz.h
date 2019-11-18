@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
  * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
@@ -46,12 +47,12 @@
 
 /* Value of Z-UUID in control space that indicates a Gen-Z device */
 #define GENZ_Z_UUID	0x4813ea5f074e4be2a355a354145c9927
-#define GENZ_CAST_UUID(u) *((uuid_t *)&(u))
+#define GENZ_CAST_UUID(u) (*((uuid_t *)&(u)))
 
 extern struct bus_type genz_bus_type;
 
 /*
- * Gen-Z resources can be control or data space in the struct resources 
+ * Gen-Z resources can be control or data space in the struct resources
  * IORESOURCE_BITS.
  */
 struct genz_zres { /* subsystem private version of genz_resource */
@@ -62,7 +63,7 @@ struct genz_zres { /* subsystem private version of genz_resource */
 #define to_genz_res(n) container_of(n, struct genz_zres, zres)
 
 struct genz_fabric {
-	struct list_head node;  	/* node in list of fabrics */
+	struct list_head node;	/* node in list of fabrics */
 	uint32_t number;		/* fabric_number */
 	uuid_t mgr_uuid;
 	struct list_head devices;	/* List of devices on this fabric */
@@ -81,9 +82,9 @@ struct genz_fabric {
 
 struct genz_fabric_attribute {
 	struct attribute attr;
-        ssize_t (*show)(struct genz_fabric *fab,
+	ssize_t (*show)(struct genz_fabric *fab,
 		struct genz_fabric_attribute *attr, char *buf);
-        ssize_t (*store)(struct genz_fabric *fab,
+	ssize_t (*store)(struct genz_fabric *fab,
 		struct genz_fabric_attribute *attr,
 		const char *buf, size_t count);
 };
@@ -91,7 +92,7 @@ struct genz_fabric_attribute {
 
 struct genz_subnet {
 	uint32_t		sid;
-	struct genz_fabric 	*fabric;
+	struct genz_fabric	*fabric;
 	struct list_head	node; /* per-fabric list of subnets*/
 	struct list_head	frus; /* list of frus in this subnet */
 	struct device		dev; /* /sys/devices/genz<N>/SID */
@@ -100,9 +101,9 @@ struct genz_subnet {
 
 struct genz_subnet_attribute {
 	struct attribute attr;
-        ssize_t (*show)(struct genz_subnet *s,
+	ssize_t (*show)(struct genz_subnet *s,
 		struct genz_subnet_attribute *attr, char *buf);
-        ssize_t (*store)(struct genz_subnet *s,
+	ssize_t (*store)(struct genz_subnet *s,
 		struct genz_subnet_attribute *attr,
 		const char *buf, size_t count);
 };
@@ -118,9 +119,9 @@ struct genz_fru {
 
 struct genz_fru_attribute {
 	struct attribute attr;
-        ssize_t (*show)(struct genz_fru *f,
+	ssize_t (*show)(struct genz_fru *f,
 		struct genz_fru_attribute *attr, char *buf);
-        ssize_t (*store)(struct genz_fru *f,
+	ssize_t (*store)(struct genz_fru *f,
 		struct genz_fru_attribute *attr,
 		const char *buf, size_t count);
 };
@@ -141,16 +142,16 @@ struct genz_component {
 #ifdef NOT_YET
 static inline struct genz_component *kobj_to_genz_component(struct kobject *kobj)
 {
-        return container_of(kobj, struct genz_component, kobj);
+	return container_of(kobj, struct genz_component, kobj);
 }
 
 #endif
 
 struct genz_component_attribute {
 	struct attribute attr;
-        ssize_t (*show)(struct genz_component *c,
+	ssize_t (*show)(struct genz_component *c,
 		struct genz_component_attribute *attr, char *buf);
-        ssize_t (*store)(struct genz_component *c,
+	ssize_t (*store)(struct genz_component *c,
 		struct genz_component_attribute *attr,
 		const char *buf, size_t count);
 };
@@ -158,9 +159,9 @@ struct genz_component_attribute {
 
 struct genz_dev_attribute {
 	struct attribute attr;
-        ssize_t (*show)(struct genz_dev *zdev,
+	ssize_t (*show)(struct genz_dev *zdev,
 		struct genz_dev_attribute *attr, char *buf);
-        ssize_t (*store)(struct genz_dev *zdev,
+	ssize_t (*store)(struct genz_dev *zdev,
 		struct genz_dev_attribute *attr,
 		const char *buf, size_t count);
 };
@@ -194,16 +195,16 @@ static inline int is_genz_bridge_device(struct device *dev)
 struct genz_control_info {
 	struct kobject          kobj;
 	struct resource         *c_access_res; /* points into the c-access
-						* tree- may not end up being 
+						* tree- may not end up being
 						* a struct resource *.
-							*/
+						*/
 	struct genz_control_info *parent, *sibling, *child; /* control structure hierarchy used for creating /sys hierarchy */
 	struct genz_dev		*zdev;
 	off_t                   start;
 	uint32_t		type;		/* type from the control_structure_header */
 	uint8_t			vers;		/* version from the control_structure_header */
 	size_t                  size;		/* size in bytes */
-	struct req_zmmu         *zmmu;  	/* placeholder for zmmu entry */
+	struct req_zmmu         *zmmu;	/* placeholder for zmmu entry */
 	struct bin_attribute	battr;
 };
 
@@ -211,9 +212,9 @@ struct genz_control_info {
 
 struct genz_control_info_attribute {
 	struct attribute attr;
-        ssize_t (*show)(struct genz_control_info *info,
+	ssize_t (*show)(struct genz_control_info *info,
 		struct genz_control_info_attribute *attr, char *buf);
-        ssize_t (*store)(struct genz_control_info *info,
+	ssize_t (*store)(struct genz_control_info *info,
 		struct genz_control_info_attribute *attr,
 		const char *buf, size_t count);
 };

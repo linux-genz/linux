@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
  * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
@@ -75,6 +76,7 @@ int genz_create_attr(struct genz_dev *zdev, struct genz_zres *zres)
 	res_attr->read = genz_read_control;
 	res_attr->write = genz_write_control;
 	res_attr->mmap = NULL;
+	pr_debug("%s: zdev->dev.kobj is %px\n", __func__, &zdev->dev.kobj);
 	ret = sysfs_create_bin_file(&zdev->dev.kobj, res_attr);
 	if (ret) {
 		printk(KERN_ERR "sysfs_create_bin_file failed with %d\n", ret);
