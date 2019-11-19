@@ -309,13 +309,6 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 		pr_debug("genz_control_read_fru_uuid returned %d\n", ret);
 		goto error;
 	}
-	/*
-	ret = genz_create_mgr_uuid_file(&f->dev);
-	if (ret) {
-		pr_debug("genz_create_mgr_uuid_file failed\n");
-		return -EINVAL;
-	}
-	*/
 	return ret;
 error:
 	genz_free_component(&zbdev->zdev.zcomp->kref);
@@ -434,6 +427,7 @@ int genz_unregister_bridge(struct device *dev)
 	zbdev = genz_find_bridge(dev);
 	if (zbdev) {
 		list_del(&zbdev->bridge_node);
+		genz_fabric_uuid_tracker_free(&zbdev->fabric->mgr_uuid);
 		genz_bridge_remove_control_files(zbdev);
 		genz_bridge_zmmu_clear(zbdev);
 		kfree(zbdev);
