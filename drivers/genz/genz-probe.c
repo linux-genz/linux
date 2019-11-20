@@ -625,7 +625,6 @@ static void genz_release_dev(struct device *dev)
 
 int genz_init_dev(struct genz_dev *zdev, struct genz_fabric *fabric)
 {
-        struct genz_component *zcomp;
 	unsigned long flags;
 
 	spin_lock_irqsave(&fabric->devices_lock, flags);

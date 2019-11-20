@@ -1238,15 +1238,9 @@ int genz_control_read_c_uuid(struct genz_dev *zdev, uuid_t *c_uuid)
 int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 {
 	int ret;
-	struct genz_control_structure_header hdr;
-	struct genz_control_ptr_info *cpi;
 	struct genz_dev *zdev;
-	struct genz_fabric *f;
-	struct genz_subnet *s;
-	struct genz_component *zcomp;
 	struct genz_zres *zres;
 	struct device *dev;
-	uint16_t sid, cid, cclass;
 
 	dev = zbdev->bridge_dev;
 	/* Make the genzN directory under the native device */
