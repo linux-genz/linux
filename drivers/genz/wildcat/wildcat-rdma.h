@@ -253,30 +253,6 @@ struct wildcat_xqinfo {
 	uint8_t                queue; /* HW queue number */
 };
 
-/*
- * Traffic class abstraction for user space. Used in wildcat_rdma_req_XQALLOC
- * traffic_class field. Mapping to actual Gen-Z traffic class is
- * undefined to user space.
- */
-enum {
-	WILDCAT_TC_0 = 0,
-	WILDCAT_TC_1 = 1,
-	WILDCAT_TC_2 = 2,
-	WILDCAT_TC_3 = 3,
-	WILDCAT_TC_4 = 4,
-	WILDCAT_TC_5 = 5,
-	WILDCAT_TC_6 = 6,
-	WILDCAT_TC_7 = 7,
-	WILDCAT_TC_8 = 8,
-	WILDCAT_TC_9 = 9,
-	WILDCAT_TC_10 = 10,
-	WILDCAT_TC_11 = 11,
-	WILDCAT_TC_12 = 12,
-	WILDCAT_TC_13 = 13,
-	WILDCAT_TC_14 = 14,
-	WILDCAT_TC_15 = 15
-};
-
 struct wildcat_rdma_req_XQALLOC {
 	struct wildcat_rdma_hdr hdr;
 	uint32_t            cmdq_ent;       /* Minimum entries in the cmdq */

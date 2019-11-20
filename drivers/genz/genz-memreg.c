@@ -50,7 +50,7 @@ static void pte_info_free(struct kref *ref);
 bool genz_gcid_is_local(struct genz_bridge_dev *br, uint32_t gcid)
 {
 	/* Revisit: handle multiple bridge CIDs */
-	return (br->br_info.gcid == gcid);
+	return (genz_dev_gcid(&br->zdev, 0) == gcid);
 }
 
 void genz_init_mem_data(struct genz_mem_data *mdata,
@@ -773,7 +773,7 @@ EXPORT_SYMBOL(genz_rmr_free_all);
 struct genz_rmr *genz_rmr_get(
 	struct genz_mem_data *mdata, uuid_t *uuid, uint32_t dgcid,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint pasid,
-	uint32_t rkey, uint64_t *req_addr, uint32_t *pg_ps)
+	uint32_t rkey, struct genz_rmr_info *rmri)
 {
 	struct genz_rmr         *rmr, *found;
 	struct genz_pte_info    *info;
@@ -833,8 +833,8 @@ struct genz_rmr *genz_rmr_get(
 	if (found != rmr) {
 		genz_rmr_remove(rmr, true);
 		ret = -EEXIST;
-		*req_addr = found->req_addr;
-		*pg_ps = found->pte_info->pg->page_grid.page_size_0;
+		rmri->req_addr = found->req_addr;
+		rmri->pg_ps = found->pte_info->pg->page_grid.page_size_0;
 	}
 
  out:
@@ -842,10 +842,10 @@ struct genz_rmr *genz_rmr_get(
 }
 EXPORT_SYMBOL(genz_rmr_get);
 
-int genz_kernel_MR_REG(struct genz_mem_data *mdata, uint64_t vaddr,
-                       uint64_t len, uint64_t access, uint32_t pasid,
-                       uint64_t *rsp_zaddr, uint32_t *pg_ps,
-                       uint32_t *ro_rkey, uint32_t *rw_rkey)
+int genz_mr_reg(struct genz_mem_data *mdata, uint64_t vaddr,
+		uint64_t len, uint64_t access, uint32_t pasid,
+		uint64_t *rsp_zaddr, uint32_t *pg_ps,
+		uint32_t *ro_rkey, uint32_t *rw_rkey)
 {
 	int               status = 0;
 	bool              local, remote, cpu_visible, individual, indiv_rkeys;
@@ -903,19 +903,24 @@ int genz_kernel_MR_REG(struct genz_mem_data *mdata, uint64_t vaddr,
 		 status, *rsp_zaddr, *pg_ps);
 	return status;
 }
+EXPORT_SYMBOL(genz_mr_reg);
 
-int genz_kernel_RMR_IMPORT(
+int genz_rmr_import(
 	struct genz_mem_data *mdata, uuid_t *uuid, uint32_t dgcid,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint32_t rkey,
-	uint64_t *req_addr, void **cpu_addr, uint32_t *pg_ps)
+	struct genz_rmr_info *rmri)
 {
 	int                     status = 0;
 	struct genz_rmr         *rmr;
 	bool                    remote, cpu_visible, writable, individual;
 
-	*req_addr = GENZ_BASE_ADDR_ERROR;
-	*cpu_addr = NULL;
-	*pg_ps = 0;
+	rmri->rsp_zaddr = rsp_zaddr;
+	rmri->len = len;
+	rmri->access = access;
+	rmri->gcid = dgcid;
+	rmri->req_addr = GENZ_BASE_ADDR_ERROR;
+	rmri->cpu_addr = NULL;
+	rmri->pg_ps = 0;
 	remote = !!(access & (GENZ_MR_GET_REMOTE|GENZ_MR_PUT_REMOTE));
 	writable = !!(access & GENZ_MR_PUT_REMOTE);
 	cpu_visible = !!(access & GENZ_MR_REQ_CPU);
@@ -934,28 +939,54 @@ int genz_kernel_RMR_IMPORT(
 	}
 
 	rmr = genz_rmr_get(mdata, uuid, dgcid, rsp_zaddr, len, access,
-			   NO_PASID, rkey, req_addr, pg_ps);
+			   NO_PASID, rkey, rmri);
 	if (IS_ERR(rmr)) {
 		status = PTR_ERR(rmr);
 		goto out;
 	}
 
 	/* create requester ZMMU entries */
-	status = genz_zmmu_req_pte_alloc(rmr->pte_info, req_addr, pg_ps);
+	status = genz_zmmu_req_pte_alloc(rmr->pte_info, rmri);
 	if (status < 0) {
 		genz_rmr_remove(rmr, true);
 		goto out;
 	}
 
-	rmr->req_addr = *req_addr;
-	rmr->mmap_pfn = ROUND_DOWN_PAGE(*req_addr, BIT_ULL(*pg_ps)) >> PAGE_SHIFT;
+	rmr->req_addr = rmri->req_addr;
+	rmr->mmap_pfn = ROUND_DOWN_PAGE(rmri->req_addr,
+					BIT_ULL(rmri->pg_ps)) >> PAGE_SHIFT;
 
 	if (cpu_visible) {
-		*cpu_addr = memremap(*req_addr, len, MEMREMAP_WB);
+		rmri->cpu_addr = memremap(rmri->req_addr, len, MEMREMAP_WB);
 	}
 
  out:
 	pr_debug("ret=%d, req_addr=0x%016llx, cpu_addr=%px, pg_ps=%u\n",
-		 status, *req_addr, *cpu_addr, *pg_ps);
+		 status, rmri->req_addr, rmri->cpu_addr, rmri->pg_ps);
 	return status;
 }
+EXPORT_SYMBOL(genz_rmr_import);
+
+int genz_rmr_free(struct genz_mem_data *mdata, struct genz_rmr_info *rmri)
+{
+	int                     status = 0;
+	struct genz_rmr         *rmr;
+	ulong                   flags;
+
+	spin_lock_irqsave(&mdata->md_lock, flags);
+	rmr = genz_rmr_search(mdata, rmri->gcid, rmri->rsp_zaddr, rmri->len,
+			      rmri->access, rmri->req_addr);
+	if (!rmr) {
+		status = -EINVAL;
+		goto unlock;
+	}
+	genz_rmr_remove(rmr, false);
+
+unlock:
+	spin_unlock_irqrestore(&mdata->md_lock, flags);
+	pr_debug("ret=%d, rsp_zaddr=0x%016llx, "
+		 "len=0x%llx, access=0x%llx\n",
+		 status, rmri->rsp_zaddr, rmri->len, rmri->access);
+	return status;
+}
+EXPORT_SYMBOL(genz_rmr_free);

@@ -207,5 +207,9 @@ void wildcat_xdm_release_slice_queue(
 void wildcat_rdm_release_slice_queue(
 	struct bridge *br, int slice, int queue);
 uint32_t wildcat_rspctxid_alloc(int slice, int queue);
+int wildcat_alloc_queues(struct genz_bridge_dev *gzbr,
+			 struct genz_xdm_info *xdmi,
+			 struct genz_rdm_info *rdmi);
+int wildcat_free_queues(struct genz_xdm_info *gzxi, struct genz_rdm_info *gzri);
 
 #endif /* _WILDCAT_QUEUE_H_ */

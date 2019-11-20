@@ -322,43 +322,42 @@ union zpages {
 };
 
 struct xdm_info {
-	struct bridge  *br;
-	uint32_t       cmdq_ent, cmplq_ent;
-	uint8_t        slice_mask, traffic_class, priority;
-	bool           cur_valid;
-	size_t         cmdq_size, cmplq_size, qcm_size;
-	struct slice   *sl;
+	struct bridge          *br;
+	struct genz_xdm_info   *gzxi;
+	uint8_t                slice_mask;
+	bool                   cur_valid;
+	size_t                 cmdq_size, cmplq_size, qcm_size;
+	struct slice           *sl;
 	struct wildcat_xdm_qcm *hw_qcm_addr;
-	union zpages   *cmdq_zpage, *cmplq_zpage;
-	int            slice, queue;
-	uint           cmdq_tail_shadow, cmdq_head_shadow; /* shadow of HW reg */
-	uint           cmplq_tail_shadow;                  /* shadow of HW reg */
-	uint           cmplq_head;                         /* SW-only */
-	uint           active_cmds;                        /* SW-only */
-	spinlock_t     xdm_info_lock;
+	union zpages           *cmdq_zpage, *cmplq_zpage;
+	int                    slice, queue;
+	/* shadows of HW regs */  /* Revisit: any of these generic? */
+	uint                   cmdq_tail_shadow, cmdq_head_shadow;
+	uint                   cmplq_tail_shadow;
+	uint                   cmplq_head;                 /* SW-only */
+	uint                   active_cmds;                /* SW-only */
 };
 
 struct rdm_info {
-	struct bridge  *br;
-	uint32_t       cmplq_ent;
-	uint8_t        slice_mask;
-	bool           cur_valid;
-	size_t         cmplq_size, qcm_size;
-	struct slice   *sl;
+	struct bridge          *br;
+	struct genz_rdm_info   *gzri;
+	uint8_t                slice_mask;
+	bool                   cur_valid;
+	size_t                 cmplq_size, qcm_size;
+	struct slice           *sl;
 	struct wildcat_rdm_qcm *hw_qcm_addr;
-	union zpages   *cmplq_zpage;
-	int            slice, queue, vector;
-	uint32_t       rspctxid;
-	uint           cmplq_tail_shadow, cmplq_head_shadow; /* shadow of HW reg */
-	spinlock_t     rdm_info_lock;
+	union zpages           *cmplq_zpage;
+	int                    slice, queue, vector;
+	/* shadows of HW regs */  /* Revisit: any of these generic? */
+	uint                   cmplq_tail_shadow, cmplq_head_shadow;
 };
 
 struct bridge {
 	uint32_t                gcid;
 	struct slice            slice[SLICES];
 	spinlock_t              zmmu_lock;  /* global bridge zmmu lock */
-	struct xdm_info         msg_xdm;
-	struct rdm_info         msg_rdm;
+	struct genz_xdm_info    msg_xdm;
+	struct genz_rdm_info    msg_rdm;
 	struct mutex            csr_mutex;  /* protect CSR mailbox */
 	struct workqueue_struct *wildcat_msg_workq;
 };

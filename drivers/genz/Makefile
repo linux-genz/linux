@@ -13,9 +13,11 @@ genz-y := genz-core.o \
           genz-rkey.o \
           genz-uuid.o \
           genz-memreg.o \
-          genz-probe.o
+          genz-probe.o \
+          genz-queue.o
 
 obj-$(CONFIG_GENZ)           += genz.o
+obj-$(CONFIG_GENZ_BLK)       += genz-blk.o
 
 # Object files in subdirectories
 obj-$(CONFIG_GENZ_WILDCAT)   += wildcat/

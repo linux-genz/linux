@@ -264,7 +264,7 @@ int wildcat_msg_enic_er_read(struct enic *enic, struct wildcat_rdm_hdr *req_hdr,
 int wildcat_msg_enic_cmpl(struct enic *enic, uint q,
 			  struct wildcat_rdm_hdr *hdr, union wildcat_msg *msg);
 bool wildcat_msg_enic_more(struct enic *enic, uint q);
-int wildcat_msg_qalloc(struct bridge *br);
-int wildcat_msg_qfree(struct bridge *br);
+int wildcat_msg_qalloc(struct genz_bridge_dev *gzbr);
+int wildcat_msg_qfree(struct genz_bridge_dev *gzbr);
 
 #endif /* _WILDCAT_MSG_H_ */

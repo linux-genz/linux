@@ -686,93 +686,6 @@ out:
 	return status;
 }
 
-static int zhpe_core_alloc_queues(void *hw, uint xdm_cmdq_ent,
-				  uint xdm_cmplq_ent, uint rdm_cmplq_ent)
-{
-	int ret = 0;
-	struct bridge *br = (struct bridge *)hw;
-	struct enic *enic;
-	struct xdm_info *xdmi;
-	struct rdm_info *req_rdmi, *rsp_rdmi;
-
-	/* Revisit: locking */
-	if (!br || !br->enic) {
-		ret = -EINVAL;
-		goto done;
-	}
-
-	enic = br->enic;
-	xdmi = &enic->xdmi;
-	req_rdmi = &enic->req_rdmi;
-	rsp_rdmi = &enic->rsp_rdmi;
-
-	/* Set up the XDM info structure */
-	xdmi->br = br;
-	xdmi->cmdq_ent = xdm_cmdq_ent;
-	xdmi->cmplq_ent = xdm_cmplq_ent;
-	xdmi->traffic_class = WILDCAT_TC_0;
-	xdmi->priority = 0;
-	xdmi->slice_mask = ALL_SLICES;
-	xdmi->cur_valid = 1;
-	ret = zhpe_kernel_XQALLOC(xdmi);
-	if (ret)
-		goto done;
-
-	/* Set up the request RDM info structure */
-	req_rdmi->br = br;
-	req_rdmi->cmplq_ent = rdm_cmplq_ent;
-	/* any slice other than the XDM slice */
-	req_rdmi->slice_mask = ~(1u << xdmi->slice) & ALL_SLICES;
-	req_rdmi->cur_valid = 1;
-	ret = zhpe_kernel_RQALLOC(req_rdmi);
-	if (ret)
-		goto xqfree;
-
-	/* Set up the response RDM info structure */
-	rsp_rdmi->br = br;
-	rsp_rdmi->cmplq_ent = rdm_cmplq_ent;
-	/* any slice other than the XDM or request RDM slices */
-	rsp_rdmi->slice_mask = ~((1u << xdmi->slice) | (1u << req_rdmi->slice))
-            & ALL_SLICES;
-	rsp_rdmi->cur_valid = 1;
-	ret = zhpe_kernel_RQALLOC(rsp_rdmi);
-	if (ret)
-		goto rqfree;
-
-	/* clear stop bits - queues are now ready */
-	xdm_qcm_write_val(0, xdmi->hw_qcm_addr, XDM_STOP_OFFSET);
-	rdm_qcm_write_val(0, req_rdmi->hw_qcm_addr, RDM_STOP_OFFSET);
-	rdm_qcm_write_val(0, rsp_rdmi->hw_qcm_addr, RDM_STOP_OFFSET);
-
-	return 0;
-
-rqfree:
-	zhpe_kernel_RQFREE(req_rdmi);
-xqfree:
-	zhpe_kernel_XQFREE(xdmi);
-
-done:
-	return ret;
-}
-
-static int zhpe_core_free_queues(void *hw)
-{
-	struct bridge *br = (struct bridge *)hw;
-	int ret = 0;
-
-	if (!br->enic) {
-		ret = -EINVAL;
-		goto done;
-	}
-
-	zhpe_kernel_XQFREE(&br->enic->xdmi);
-	zhpe_kernel_RQFREE(&br->enic->req_rdmi);
-	zhpe_kernel_RQFREE(&br->enic->rsp_rdmi);
-
- done:
-	return ret;
-}
-
 static int zhpe_core_request_irq(void *hw, uint irq_index,
 				 irq_handler_t handler,
 				 ulong irqflags, const char *devname,
@@ -997,6 +910,10 @@ static struct genz_bridge_info wildcat_br_info = {
 	.rsp_zmmu            = 1,
 	.xdm                 = 1,
 	.rdm                 = 1,
+	.nr_xdm_queues       = XDM_QUEUES_PER_SLICE,
+	.nr_rdm_queues       = RDM_QUEUES_PER_SLICE,
+	.xdm_qlen            = MAX_SW_XDM_QLEN,
+	.rdm_qlen            = MAX_SW_RDM_QLEN,
 	.nr_req_page_grids   = WILDCAT_PAGE_GRID_ENTRIES,
 	.nr_rsp_page_grids   = WILDCAT_PAGE_GRID_ENTRIES,
 	.nr_req_ptes         = WILDCAT_REQ_ZMMU_ENTRIES,
@@ -1027,6 +944,8 @@ static struct genz_bridge_driver wildcat_genz_bridge_driver = {
 	.rsp_pte_write = wildcat_rsp_pte_write,
 	.dma_map_sg_attrs = wildcat_dma_map_sg_attrs,
 	.dma_unmap_sg_attrs = wildcat_dma_unmap_sg_attrs,
+	.alloc_queues = wildcat_alloc_queues,
+	.free_queues = wildcat_free_queues,
 };
 
 #define WILDCAT_ZMMU_XDM_RDM_HSR_BAR 0
@@ -1037,6 +956,7 @@ static int wildcat_probe(struct pci_dev *pdev,
 	int ret, pos;
 	int l_slice_id;
 	void __iomem *base_addr;
+	struct genz_bridge_dev *gzbr = NULL;
 	struct bridge *br = &wildcat_bridge; /* Revisit: MultiBridge */
 	struct slice *sl;
 	phys_addr_t phys_base;
@@ -1159,13 +1079,6 @@ static int wildcat_probe(struct pci_dev *pdev,
 	}
 
 	if (sl->id == 0) {
-		/* allocate driver-driver msg queues on slice 0 only */
-		ret = wildcat_msg_qalloc(br);
-		if (ret) {
-			dev_dbg(&pdev->dev,
-			      "wildcat_msg_qalloc failed with error %d\n", ret);
-			goto err_free_interrupts;
-		}
 		/* register with Gen-Z subsystem on slice 0 only */
 		ret = genz_register_bridge(&pdev->dev,
 					   &wildcat_genz_bridge_driver, br);
@@ -1175,12 +1088,20 @@ static int wildcat_probe(struct pci_dev *pdev,
 			      ret);
 			goto err_msg_qfree;
 		}
+		/* allocate driver-driver msg queues on slice 0 only */
+		gzbr = genz_find_bridge(&pdev->dev);
+		ret = wildcat_msg_qalloc(gzbr);
+		if (ret) {
+			dev_dbg(&pdev->dev,
+			      "wildcat_msg_qalloc failed with error %d\n", ret);
+			goto err_free_interrupts;
+		}
 	}
 	pci_set_master(pdev);
 	return 0;
 
 err_msg_qfree:
-        wildcat_msg_qfree(br);
+        wildcat_msg_qfree(gzbr);
 
 err_free_interrupts:
 	wildcat_free_interrupts(pdev);
@@ -1203,6 +1124,7 @@ err_out:
 static void wildcat_remove(struct pci_dev *pdev)
 {
 	struct slice *sl;
+	struct genz_bridge_dev *gzbr;
 
 	/* No teardown for function 0 */
 	if (PCI_FUNC(pdev->devfn) == 0) {
@@ -1215,8 +1137,9 @@ static void wildcat_remove(struct pci_dev *pdev)
 		pci_name(pdev), sl->id);
 
 	if (sl->id == 0) {
+		gzbr = genz_find_bridge(&pdev->dev);
+		wildcat_msg_qfree(gzbr);
 		genz_unregister_bridge(&pdev->dev);
-		wildcat_msg_qfree(BRIDGE_FROM_SLICE(sl));
 	}
 	wildcat_free_interrupts(pdev);
 	pci_clear_master(pdev);

@@ -843,12 +843,12 @@ EXPORT_SYMBOL(wildcat_xdm_queue_sizes);
 
 int wildcat_kernel_XQALLOC(struct xdm_info *xdmi)
 {
+	struct genz_xdm_info *gzxi = xdmi->gzxi;
 	int ret = 0;
 
 	pr_debug("cmdq_ent=%u, cmplq_ent=%u\n",
-		 xdmi->cmdq_ent, xdmi->cmplq_ent);
-	spin_lock_init(&xdmi->xdm_info_lock);
-	ret = wildcat_xdm_queue_sizes(&xdmi->cmdq_ent, &xdmi->cmplq_ent,
+		 gzxi->cmdq_ent, gzxi->cmplq_ent);
+	ret = wildcat_xdm_queue_sizes(&gzxi->cmdq_ent, &gzxi->cmplq_ent,
 				      &xdmi->cmdq_size, &xdmi->cmplq_size,
 				      &xdmi->qcm_size);
 	if (ret)
@@ -874,8 +874,8 @@ int wildcat_kernel_XQALLOC(struct xdm_info *xdmi)
     wildcat_xdm_qcm_setup(xdmi->hw_qcm_addr,
 			  xdmi->cmdq_zpage->dma.dma_addr,
 			  xdmi->cmplq_zpage->dma.dma_addr,
-			  xdmi->cmdq_ent, xdmi->cmplq_ent,
-			  xdmi->traffic_class, xdmi->priority, xdmi->cur_valid,
+			  gzxi->cmdq_ent, gzxi->cmplq_ent,
+			  gzxi->traffic_class, gzxi->priority, xdmi->cur_valid,
 			  NO_PASID);
     xdmi->cmdq_head_shadow = 0;
     xdmi->cmdq_tail_shadow = 0;
@@ -996,12 +996,12 @@ EXPORT_SYMBOL(wildcat_rdm_queue_sizes);
 
 int wildcat_kernel_RQALLOC(struct rdm_info *rdmi)
 {
+	struct genz_rdm_info *gzri = rdmi->gzri;
 	int ret = 0;
 
 	pr_debug("cmplq_ent=%u, slice_mask 0x%x\n",
-		 rdmi->cmplq_ent, rdmi->slice_mask);
-	spin_lock_init(&rdmi->rdm_info_lock);
-	ret = wildcat_rdm_queue_sizes(&rdmi->cmplq_ent,
+		 gzri->cmplq_ent, rdmi->slice_mask);
+	ret = wildcat_rdm_queue_sizes(&gzri->cmplq_ent,
 				      &rdmi->cmplq_size, &rdmi->qcm_size);
 	if (ret)
 		goto done;
@@ -1009,30 +1009,30 @@ int wildcat_kernel_RQALLOC(struct rdm_info *rdmi)
 				   &rdmi->slice, &rdmi->queue, &rdmi->vector);
 	if (ret)
 		goto done;
-	rdmi->rspctxid = wildcat_rspctxid_alloc(rdmi->slice, rdmi->queue);
-    /* Get a pointer to the qcm chosen to initialize it's fields */
-    rdmi->sl = &(rdmi->br->slice[rdmi->slice]);
-    rdmi->hw_qcm_addr = &(rdmi->sl->bar->rdm[rdmi->queue*2]);
-    ret = wildcat_dma_alloc_zpage(rdmi->sl, rdmi->cmplq_size,
-				  &rdmi->cmplq_zpage);
-    if (ret != 0) {
-        pr_debug("wildcat_dma_alloc_zpage failed for cmplq\n");
-        goto release_queue;
-    }
-    wildcat_rdm_qcm_setup(rdmi->hw_qcm_addr,
-			  rdmi->cmplq_zpage->dma.dma_addr,
-			  rdmi->cmplq_ent, rdmi->cur_valid, NO_PASID);
-    rdmi->cmplq_tail_shadow = 0;
-    rdmi->cmplq_head_shadow = 0;
-    ret = 0;
-    pr_debug("slice=%d, queue=%d, rspctxid=%u\n",
-	     rdmi->slice, rdmi->queue, rdmi->rspctxid);
-    goto done;
+	gzri->rspctxid = wildcat_rspctxid_alloc(rdmi->slice, rdmi->queue);
+	/* Get a pointer to the qcm chosen to initialize it's fields */
+	rdmi->sl = &(rdmi->br->slice[rdmi->slice]);
+	rdmi->hw_qcm_addr = &(rdmi->sl->bar->rdm[rdmi->queue*2]);
+	ret = wildcat_dma_alloc_zpage(rdmi->sl, rdmi->cmplq_size,
+				      &rdmi->cmplq_zpage);
+	if (ret != 0) {
+		pr_debug("wildcat_dma_alloc_zpage failed for cmplq\n");
+		goto release_queue;
+	}
+	wildcat_rdm_qcm_setup(rdmi->hw_qcm_addr,
+			      rdmi->cmplq_zpage->dma.dma_addr,
+			      gzri->cmplq_ent, rdmi->cur_valid, NO_PASID);
+	rdmi->cmplq_tail_shadow = 0;
+	rdmi->cmplq_head_shadow = 0;
+	ret = 0;
+	pr_debug("slice=%d, queue=%d, rspctxid=%u\n",
+		 rdmi->slice, rdmi->queue, gzri->rspctxid);
+	goto done;
 
- release_queue:
-    wildcat_rdm_release_slice_queue(rdmi->br, rdmi->slice, rdmi->queue);
- done:
-    return ret;
+release_queue:
+	wildcat_rdm_release_slice_queue(rdmi->br, rdmi->slice, rdmi->queue);
+done:
+	return ret;
 }
 
 int wildcat_kernel_RQFREE(struct rdm_info *rdmi)
@@ -1049,4 +1049,102 @@ int wildcat_kernel_RQFREE(struct rdm_info *rdmi)
 
  done:
     return ret;
+}
+
+int wildcat_alloc_queues(struct genz_bridge_dev *gzbr,
+			 struct genz_xdm_info *xdmi, struct genz_rdm_info *rdmi)
+{
+	int ret = 0;
+	struct bridge *br = wildcat_gzbr_to_br(gzbr);
+	struct xdm_info *wc_xdmi = NULL;
+	struct rdm_info *wc_rdmi = NULL;
+
+	/* Revisit: locking */
+	if (!gzbr || !br) {
+		ret = -EINVAL;
+		goto done;
+	}
+
+	/* Allocate and set up the wildcat-specific XDM info */
+	if (xdmi) {
+		wc_xdmi = kzalloc(sizeof(*wc_xdmi), GFP_KERNEL);
+		if (!wc_xdmi) {
+			ret = -ENOMEM;
+			goto done;
+		}
+		xdmi->br_driver_data = wc_xdmi;
+		wc_xdmi->br = br;
+		wc_xdmi->gzxi = xdmi;
+		wc_xdmi->slice_mask = ALL_SLICES;
+		wc_xdmi->cur_valid = 1;
+		ret = wildcat_kernel_XQALLOC(wc_xdmi);
+		if (ret)
+			goto xdmi_free;
+		xdmi->dma_dev = &wc_xdmi->sl->pdev->dev;
+	}
+
+	/* Allocate and set up the wildcat-specific RDM info */
+	if (rdmi) {
+		wc_rdmi = kzalloc(sizeof(*wc_rdmi), GFP_KERNEL);
+		if (!wc_rdmi) {
+			ret = -ENOMEM;
+			goto xqfree;
+		}
+		rdmi->br_driver_data = wc_rdmi;
+		wc_rdmi->br = br;
+		wc_rdmi->gzri = rdmi;
+		if (rdmi->br_driver_flags) {
+			wc_rdmi->slice_mask = (uint8_t)rdmi->br_driver_flags;
+		} else {
+			/* any slice other than the XDM slice */
+			wc_rdmi->slice_mask = (xdmi) ?
+				(~(1u << wc_xdmi->slice) & ALL_SLICES) :
+				ALL_SLICES;
+		}
+		wc_rdmi->cur_valid = 1;
+		ret = wildcat_kernel_RQALLOC(wc_rdmi);
+		if (ret)
+			goto rdmi_free;
+		rdmi->dma_dev = &wc_rdmi->sl->pdev->dev;
+	}
+
+	/* clear stop bits - queues are now ready */
+	if (xdmi)
+		xdm_qcm_write_val(0, wc_xdmi->hw_qcm_addr, XDM_STOP_OFFSET);
+	if (rdmi)
+		rdm_qcm_write_val(0, wc_rdmi->hw_qcm_addr, RDM_STOP_OFFSET);
+
+	return 0;
+
+rdmi_free:
+	if (wc_rdmi)
+		kfree(wc_rdmi);
+xqfree:
+	if (wc_xdmi)
+		wildcat_kernel_XQFREE(wc_xdmi);
+xdmi_free:
+	if (wc_xdmi)
+		kfree(wc_xdmi);
+done:
+	return ret;
+}
+
+int wildcat_free_queues(struct genz_xdm_info *gzxi, struct genz_rdm_info *gzri)
+{
+	int ret = 0;
+	struct xdm_info *xdmi;
+	struct rdm_info *rdmi;
+
+	/* Revisit: locking */
+	if (gzxi) {
+		xdmi = (struct xdm_info *)gzxi->br_driver_data;
+		ret = wildcat_kernel_XQFREE(xdmi);
+	}
+
+	if (gzri) {
+		rdmi = (struct rdm_info *)gzri->br_driver_data;
+		ret |= wildcat_kernel_RQFREE(rdmi);
+	}
+
+	return ret;
 }

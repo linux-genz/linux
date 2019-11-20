@@ -131,6 +131,10 @@ struct genz_bridge_info {
 	uint64_t xdm            : 1;
 	uint64_t rdm            : 1;
 	uint64_t load_store     : 1;
+	uint     nr_xdm_queues;
+	uint     nr_rdm_queues;
+	uint     xdm_qlen;
+	uint     rdm_qlen;
 	uint     nr_req_page_grids;
 	uint     nr_rsp_page_grids;
 	uint64_t nr_req_ptes;
@@ -141,7 +145,6 @@ struct genz_bridge_info {
 	uint64_t max_cpuvisible_addr;
 	uint64_t min_nonvisible_addr;
 	uint64_t max_nonvisible_addr;
-	uint32_t gcid;
 };
 
 struct genz_page_grid {
@@ -151,6 +154,26 @@ struct genz_page_grid {
 	struct rb_root   pte_tree;       /* rbtree root of allocated ptes */
 	bool             humongous;      /* only allowed once */
 	bool             cpu_visible;    /* only for requester page_grids */
+};
+
+struct genz_xdm_info {
+	struct genz_bridge_dev *br;
+	uint32_t               cmdq_ent, cmplq_ent;
+	uint8_t                traffic_class, priority;
+	struct device          *dma_dev;
+	void                   *br_driver_data;
+	uint64_t               br_driver_flags;
+	spinlock_t             xdm_info_lock;
+};
+
+struct genz_rdm_info {
+	struct genz_bridge_dev *br;
+	uint32_t               cmplq_ent;
+	uint32_t               rspctxid;
+	struct device          *dma_dev;
+	void                   *br_driver_data;
+	uint64_t               br_driver_flags;
+	spinlock_t             rdm_info_lock;
 };
 
 struct genz_bridge_driver {
@@ -187,6 +210,11 @@ struct genz_bridge_driver {
 	void (*dma_unmap_sg_attrs)(
 		struct genz_bridge_dev *br, struct scatterlist *sg, int nents,
 		enum dma_data_direction direction, unsigned long dma_attrs);
+	int (*alloc_queues)(struct genz_bridge_dev *br,
+			    struct genz_xdm_info *xdmi,
+			    struct genz_rdm_info *rdmi);
+	int (*free_queues)(struct genz_xdm_info *xdmi,
+			   struct genz_rdm_info *rdmi);
 };
 #define to_genz_bridge_driver(d) container_of(d, struct genz_bridge_driver, driver)
 
@@ -357,14 +385,19 @@ static inline uint64_t genz_pg_addr(struct genz_page_grid *genz_pg)
 		GENZ_PAGE_GRID_MIN_PAGESIZE;
 }
 
+#define GENZ_INVALID_GCID       (-1u)
 #define GCID_STRING_LEN              8
 
 #define GENZ_MR_GET             ((uint32_t)1 << 0)
 #define GENZ_MR_PUT             ((uint32_t)1 << 1)
 #define GENZ_MR_SEND            GENZ_MR_PUT
 #define GENZ_MR_RECV            GENZ_MR_GET
+#define GENZ_MR_READ            GENZ_MR_PUT
+#define GENZ_MR_WRITE           GENZ_MR_GET
 #define GENZ_MR_GET_REMOTE      ((uint32_t)1 << 2)
 #define GENZ_MR_PUT_REMOTE      ((uint32_t)1 << 3)
+#define GENZ_MR_READ_REMOTE     GENZ_MR_GET_REMOTE
+#define GENZ_MR_WRITE_REMOTE    GENZ_MR_PUT_REMOTE
 #define GENZ_MR_FLAG0           ((uint32_t)1 << 4) /* Usable by user-space */
 #define GENZ_MR_FLAG1           ((uint32_t)1 << 5)
 #define GENZ_MR_FLAG2           ((uint32_t)1 << 6)
@@ -386,36 +419,36 @@ static inline uint64_t genz_pg_addr(struct genz_page_grid *genz_pg)
 #define GENZ_CONTROL_SIZE_UNIT  16 /* control structs are in 16-byte units */
 
 enum space_type {
-    GENZ_DATA    = 0,
-    GENZ_CONTROL = 1
+	GENZ_DATA    = 0,
+	GENZ_CONTROL = 1
 };
 
 enum uuid_type {
-    UUID_TYPE_LOCAL    = 0x1,
-    UUID_TYPE_REMOTE   = 0x2,
-    UUID_TYPE_LOOPBACK = (UUID_TYPE_LOCAL | UUID_TYPE_REMOTE),
-    UUID_TYPE_ZBRIDGE  = 0x4,
-    UUID_TYPE_FABRIC   = 0x8
+	UUID_TYPE_LOCAL    = 0x1,
+	UUID_TYPE_REMOTE   = 0x2,
+	UUID_TYPE_LOOPBACK = (UUID_TYPE_LOCAL | UUID_TYPE_REMOTE),
+	UUID_TYPE_ZBRIDGE  = 0x4,
+	UUID_TYPE_FABRIC   = 0x8
 };
 
 #define UUID_TYPE_REMOTE_LOCAL (UUID_TYPE_REMOTE | UUID_TYPE_LOCAL)
 
 struct uuid_tracker_remote {
-    uint32_t                ro_rkey;
-    uint32_t                rw_rkey;
-    uint32_t                uu_flags;
-    bool                    rkeys_valid;
-    bool                    torndown;  /* UUID is being torndown */
-    /* Revisit: add bool to distinguish "alias" vs "real" loopback */
-    /* local users of this remote UUID - protected by local_uuid_lock */
-    struct rb_root          local_uuid_tree;
-    spinlock_t              local_uuid_lock;
+	uint32_t                ro_rkey;
+	uint32_t                rw_rkey;
+	uint32_t                uu_flags;
+	bool                    rkeys_valid;
+	bool                    torndown;  /* UUID is being torndown */
+	/* Revisit: add bool to distinguish "alias" vs "real" loopback */
+	/* local users of this remote UUID - protected by local_uuid_lock */
+	struct rb_root          local_uuid_tree;
+	spinlock_t              local_uuid_lock;
 };
 
 struct uuid_tracker_local {
-    struct genz_mem_data *mdata;
-    /* remote users of this local UUID - protected by mdata->uuid_lock */
-    struct rb_root   uu_remote_uuid_tree;
+	struct genz_mem_data *mdata;
+	/* remote users of this local UUID - protected by mdata->uuid_lock */
+	struct rb_root   uu_remote_uuid_tree;
 };
 
 struct uuid_tracker_fabric {
@@ -424,20 +457,20 @@ struct uuid_tracker_fabric {
 };
 
 struct uuid_tracker {
-    uuid_t                      uuid;
-    struct rb_node              node;
-    struct kref                 refcount;
-    enum uuid_type		uutype;
-    struct uuid_tracker_remote  *remote;
-    struct uuid_tracker_local   *local;
-    struct uuid_tracker_fabric	*fabric;
-    struct list_head 		*zbr_list;
+	uuid_t                      uuid;
+	struct rb_node              node;
+	struct kref                 refcount;
+	enum uuid_type		uutype;
+	struct uuid_tracker_remote  *remote;
+	struct uuid_tracker_local   *local;
+	struct uuid_tracker_fabric	*fabric;
+	struct list_head 		*zbr_list;
 };
 
 struct uuid_node {
-    struct uuid_tracker *tracker;
-    struct rb_node      node;
-    struct rb_root      un_rmr_tree;
+	struct uuid_tracker *tracker;
+	struct rb_node      node;
+	struct rb_root      un_rmr_tree;
 };
 
 extern spinlock_t genz_uuid_rbtree_lock;
@@ -455,43 +488,79 @@ struct genz_mem_data {
 };
 
 struct genz_umem {
-    struct genz_mem_data  *mdata;
-    struct genz_pte_info  *pte_info;
-    struct rb_node        node;  /* within mdata->md_mr_tree */
-    struct kref           refcount;
-    uint64_t              vaddr;
-    size_t                size;
-    int                   page_shift;
-    bool                  writable;
-    bool                  hugetlb;
-    bool                  need_release;
-    bool                  dirty;
-    bool                  erase;
-    struct work_struct    work;  /* Revisit: these next 3 were copied from */
-    struct mm_struct      *mm;   /* ib_umem and are currently unused */
-    unsigned long         diff;
-    struct sg_table       sg_head;
-    int                   nmap;
-    int                   npages;
+	struct genz_mem_data  *mdata;
+	struct genz_pte_info  *pte_info;
+	struct rb_node        node;  /* within mdata->md_mr_tree */
+	struct kref           refcount;
+	uint64_t              vaddr;
+	size_t                size;
+	int                   page_shift;
+	bool                  writable;
+	bool                  hugetlb;
+	bool                  need_release;
+	bool                  dirty;
+	bool                  erase;
+	struct work_struct    work;  /* Revisit: these next 3 were copied from */
+	struct mm_struct      *mm;   /* ib_umem and are currently unused */
+	unsigned long         diff;
+	struct sg_table       sg_head;
+	int                   nmap;
+	int                   npages;
 };
+
+/* Revisit: embed this in genz_rmr? */
+struct genz_rmr_info {
+	uint64_t     rsp_zaddr;
+	uint64_t     req_addr;
+	uint64_t     len;
+	uint64_t     access;
+	void         *cpu_addr;
+	uint32_t     pg_ps;
+	uint32_t     gcid;
+};
+
+/* Revisit: probably should have equivalent genz_mr_info */
 
 struct uuid_node;  /* Revisit: define */
 struct zmap;       /* Revisit: define */
 struct genz_rmr {
-    struct genz_mem_data  *mdata;
-    struct genz_pte_info  *pte_info;
-    struct rb_node        md_node;  /* within mdata->md_rmr_tree */
-    struct rb_node        un_node;  /* within mdata->md_remote_uuid_tree->un_rmr_tree */
-    struct kref           refcount;
-    struct uuid_tracker   *uu;    /* the remote UUID this rmr belongs to */
-    struct uuid_node      *unode; /* the local unode this rmr belongs to */
-    struct zmap           *zmap;
-    uint64_t              rsp_zaddr;
-    uint64_t              req_addr;
-    ulong                 mmap_pfn;
-    bool                  writable;
-    bool                  fd_erase;
-    bool                  un_erase;
+	struct genz_mem_data  *mdata;
+	struct genz_pte_info  *pte_info;
+	struct rb_node        md_node;  /* within mdata->md_rmr_tree */
+	struct rb_node        un_node;  /* within mdata->md_remote_uuid_tree->un_rmr_tree */
+	struct kref           refcount;
+	struct uuid_tracker   *uu;    /* the remote UUID this rmr belongs to */
+	struct uuid_node      *unode; /* the local unode this rmr belongs to */
+	struct zmap           *zmap;
+	uint64_t              rsp_zaddr;
+	uint64_t              req_addr;
+	ulong                 mmap_pfn;
+	bool                  writable;
+	bool                  fd_erase;
+	bool                  un_erase;
+};
+
+/*
+ * Traffic class abstraction for user space.
+ * Mapping to actual Gen-Z traffic class is undefined in user space.
+ */
+enum {
+	GENZ_TC_0 = 0,
+	GENZ_TC_1 = 1,
+	GENZ_TC_2 = 2,
+	GENZ_TC_3 = 3,
+	GENZ_TC_4 = 4,
+	GENZ_TC_5 = 5,
+	GENZ_TC_6 = 6,
+	GENZ_TC_7 = 7,
+	GENZ_TC_8 = 8,
+	GENZ_TC_9 = 9,
+	GENZ_TC_10 = 10,
+	GENZ_TC_11 = 11,
+	GENZ_TC_12 = 12,
+	GENZ_TC_13 = 13,
+	GENZ_TC_14 = 14,
+	GENZ_TC_15 = 15
 };
 
 static inline int genz_uuid_cmp(const uuid_t *u1, const uuid_t *u2)
@@ -548,13 +617,15 @@ int genz_pasid_alloc(unsigned int *pasid);
 void genz_pasid_free(unsigned int pasid);
 int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv,
 			 void *driver_data);
+struct genz_bridge_dev *genz_find_bridge(struct device *dev);
 int genz_unregister_bridge(struct device *dev);
 char *genz_gcid_str(const uint32_t gcid, char *str, const size_t len);
+uint32_t genz_dev_gcid(struct genz_dev *zdev, uint index);
 void genz_init_mem_data(struct genz_mem_data *mdata,
 			struct genz_bridge_dev *br);
 void genz_zmmu_clear_all(struct genz_bridge_dev *br, bool free_radix_tree);
-int genz_zmmu_req_pte_alloc(struct genz_pte_info *info, uint64_t *req_addr,
-                            uint32_t *pg_ps);
+int genz_zmmu_req_pte_alloc(struct genz_pte_info *ptei,
+                            struct genz_rmr_info *rmri);
 int genz_zmmu_rsp_pte_alloc(struct genz_pte_info *info, uint64_t *rsp_zaddr,
                             uint32_t *pg_ps);
 void genz_zmmu_req_pte_free(struct genz_pte_info *info);
@@ -597,7 +668,7 @@ struct genz_rmr *genz_rmr_search(
 struct genz_rmr *genz_rmr_get(
 	struct genz_mem_data *mdata, uuid_t *uuid, uint32_t dgcid,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint pasid,
-	uint32_t rkey, uint64_t *req_addr, uint32_t *pg_ps);
+	uint32_t rkey, struct genz_rmr_info *rmri);
 void genz_umem_free_all(struct genz_mem_data *mdata,
                         struct genz_pte_info **humongous_zmmu_rsp_pte);
 struct genz_umem *genz_umem_search(struct genz_mem_data *mdata,
@@ -608,13 +679,19 @@ struct genz_umem *genz_umem_get(struct genz_mem_data *mdata, uint64_t vaddr,
                                 uint pasid, uint32_t ro_rkey, uint32_t rw_rkey,
                                 bool dmasync, bool kernel);
 void genz_umem_remove(struct genz_umem *umem);
-int genz_kernel_MR_REG(struct genz_mem_data *mdata, uint64_t vaddr,
-                       uint64_t len, uint64_t access, uint32_t pasid,
-                       uint64_t *rsp_zaddr, uint32_t *pg_ps,
-                       uint32_t *ro_rkey, uint32_t *rw_rkey);
-int genz_kernel_RMR_IMPORT(
+int genz_mr_reg(struct genz_mem_data *mdata, uint64_t vaddr,
+		uint64_t len, uint64_t access, uint32_t pasid,
+		uint64_t *rsp_zaddr, uint32_t *pg_ps,
+		uint32_t *ro_rkey, uint32_t *rw_rkey);
+/* Revisit: add genz_mr_free */
+int genz_rmr_import(
 	struct genz_mem_data *mdata, uuid_t *uuid, uint32_t dgcid,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint32_t rkey,
-	uint64_t *req_addr, void **cpu_addr, uint32_t *pg_ps);
+	struct genz_rmr_info *rmri);
+int genz_rmr_free(struct genz_mem_data *mdata, struct genz_rmr_info *rmri);
 bool genz_gcid_is_local(struct genz_bridge_dev *br, uint32_t gcid);
+int genz_alloc_queues(struct genz_bridge_dev *br,
+		      struct genz_xdm_info *xdmi, struct genz_rdm_info *rdmi);
+int genz_free_queues(struct genz_xdm_info *xdmi, struct genz_rdm_info *rdmi);
+
 #endif /* LINUX_GENZ_H */

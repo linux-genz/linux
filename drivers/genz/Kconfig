@@ -18,4 +18,16 @@ menuconfig GENZ
 	  will be called genz.
 
 
+
+menuconfig GENZ_BLK
+	tristate "Gen-Z block driver"
+	depends on GENZ
+	---help---
+	  This option enables the Gen-Z block driver.
+
+	  Say Y here to enable support for these types of devices.
+
+	  To compile this code as a module, choose M here: the module
+	  will be called genz-blk.
+
 source "drivers/genz/wildcat/Kconfig"

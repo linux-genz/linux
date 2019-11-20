@@ -385,12 +385,29 @@ int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv,
 
 	/* add zbdev to global list */
 	/* Revisit: locking */
-	list_add_tail(&zbdev->bridge_node, &genz_bridge_list);
+	list_add(&zbdev->bridge_node, &genz_bridge_list);
 
 out:
 	return ret;
 }
 EXPORT_SYMBOL(genz_register_bridge);
+
+struct genz_bridge_dev *genz_find_bridge(struct device *dev)
+{
+	struct genz_bridge_dev *zbdev = NULL, *cur;
+
+	/* dev is the native bridge dev - find corresponding genz_bridge_dev */
+	/* Revisit: locking */
+	list_for_each_entry(cur, &genz_bridge_list, bridge_node) {
+		if (cur->bridge_dev == dev) {
+			zbdev = cur;
+			break;
+		}
+	}
+
+	return zbdev;
+}
+EXPORT_SYMBOL(genz_find_bridge);
 
 /**
  * genz_unregister_bridge - unregister a Gen-Z bridge driver
@@ -410,19 +427,13 @@ EXPORT_SYMBOL(genz_register_bridge);
 int genz_unregister_bridge(struct device *dev)
 {
 	int ret = 0;
-	struct genz_bridge_dev *zbdev = NULL, *cur;
+	struct genz_bridge_dev *zbdev;
 
 	/* dev is the native bridge dev - find corresponding genz_bridge_dev */
 	/* Revisit: locking */
-	list_for_each_entry(cur, &genz_bridge_list, bridge_node) {
-		if (cur->bridge_dev == dev) {
-			zbdev = cur;
-			list_del(&zbdev->bridge_node);
-			break;
-		}
-	}
-
+	zbdev = genz_find_bridge(dev);
 	if (zbdev) {
+		list_del(&zbdev->bridge_node);
 		genz_bridge_remove_control_files(zbdev);
 		genz_bridge_zmmu_clear(zbdev);
 		kfree(zbdev);
@@ -434,7 +445,7 @@ int genz_unregister_bridge(struct device *dev)
 }
 EXPORT_SYMBOL(genz_unregister_bridge);
 
-struct genz_bridge_dev *genz_find_bridge(struct genz_dev *zdev)
+struct genz_bridge_dev *genz_zdev_bridge(struct genz_dev *zdev)
 {
 	struct genz_bridge_dev *zbdev = NULL;
 	struct genz_fabric *fabric;
@@ -540,6 +551,7 @@ struct genz_resource *genz_get_first_resource(struct genz_dev *zdev)
 		return NULL;
 	return &zres->zres;
 }
+EXPORT_SYMBOL(genz_get_first_resource);
 
 struct genz_resource *genz_get_next_resource(struct genz_dev *zdev,
 		struct genz_resource *res)
@@ -556,21 +568,36 @@ struct genz_resource *genz_get_next_resource(struct genz_dev *zdev,
 		return NULL;
 	return &zres->zres;
 }
+EXPORT_SYMBOL(genz_get_next_resource);
 
+/* Revisit: these next 3 should probably be "static inline" in genz.h */
 bool genz_is_data_resource(struct genz_resource *res)
 {
 	return(!(res->res.flags & IORESOURCE_GENZ_CONTROL));
 }
+EXPORT_SYMBOL(genz_is_data_resource);
 
 bool genz_is_control_resource(struct genz_resource *res)
 {
 	return(res->res.flags & IORESOURCE_GENZ_CONTROL);
 }
+EXPORT_SYMBOL(genz_is_control_resource);
 
 const char *genz_resource_name(struct genz_resource *res)
 {
 	return res->res.name;
 }
+EXPORT_SYMBOL(genz_resource_name);
+
+uint32_t genz_dev_gcid(struct genz_dev *zdev, uint index)
+{
+	/* Revisit: handle multiple CIDs */
+	if (index != 0 || !zdev->zcomp || !zdev->zcomp->subnet)
+		return GENZ_INVALID_GCID;
+
+	return genz_get_gcid(zdev->zcomp->subnet->sid, zdev->zcomp->cid);
+}
+EXPORT_SYMBOL(genz_dev_gcid);
 
 static void force_dev_cleanup(void)
 {

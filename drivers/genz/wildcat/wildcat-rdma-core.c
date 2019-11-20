@@ -1465,9 +1465,9 @@ int wildcat_rdma_user_req_RMR_IMPORT(struct io_entry *entry)
 	struct bridge           *br = wildcat_gzbr_to_br(mdata->bridge);
 	struct genz_rmr         *rmr;
 	struct zmap             *zmap;
+	struct genz_rmr_info    rmri;
 	uint64_t                len, access, rsp_zaddr;
-	uint64_t                req_addr;
-	uint32_t                pg_ps, dgcid;
+	uint32_t                dgcid;
 	off_t                   offset = GENZ_BASE_ADDR_ERROR;
 	bool                    remote, cpu_visible, writable, individual;
 
@@ -1496,7 +1496,7 @@ int wildcat_rdma_user_req_RMR_IMPORT(struct io_entry *entry)
 	 */
 	dgcid = wildcat_gcid_from_uuid(uuid);
 	rmr = genz_rmr_get(mdata, uuid, dgcid, rsp_zaddr, len, access,
-			   entry->fdata->pasid, 0, &req_addr, &pg_ps);
+			   entry->fdata->pasid, 0, &rmri);
 	if (IS_ERR(rmr)) {
 		status = PTR_ERR(rmr);
 		if (status == -EEXIST)
@@ -1507,8 +1507,7 @@ int wildcat_rdma_user_req_RMR_IMPORT(struct io_entry *entry)
 
 	/* create requester ZMMU entries, if necessary */
 	if (individual) {
-		status = genz_zmmu_req_pte_alloc(rmr->pte_info,
-						 &req_addr, &pg_ps);
+		status = genz_zmmu_req_pte_alloc(rmr->pte_info, &rmri);
 		if (status < 0) {
 			genz_rmr_remove(rmr, true);
 			goto out;
@@ -1518,8 +1517,9 @@ int wildcat_rdma_user_req_RMR_IMPORT(struct io_entry *entry)
 		; /* Revisit: finish this */
 	}
 
-	rmr->req_addr = req_addr;
-	rmr->mmap_pfn = ROUND_DOWN_PAGE(req_addr, BIT_ULL(pg_ps)) >> PAGE_SHIFT;
+	rmr->req_addr = rmri.req_addr;
+	rmr->mmap_pfn = ROUND_DOWN_PAGE(rmri.req_addr, BIT_ULL(rmri.pg_ps))
+		>> PAGE_SHIFT;
 
 	if (cpu_visible) {
 		zmap = rmr_zmap_alloc(entry->fdata, rmr);
@@ -1532,13 +1532,13 @@ int wildcat_rdma_user_req_RMR_IMPORT(struct io_entry *entry)
 	}
 
 addr:
-	rsp->rmr_import.req_addr = req_addr;
+	rsp->rmr_import.req_addr = rmri.req_addr;
 	rsp->rmr_import.offset = offset;
-	rsp->rmr_import.pg_ps = pg_ps;
+	rsp->rmr_import.pg_ps = rmri.pg_ps;
 
 out:
 	pr_debug("ret=%d, req_addr=0x%016llx, offset=0x%lx, pg_ps=%u\n",
-		 status, req_addr, offset, pg_ps);
+		 status, rmri.req_addr, offset, rmri.pg_ps);
 	return queue_io_rsp(entry, sizeof(rsp->rmr_import), status);
 }
 

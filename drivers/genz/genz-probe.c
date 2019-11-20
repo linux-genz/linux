@@ -664,7 +664,7 @@ int genz_device_add(struct genz_dev *zdev)
         zdev->dev.bus = &genz_bus_type;
 	zdev->dev.parent = &zdev->zcomp->dev;
 	zdev->dev.release = genz_release_dev;
-	zdev->zbdev = genz_find_bridge(zdev);
+	zdev->zbdev = genz_zdev_bridge(zdev);
 	if (zdev->zbdev == NULL) {
 		pr_debug("genz_device_add failed to find a bridge\n");
 	}

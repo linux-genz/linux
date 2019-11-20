@@ -163,6 +163,11 @@ int wildcat_common_UUID_IMPORT(struct genz_mem_data *mdata, uuid_t *uuid,
 	uint32_t                ro_rkey, rw_rkey;
 	struct bridge           *br = wildcat_gzbr_to_br(mdata->bridge);
 
+	if (!br) {
+		pr_debug("br is NULL!\n");
+		status = -EINVAL;
+		goto out;
+	}
 	if (wildcat_uuid_is_local(br, uuid)) {
 		if (loopback) {
 			type = UUID_TYPE_LOOPBACK;
@@ -187,6 +192,11 @@ int wildcat_common_UUID_IMPORT(struct genz_mem_data *mdata, uuid_t *uuid,
 		goto err_md_node;
 
 	/* add mdata->local_uuid to uu->remote->local_uuid_tree */
+	if (!mdata->local_uuid) {
+		status = -EINVAL;
+		pr_debug("mdata->local_uuid is NULL!\n");
+		goto err_md_node;
+	}
 	kref_get(&mdata->local_uuid->refcount);
 	uu_node = genz_remote_uuid_alloc_and_insert(
 		mdata->local_uuid, &uu->remote->local_uuid_lock,

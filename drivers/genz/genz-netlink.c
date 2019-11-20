@@ -412,7 +412,7 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		ret = -EINVAL;
 		goto err;
 	}
-	if (zcomp->cclass > GENZ_NUM_HARDWARE_TYPES) {
+	if (zcomp->cclass >= genz_hardware_classes_nelems) {
 		pr_debug("CCLASS invalid\n");
 		ret = -EINVAL;
 		goto err;

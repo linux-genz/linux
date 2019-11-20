@@ -155,6 +155,7 @@ static void msg_state_free(struct wildcat_msg_state *ms)
 static int _msg_xdm_get_cmpl(struct xdm_info *xdmi,
 			     struct wildcat_cq_entry *entry)
 {
+	struct genz_xdm_info *gzxi = xdmi->gzxi;
 	int ret = 0;
 	uint head, next_head, cmdq_ent, cmpl_index;
 	struct wildcat_cq_entry *xdm_entry, *next_entry;
@@ -162,7 +163,7 @@ static int _msg_xdm_get_cmpl(struct xdm_info *xdmi,
 
 	/* caller must hold xdm_info_lock */
 
-	cmdq_ent = xdmi->cmdq_ent;
+	cmdq_ent = gzxi->cmdq_ent;
 	head = xdmi->cmplq_head;
 	cpu_addr = xdmi->cmplq_zpage->dma.cpu_addr;
 	xdm_entry = &(((struct wildcat_cq_entry *)cpu_addr)[head]);
@@ -176,7 +177,7 @@ static int _msg_xdm_get_cmpl(struct xdm_info *xdmi,
 	/* copy XDM completion entry to caller */
 	*entry = *xdm_entry;
 	/* do mod-add to compute next head value */
-	next_head = (head + 1) % xdmi->cmplq_ent;
+	next_head = (head + 1) % gzxi->cmplq_ent;
 	/* toggle cur_valid on wrap */
 	if (next_head < head)
 		xdmi->cur_valid = !xdmi->cur_valid;
@@ -200,12 +201,13 @@ out:
 
 int msg_xdm_get_cmpl(struct xdm_info *xdmi, struct wildcat_cq_entry *entry)
 {
+	struct genz_xdm_info *gzxi = xdmi->gzxi;
 	int ret;
 	ulong flags;
 
-	spin_lock_irqsave(&xdmi->xdm_info_lock, flags);
+	spin_lock_irqsave(&gzxi->xdm_info_lock, flags);
 	ret = _msg_xdm_get_cmpl(xdmi, entry);
-	spin_unlock_irqrestore(&xdmi->xdm_info_lock, flags);
+	spin_unlock_irqrestore(&gzxi->xdm_info_lock, flags);
 	return ret;
 }
 
@@ -241,17 +243,18 @@ static int _msg_xdm_get_cmpls(struct xdm_info *xdmi)
 static int msg_xdm_queue_cmd(struct xdm_info *xdmi,
                              union wildcat_hw_wq_entry *cmd)
 {
+	struct genz_xdm_info *gzxi = xdmi->gzxi;
 	int ret = 0;
 	uint head, tail, next_tail;
 	union wildcat_hw_wq_entry *xdm_entry;
 	void *cpu_addr;
 	ulong flags;
 
-	spin_lock_irqsave(&xdmi->xdm_info_lock, flags);
+	spin_lock_irqsave(&gzxi->xdm_info_lock, flags);
 	/* Revisit: add support for cmd buffers */
 	tail = xdmi->cmdq_tail_shadow;
 	/* do mod-add to compute next tail value */
-	next_tail = (tail + 1) % xdmi->cmdq_ent;
+	next_tail = (tail + 1) % gzxi->cmdq_ent;
 restart_head:
 	head = xdmi->cmdq_head_shadow;
 	if (next_tail == head) {  /* cmdq appears to be full */
@@ -262,7 +265,7 @@ restart_head:
 		if (head != xdmi->cmdq_head_shadow)
 			goto restart_head;
 		ret = -EBUSY;
-	} else if (xdmi->active_cmds + 1 >= xdmi->cmplq_ent) {
+	} else if (xdmi->active_cmds + 1 >= gzxi->cmplq_ent) {
 		ret = _msg_xdm_get_cmpls(xdmi);
 	}
 	if (ret < 0) {
@@ -281,7 +284,7 @@ restart_head:
 	ret = tail;
 
 out:
-	spin_unlock_irqrestore(&xdmi->xdm_info_lock, flags);
+	spin_unlock_irqrestore(&gzxi->xdm_info_lock, flags);
 	return ret;
 }
 
@@ -375,13 +378,14 @@ out:
 static int msg_rdm_get_cmpl(struct rdm_info *rdmi, struct wildcat_rdm_hdr *hdr,
                             union wildcat_msg *msg)
 {
+	struct genz_rdm_info *gzri = rdmi->gzri;
 	int ret = 0;
 	uint head, next_head;
 	struct wildcat_rdm_entry *rdm_entry, *next_entry;
 	void *cpu_addr;
 	ulong flags;
 
-	spin_lock_irqsave(&rdmi->rdm_info_lock, flags);
+	spin_lock_irqsave(&gzri->rdm_info_lock, flags);
 	head = rdmi->cmplq_head_shadow;
 	cpu_addr = rdmi->cmplq_zpage->dma.cpu_addr;
 	rdm_entry = &(((struct wildcat_rdm_entry *)cpu_addr)[head]);
@@ -395,7 +399,7 @@ static int msg_rdm_get_cmpl(struct rdm_info *rdmi, struct wildcat_rdm_hdr *hdr,
 	*hdr = rdm_entry->hdr;
 	memcpy(msg, rdm_entry->payload, sizeof(*msg));
 	/* do mod-add to compute next head value */
-	next_head = (head + 1) % rdmi->cmplq_ent;
+	next_head = (head + 1) % gzri->cmplq_ent;
 	/* toggle cur_valid on wrap */
 	if (next_head < head)
 		rdmi->cur_valid = !rdmi->cur_valid;
@@ -408,7 +412,7 @@ static int msg_rdm_get_cmpl(struct rdm_info *rdmi, struct wildcat_rdm_hdr *hdr,
 	ret = (next_entry->hdr.valid == rdmi->cur_valid);
 
 out:
-	spin_unlock_irqrestore(&rdmi->rdm_info_lock, flags);
+	spin_unlock_irqrestore(&gzri->rdm_info_lock, flags);
 	return ret;
 }
 
@@ -555,6 +559,7 @@ static int msg_req_NOP(struct rdm_info *rdmi, struct xdm_info *xdmi,
                        struct wildcat_rdm_hdr *req_hdr,
                        union wildcat_msg *req_msg)
 {
+	struct genz_rdm_info *gzri = rdmi->gzri;
 	uint32_t          rspctxid = req_msg->hdr.rspctxid;
 	union wildcat_msg rsp_msg = { 0 };
 	uint64_t          seq;
@@ -565,7 +570,7 @@ static int msg_req_NOP(struct rdm_info *rdmi, struct xdm_info *xdmi,
 		 genz_gcid_str(req_hdr->sgcid, str, sizeof(str)),
 		 req_hdr->reqctxid, rspctxid, req_msg->hdr.msgid, seq);
 	/* fill in rsp_msg */
-	msg_setup_rsp_hdr(&rsp_msg, req_msg, WILDCAT_MSG_OK, rdmi->rspctxid);
+	msg_setup_rsp_hdr(&rsp_msg, req_msg, WILDCAT_MSG_OK, gzri->rspctxid);
 	rsp_msg.rsp.nop.seq = req_msg->req.nop.seq;
 	/* send cmd */
 	return msg_send_cmd(xdmi, &rsp_msg, req_hdr->sgcid, rspctxid);
@@ -590,6 +595,7 @@ static int msg_req_UUID_IMPORT(struct rdm_info *rdmi, struct xdm_info *xdmi,
 			       struct wildcat_rdm_hdr *req_hdr,
 			       union wildcat_msg *req_msg)
 {
+	struct genz_rdm_info   *gzri = rdmi->gzri;
 	int                    status = WILDCAT_MSG_OK;
 	uint32_t               rspctxid = req_msg->hdr.rspctxid;
 	uint32_t               ro_rkey = 0, rw_rkey = 0;
@@ -653,7 +659,7 @@ tuu_remove:
 
 respond:
 	/* fill in rsp_msg */
-	msg_setup_rsp_hdr(&rsp_msg, req_msg, status, rdmi->rspctxid);
+	msg_setup_rsp_hdr(&rsp_msg, req_msg, status, gzri->rspctxid);
 	uuid_copy(&rsp_msg.rsp.uuid_import.src_uuid, src_uuid);
 	uuid_copy(&rsp_msg.rsp.uuid_import.tgt_uuid, tgt_uuid);
 	rsp_msg.rsp.uuid_import.ro_rkey = ro_rkey;
@@ -686,6 +692,7 @@ static int msg_req_UUID_FREE(struct rdm_info *rdmi, struct xdm_info *xdmi,
 			     struct wildcat_rdm_hdr *req_hdr,
 			     union wildcat_msg *req_msg)
 {
+	struct genz_rdm_info   *gzri = rdmi->gzri;
 	int                    status = WILDCAT_MSG_OK;
 	uint32_t               rspctxid = req_msg->hdr.rspctxid;
 	uuid_t                 *src_uuid = &req_msg->req.uuid_free.src_uuid;
@@ -732,7 +739,7 @@ tuu_remove:
 
 respond:
 	/* fill in rsp_msg */
-	msg_setup_rsp_hdr(&rsp_msg, req_msg, status, rdmi->rspctxid);
+	msg_setup_rsp_hdr(&rsp_msg, req_msg, status, gzri->rspctxid);
 	uuid_copy(&rsp_msg.rsp.uuid_free.src_uuid, src_uuid);
 	uuid_copy(&rsp_msg.rsp.uuid_free.tgt_uuid, tgt_uuid);
 	/* send cmd */
@@ -761,6 +768,7 @@ static int msg_req_UUID_TEARDOWN(struct rdm_info *rdmi, struct xdm_info *xdmi,
 				 struct wildcat_rdm_hdr *req_hdr,
 				 union wildcat_msg *req_msg)
 {
+	struct genz_rdm_info   *gzri = rdmi->gzri;
 	int                    status = WILDCAT_MSG_OK;
 	uint32_t               rspctxid = req_msg->hdr.rspctxid;
 	uuid_t                 *src_uuid = &req_msg->req.uuid_teardown.src_uuid;
@@ -784,7 +792,7 @@ static int msg_req_UUID_TEARDOWN(struct rdm_info *rdmi, struct xdm_info *xdmi,
 
 respond:
 	/* fill in rsp_msg */
-	msg_setup_rsp_hdr(&rsp_msg, req_msg, status, rdmi->rspctxid);
+	msg_setup_rsp_hdr(&rsp_msg, req_msg, status, gzri->rspctxid);
 	uuid_copy(&rsp_msg.rsp.uuid_teardown.src_uuid, src_uuid);
 	/* send cmd */
 	return msg_send_cmd(xdmi, &rsp_msg, req_hdr->sgcid, rspctxid);
@@ -973,13 +981,14 @@ static int msg_req_ERROR(struct rdm_info *rdmi, struct xdm_info *xdmi,
                          struct wildcat_rdm_hdr *req_hdr,
                          union wildcat_msg *req_msg, int status)
 {
+	struct genz_rdm_info   *gzri = rdmi->gzri;
 	uint32_t               rspctxid;
 	uint                   msgid;
 	union wildcat_msg         rsp_msg = { 0 };
 	char                   gcstr[GCID_STRING_LEN+1];
 
 	if (status == WILDCAT_MSG_ERR_UNKNOWN_VERSION) {
-		rspctxid = rdmi->rspctxid;
+		rspctxid = gzri->rspctxid;
 		msgid    = 0;
 	} else {
 		rspctxid = req_msg->hdr.rspctxid;
@@ -991,7 +1000,7 @@ static int msg_req_ERROR(struct rdm_info *rdmi, struct xdm_info *xdmi,
 		 req_hdr->reqctxid, rspctxid, msgid);
 
 	/* fill in rsp_msg */
-	msg_setup_rsp_hdr(&rsp_msg, req_msg, status, rdmi->rspctxid);
+	msg_setup_rsp_hdr(&rsp_msg, req_msg, status, gzri->rspctxid);
 	/* send cmd */
 	return msg_send_cmd(xdmi, &rsp_msg, req_hdr->sgcid, rspctxid);
 }
@@ -1002,6 +1011,8 @@ static void msg_work_handler(struct work_struct *w)
 	struct wildcat_rdm_hdr   *msg_hdr;
 	union  wildcat_msg       *msg;
 	struct wildcat_msg_state *state;
+	struct genz_xdm_info  *gzxi;
+	struct genz_rdm_info  *gzri;
 	struct xdm_info       *xdmi;
 	struct rdm_info       *rdmi;
 	uint32_t              rspctxid;
@@ -1012,8 +1023,10 @@ static void msg_work_handler(struct work_struct *w)
 	char                  dgstr[GCID_STRING_LEN+1];
 
 	msg_work = container_of(w, struct wildcat_msg_work, work);
-	xdmi     = &msg_work->br->msg_xdm;
-	rdmi     = &msg_work->br->msg_rdm;
+	gzxi     = &msg_work->br->msg_xdm;
+	gzri     = &msg_work->br->msg_rdm;
+	xdmi     = (struct xdm_info *)gzxi->br_driver_data;
+	rdmi     = (struct rdm_info *)gzri->br_driver_data;
 	msg      = &msg_work->msg;
 	msg_hdr  = &msg_work->msg_hdr;
 	rspctxid = msg->hdr.rspctxid;
@@ -1114,7 +1127,8 @@ out:
 static irqreturn_t msg_rdm_interrupt_handler(int irq_index, void *data)
 {
 	struct bridge *br = (struct bridge *)data;
-	struct rdm_info *rdmi = &br->msg_rdm;
+	struct genz_rdm_info *gzri = &br->msg_rdm;
+	struct rdm_info *rdmi = (struct rdm_info *)gzri->br_driver_data;
 	struct wildcat_msg_work *msg_work;
 	int ret;
 	bool more;
@@ -1162,11 +1176,12 @@ int wildcat_msg_send_UUID_IMPORT(struct bridge *br,
 				 uuid_t *src_uuid, uuid_t *tgt_uuid,
 				 uint32_t *ro_rkey, uint32_t *rw_rkey)
 {
-	struct xdm_info         *xdmi = &br->msg_xdm;
-	struct rdm_info         *rdmi = &br->msg_rdm;
+	struct genz_xdm_info    *gzxi = &br->msg_xdm;
+	struct xdm_info         *xdmi = (struct xdm_info *)gzxi->br_driver_data;
+	struct genz_rdm_info    *gzri = &br->msg_rdm;
 	int                     ret = 0;
 	uint32_t                dgcid = wildcat_gcid_from_uuid(tgt_uuid);
-	uint32_t                rspctxid = rdmi->rspctxid;
+	uint32_t                rspctxid = gzri->rspctxid;
 	struct wildcat_msg_state   *state;
 	union wildcat_msg          *req_msg;
 	char                    gcstr[GCID_STRING_LEN+1];
@@ -1205,11 +1220,12 @@ out:
 struct wildcat_msg_state *wildcat_msg_send_UUID_FREE(
 	struct bridge *br, uuid_t *src_uuid, uuid_t *tgt_uuid, bool wait)
 {
-	struct xdm_info         *xdmi = &br->msg_xdm;
-	struct rdm_info         *rdmi = &br->msg_rdm;
+	struct genz_xdm_info    *gzxi = &br->msg_xdm;
+	struct xdm_info         *xdmi = (struct xdm_info *)gzxi->br_driver_data;
+	struct genz_rdm_info    *gzri = &br->msg_rdm;
 	int                     ret = 0;
 	uint32_t                dgcid = wildcat_gcid_from_uuid(tgt_uuid);
-	uint32_t                rspctxid = rdmi->rspctxid;
+	uint32_t                rspctxid = gzri->rspctxid;
 	struct wildcat_msg_state   *state;
 	union wildcat_msg          *req_msg;
 	char                    gcstr[GCID_STRING_LEN+1];
@@ -1251,11 +1267,12 @@ struct wildcat_msg_state *wildcat_msg_send_UUID_TEARDOWN(struct bridge *br,
 							 uuid_t *src_uuid,
 							 uuid_t *tgt_uuid)
 {
-	struct xdm_info         *xdmi = &br->msg_xdm;
-	struct rdm_info         *rdmi = &br->msg_rdm;
+	struct genz_xdm_info    *gzxi = &br->msg_xdm;
+	struct xdm_info         *xdmi = (struct xdm_info *)gzxi->br_driver_data;
+	struct genz_rdm_info    *gzri = &br->msg_rdm;
 	int                     ret = 0;
 	uint32_t                dgcid = wildcat_gcid_from_uuid(tgt_uuid);
-	uint32_t                rspctxid = rdmi->rspctxid;
+	uint32_t                rspctxid = gzri->rspctxid;
 	struct wildcat_msg_state   *state;
 	union wildcat_msg          *req_msg;
 	char                    gcstr[GCID_STRING_LEN+1];
@@ -1602,64 +1619,58 @@ bool wildcat_msg_enic_more(struct enic *enic, uint q)
 }
 #endif /* ZHPE_ENIC */
 
-int wildcat_msg_qalloc(struct bridge *br)
+int wildcat_msg_qalloc(struct genz_bridge_dev *gzbr)
 {
-	int ret = 0;
-        struct xdm_info *xdmi = &br->msg_xdm;
-        struct rdm_info *rdmi = &br->msg_rdm;
+	int                   ret = 0;
+	struct bridge         *br = wildcat_gzbr_to_br(gzbr);
+	struct genz_xdm_info  *gzxi = &br->msg_xdm;
+	struct genz_rdm_info  *gzri = &br->msg_rdm;
+	struct xdm_info       *xdmi;
+	struct rdm_info       *rdmi;
 
 	/* Set up the XDM info structure */
-        xdmi->br = br;
-	xdmi->cmdq_ent = 64;
-	xdmi->cmplq_ent = 64;
-	xdmi->traffic_class = 0; /* Revisit: WILDCAT_TC_0 not visible */
-	xdmi->priority = 0;
-	xdmi->slice_mask = ALL_SLICES;
-        xdmi->cur_valid = 1;
-	ret = wildcat_kernel_XQALLOC(xdmi);
-        if (ret)
-            goto done;
+	gzxi->cmdq_ent = 64;
+	gzxi->cmplq_ent = 64;
+	gzxi->traffic_class = GENZ_TC_0;
+	gzxi->priority = 0;
 
 	/* Set up the RDM info structure */
-        rdmi->br = br;
-	rdmi->cmplq_ent = 128;
-	rdmi->slice_mask = SLICE_DEMAND|0x1;  /* slice 0 only */
-        rdmi->cur_valid = 1;
-	ret = wildcat_kernel_RQALLOC(rdmi);
-        if (ret)
-            goto xqfree;
-        if (rdmi->rspctxid != 0) { /* must be 0 for driver-driver msg RDM */
+	gzri->cmplq_ent = 128;
+	gzri->br_driver_flags = SLICE_DEMAND|0x1;  /* slice 0 only */
+
+	ret = genz_alloc_queues(gzbr, gzxi, gzri);
+	if (ret < 0)
+		goto done;
+        if (gzri->rspctxid != 0) { /* must be 0 for driver-driver msg RDM */
             ret = -EBUSY;
-            goto rqfree;
+            goto qfree;
         }
 
+	xdmi = (struct xdm_info *)gzxi->br_driver_data;
+	rdmi = (struct rdm_info *)gzri->br_driver_data;
         ret = wildcat_register_rdm_interrupt(rdmi->sl, rdmi->queue,
-                                          msg_rdm_interrupt_handler, br);
-        if (ret)
-            goto rqfree;
-
-        /* clear stop bits - queues are now ready */
-        xdm_qcm_write_val(0, xdmi->hw_qcm_addr, XDM_STOP_OFFSET);
-        rdm_qcm_write_val(0, rdmi->hw_qcm_addr, RDM_STOP_OFFSET);
+					     msg_rdm_interrupt_handler, br);
+        if (ret < 0)
+            goto qfree;
 
         return 0;
 
- rqfree:
-        wildcat_kernel_RQFREE(rdmi);
-
- xqfree:
-        wildcat_kernel_XQFREE(xdmi);
-
+ qfree:
+        genz_free_queues(gzxi, gzri);
  done:
 	return ret;
 }
 
-int wildcat_msg_qfree(struct bridge *br)
+int wildcat_msg_qfree(struct genz_bridge_dev *gzbr)
 {
-	int ret = 0;
+	int                   ret = 0;
+	struct bridge         *br = wildcat_gzbr_to_br(gzbr);
+	struct genz_xdm_info  *gzxi = &br->msg_xdm;
+	struct genz_rdm_info  *gzri = &br->msg_rdm;
+	struct rdm_info       *rdmi = (struct rdm_info *)gzri->br_driver_data;
 
-        ret |= wildcat_kernel_XQFREE(&br->msg_xdm);
-        ret |= wildcat_kernel_RQFREE(&br->msg_rdm);
+	wildcat_unregister_rdm_interrupt(rdmi->sl, rdmi->queue);
+	ret = genz_free_queues(gzxi, gzri);
 
         return ret;
 }
