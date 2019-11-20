@@ -2063,6 +2063,7 @@ static int wildcat_rdma_probe(struct genz_dev *zdev,
 
 	/* allocate & initialize state structure */
 	dev_dbg(&zdev->dev, "allocating rstate\n");
+	dev_dbg(&zdev->dev, "zdev->dev is %s zdev->dev->parent is %s\n", dev_name(&zdev->dev), dev_name(zdev->dev.parent));
 	rstate = kzalloc(sizeof(*rstate), GFP_KERNEL);
 	if (!rstate) {
 		ret = -ENOMEM;
@@ -2194,6 +2195,14 @@ err_zpage_free:
 
 static void wildcat_rdma_exit(void)
 {
+	struct wildcat_rdma_state *rstate;
+	int ret = 0;
+
+	/* Revisit: locking */
+	list_for_each_entry(rstate, &rstate_list, rstate_node) {
+		ret = wildcat_rdma_remove(rstate->zdev);
+	}
+
 	genz_unregister_driver(&wildcat_rdma_genz_driver);
 	wildcat_rdma_cleanup_poll_devs();
 	wildcat_unregister_rdm_trigger(wildcat_rdma_trigger);
