@@ -211,5 +211,6 @@ int wildcat_alloc_queues(struct genz_bridge_dev *gzbr,
 			 struct genz_xdm_info *xdmi,
 			 struct genz_rdm_info *rdmi);
 int wildcat_free_queues(struct genz_xdm_info *gzxi, struct genz_rdm_info *gzri);
+int wildcat_sgl_request(struct genz_dev *zdev, struct genz_sgl_info *sgli);
 
 #endif /* _WILDCAT_QUEUE_H_ */

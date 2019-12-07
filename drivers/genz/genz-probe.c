@@ -659,7 +659,7 @@ struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric)
 int genz_device_add(struct genz_dev *zdev)
 {
 	int ret;
-	
+
         zdev->dev.bus = &genz_bus_type;
 	zdev->dev.parent = &zdev->zcomp->dev;
 	zdev->dev.release = genz_release_dev;

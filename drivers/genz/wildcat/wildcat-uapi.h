@@ -164,6 +164,7 @@ struct wildcat_hw_wq_dma {
 	uint32_t                 len;
 	uint64_t                 rd_addr;
 	uint64_t                 wr_addr;
+	void                     *driver_data;
 };
 
 struct wildcat_hw_wq_imm {

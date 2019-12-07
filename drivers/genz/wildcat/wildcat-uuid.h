@@ -37,7 +37,7 @@
 #ifndef _WILDCAT_UUID_H_
 #define _WILDCAT_UUID_H_
 
-void wildcat_generate_uuid(struct bridge *bridge, uuid_t *uuid);
+void wildcat_generate_uuid(struct genz_bridge_dev *gzbr, uuid_t *uuid);
 uint32_t wildcat_gcid_from_uuid(const uuid_t *uuid);
 void wildcat_notify_remote_uuids(struct genz_mem_data *mdata);
 int wildcat_common_UUID_IMPORT(struct genz_mem_data *mdata, uuid_t *uuid,

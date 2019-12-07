@@ -910,6 +910,8 @@ int genz_rmr_import(
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint32_t rkey,
 	struct genz_rmr_info *rmri)
 {
+	struct genz_bridge_dev  *br = mdata->bridge;
+	struct genz_bridge_info *br_info = &br->br_info;
 	int                     status = 0;
 	struct genz_rmr         *rmr;
 	bool                    remote, cpu_visible, writable, individual;
@@ -932,8 +934,8 @@ int genz_rmr_import(
 		 uuid, rsp_zaddr, len, access, rkey, remote, writable,
 		 cpu_visible, individual);
 
-	if (!remote || !individual ||
-	    genz_gcid_is_local(mdata->bridge, dgcid)) {
+	if (!remote || !individual || /* Revisit: allow !individual */
+	    (genz_gcid_is_local(mdata->bridge, dgcid) && !br_info->loopback)) {
 		status = -EINVAL;  /* only individual remote access allowed */
 		goto out;
 	}

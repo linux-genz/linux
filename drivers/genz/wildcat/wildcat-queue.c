@@ -1148,3 +1148,178 @@ int wildcat_free_queues(struct genz_xdm_info *gzxi, struct genz_rdm_info *gzri)
 
 	return ret;
 }
+
+static int _xdm_get_matching_cmpl(struct xdm_info *xdmi, void *match,
+				  struct wildcat_cq_entry *entry)
+{
+	struct genz_xdm_info *gzxi = xdmi->gzxi;
+	int ret = 0;
+	bool done = false;
+	bool update_head = true;
+	uint cur_valid = xdmi->cur_valid;
+	uint next_cur_valid = cur_valid, new_cur_valid;
+	uint head, next_head, cmdq_ent, cmpl_index;
+	uint new_head = -1u;
+	struct wildcat_cq_entry *xdm_entry;
+	union wildcat_hw_wq_entry *xdm_cmd;
+	void *cmpl_addr, *cmd_addr;
+
+	/* caller must hold xdm_info_lock */
+
+	cmdq_ent = gzxi->cmdq_ent;
+	cmd_addr = xdmi->cmdq_zpage->dma.cpu_addr;
+	cmpl_addr = xdmi->cmplq_zpage->dma.cpu_addr;
+
+	/* When scanning the cmplq, the each entry can be:
+	 *   invalid  - return -EBUSY
+	 *   ignore   - ignore and keep scanning
+	 *   mismatch - ignore it, but keep scanning, cmplq_head no longer
+	 *              advances
+	 *   match    - stop scan & return entry
+	 */
+	for (head = xdmi->cmplq_head; !done;
+	     head = next_head, cur_valid = next_cur_valid) {
+		xdm_entry = &(((struct wildcat_cq_entry *)cmpl_addr)[head]);
+		/* check valid bit */
+		if (xdm_entry->valid != cur_valid) {
+			ret = -EBUSY;
+			break;
+		}
+		/* do mod-add to compute next head value */
+		next_head = (head + 1) % gzxi->cmplq_ent;
+		/* Revisit: can this loop wrap more than once? */
+		/* toggle our local cur_valid on wrap */
+		if (next_head < head) {
+			next_cur_valid = !cur_valid;
+		}
+		/* skip to next entry if cmpl_index is "ignore" */
+		/* Revisit: use some other field for "ignore" */
+		cmpl_index = xdm_entry->index;
+		if (cmpl_index == -1u) {  /* Revisit: symbolic name */
+			if (update_head) {
+				new_head = next_head;
+				new_cur_valid = next_cur_valid;
+			}
+			continue;
+		}
+		xdm_cmd = &(((union wildcat_hw_wq_entry *)cmd_addr)[cmpl_index]);
+		if (xdm_cmd->dma.driver_data == match) {
+			xdmi->active_cmds--;
+			/* copy XDM completion entry to caller */
+			*entry = *xdm_entry;
+			if (update_head) {
+				new_head = next_head;
+				new_cur_valid = next_cur_valid;
+			} else {  /* mark completion as "handled" */
+				xdm_entry->index = (uint16_t)-1u;  /* Revisit: symbolic name */
+			}
+			done = true;
+		} else {  /* mismatch */
+			/* cannot advance cmplq_head beyond this entry */
+			if (update_head) {
+				new_head = head;
+				new_cur_valid = cur_valid;
+				update_head = false;
+			}
+		}
+	}
+
+	/* update cmplq_head - SW-only */
+	if (new_head != -1u) {
+		xdmi->cmplq_head = new_head;
+		xdmi->cur_valid = new_cur_valid;
+	}
+
+	/* update cmdq_head_shadow if this completion moves it forward */
+	if (done && cmpl_index < cmdq_ent) {
+		if (((xdmi->cmdq_tail_shadow - cmpl_index) % cmdq_ent) <
+		    ((xdmi->cmdq_tail_shadow - xdmi->cmdq_head_shadow) %
+		     cmdq_ent))
+			xdmi->cmdq_head_shadow = cmpl_index;
+	}
+
+	return ret;
+}
+
+static int wildcat_sgl_poll_cmpls(struct genz_dev *zdev,
+				  struct genz_sgl_info *sgli)
+{
+	struct wildcat_cq_entry cq_entry;
+	struct genz_xdm_info *gzxi = sgli->xdmi;
+	struct xdm_info      *xdmi = (struct xdm_info *)gzxi->br_driver_data;
+	uint                 more = sgli->nr_sg;
+	int ret, err = 0;
+	ulong flags;
+
+	spin_lock_irqsave(&gzxi->xdm_info_lock, flags);
+	while (more) {
+		ret = _xdm_get_matching_cmpl(xdmi, sgli, &cq_entry);
+		/* Revisit: busy-wait */
+		if (ret == -EBUSY) {
+			continue;  /* Revisit: timeout */
+		} else if (ret == 0) {
+			if (cq_entry.status != 0) {
+				err = -EIO;
+			}
+			more--;
+		}
+	}
+	spin_unlock_irqrestore(&gzxi->xdm_info_lock, flags);
+	return err;
+}
+
+int wildcat_sgl_request(struct genz_dev *zdev, struct genz_sgl_info *sgli)
+{
+	int i, ret = 0;
+	struct scatterlist *sg;
+	union wildcat_hw_wq_entry wc_cmd;
+	char *cmd_name;
+	uint dma_len;
+	uint64_t zaddr;
+	struct genz_xdm_info *gzxi = sgli->xdmi;
+	struct xdm_info      *xdmi = (struct xdm_info *)gzxi->br_driver_data;
+
+	/* Revisit: Just to get something to work, submit XDM command(s)
+	 * and poll for completion.  Change to RDM interrupts for perf.
+	 */
+
+	zaddr = sgli->rmri->req_addr + sgli->offset;
+
+	for_each_sg(sgli->sg, sg, sgli->nr_sg, i) {
+		/* fill in cmd */
+		dma_len = sg_dma_len(sg);
+		wc_cmd.dma.len = dma_len;
+		wc_cmd.dma.driver_data = sgli;
+		if (sgli->cmd == GENZ_XDM_WRITE) {
+			cmd_name = "PUT";
+			wc_cmd.hdr.opcode = WILDCAT_HW_OPCODE_PUT;
+			wc_cmd.dma.rd_addr = sg_dma_address(sg);
+			wc_cmd.dma.wr_addr = zaddr;
+		} else {  /* GENZ_XDM_READ */
+			cmd_name = "GET";
+			wc_cmd.hdr.opcode = WILDCAT_HW_OPCODE_GET;
+			wc_cmd.dma.rd_addr = zaddr;
+			wc_cmd.dma.wr_addr = sg_dma_address(sg);
+		}
+		dev_dbg(&zdev->dev,
+			"%s: rd_addr=0x%llx, wr_addr=0x%llx, len=%u\n",
+			cmd_name, wc_cmd.dma.rd_addr, wc_cmd.dma.wr_addr,
+			dma_len);
+		/* submit cmd */
+		ret = wildcat_xdm_queue_cmd(xdmi, &wc_cmd, false);
+		if (ret < 0)  {  /* Revisit: handle EBUSY/EXFULL */
+			dev_dbg(&zdev->dev,
+				"wildcat_xdm_queue_cmd error, ret=%d\n", ret);
+			/* Revisit: cleanup submitted cmds */
+			return ret;
+		}
+		zaddr += dma_len;
+	}
+
+	/* Revisit: poll for completion */
+	ret = wildcat_sgl_poll_cmpls(zdev, sgli);
+	sgli->status = ret;
+	sgli->cmpl_fn(zdev, sgli);
+
+	return ret;
+}

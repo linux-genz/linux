@@ -301,7 +301,13 @@ static int parse_resource_list(const struct nlattr *resource_list,
 			/* Revisit: include fab#:gcid_str in dev name */
 			dev_set_name(&zdev->dev, "%s%d", condensed_name,
 				zdev->zcomp->resource_count[condensed_class]++);
-		} 
+		}
+		if (u_attrs[GENZ_A_U_MRL]) {
+			ret = parse_mr_list(zdev, u_attrs[GENZ_A_U_MRL]);
+			if (ret) {
+				pr_debug("\tparse of MRL failed\n");
+			}
+		}
 		ret = genz_device_add(zdev);
 		if (ret) {
 			pr_debug("\tgenz_device_add failed with %d\n", ret);
@@ -309,12 +315,6 @@ static int parse_resource_list(const struct nlattr *resource_list,
 		ret = genz_create_uuid_file(zdev);
 		if (ret) {
 			pr_debug("\tgenz_create_uuid_file failed with %d\n", ret);
-		}
-		if (u_attrs[GENZ_A_U_MRL]) {
-			ret = parse_mr_list(zdev, u_attrs[GENZ_A_U_MRL]);
-			if (ret) {
-				pr_debug("\tparse of MRL failed\n");
-			}
 		}
 	}
 	pr_debug("\tend of RESOURCE_LIST\n");

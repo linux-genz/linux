@@ -234,6 +234,9 @@ extern uint wildcat_kmsg_timeout;
 
 /* Function Prototypes */
 void wildcat_msg_list_wait(struct list_head *msg_wait_list, ktime_t start);
+int wildcat_xdm_get_cmpl(struct xdm_info *xdmi, struct wildcat_cq_entry *entry);
+int wildcat_xdm_queue_cmd(struct xdm_info *xdmi,
+			  union wildcat_hw_wq_entry *cmd, bool discard_cmpls);
 int wildcat_msg_send_UUID_IMPORT(struct bridge *br,
 				 uuid_t *src_uuid, uuid_t *tgt_uuid,
 				 uint32_t *ro_rkey, uint32_t *rw_rkey);

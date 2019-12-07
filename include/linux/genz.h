@@ -126,11 +126,14 @@ void __genz_unregister_driver(struct genz_driver *driver);
 typedef loff_t genz_control_cookie;
 
 struct genz_bridge_info {
-	uint64_t req_zmmu       : 1;
-	uint64_t rsp_zmmu       : 1;
-	uint64_t xdm            : 1;
-	uint64_t rdm            : 1;
-	uint64_t load_store     : 1;
+	uint     req_zmmu       : 1;
+	uint     rsp_zmmu       : 1;
+	uint     xdm            : 1;
+	uint     rdm            : 1;
+	uint     xdm_cmpl_intr  : 1;
+	uint     rdm_cmpl_intr  : 1;
+	uint     load_store     : 1;
+	uint     loopback       : 1;
 	uint     nr_xdm_queues;
 	uint     nr_rdm_queues;
 	uint     xdm_qlen;
@@ -145,6 +148,7 @@ struct genz_bridge_info {
 	uint64_t max_cpuvisible_addr;
 	uint64_t min_nonvisible_addr;
 	uint64_t max_nonvisible_addr;
+	uint64_t xdm_max_xfer;
 };
 
 struct genz_page_grid {
@@ -163,6 +167,7 @@ struct genz_xdm_info {
 	struct device          *dma_dev;
 	void                   *br_driver_data;
 	uint64_t               br_driver_flags;
+	void                   *driver_data;
 	spinlock_t             xdm_info_lock;
 };
 
@@ -173,7 +178,24 @@ struct genz_rdm_info {
 	struct device          *dma_dev;
 	void                   *br_driver_data;
 	uint64_t               br_driver_flags;
+	void                   *driver_data;
 	spinlock_t             rdm_info_lock;
+};
+
+struct genz_rmr_info;
+struct genz_sgl_info;
+typedef void (*sgl_cmpl_fn)(struct genz_dev *zdev, struct genz_sgl_info *sgli);
+
+struct genz_sgl_info {
+	struct genz_rmr_info *rmri;
+	struct genz_xdm_info *xdmi;
+	uint cmd;
+	uint tag;
+	loff_t offset;
+	struct scatterlist *sg;
+	int nr_sg;
+	int status;
+	sgl_cmpl_fn cmpl_fn;
 };
 
 struct genz_bridge_driver {
@@ -192,6 +214,7 @@ struct genz_bridge_driver {
 			 void *data);
 	int (*data_write)(struct genz_dev *zdev, loff_t offset, size_t size,
 			  void *data);
+	int (*sgl_request)(struct genz_dev *zdev, struct genz_sgl_info *sgli);
 	int (*req_page_grid_write)(struct genz_bridge_dev *br, uint pg_index,
 				   struct genz_page_grid genz_pg[]);
 	int (*rsp_page_grid_write)(struct genz_bridge_dev *br, uint pg_index,
@@ -204,10 +227,10 @@ struct genz_bridge_driver {
 			     struct genz_pte_info *info);
 	int (*rsp_pte_clear)(struct genz_bridge_dev *br,
 			     struct genz_pte_info *info);
-	int (*dma_map_sg_attrs)(
+	int (*dma_map_sg_attrs)(    /* for genz_umem_pin */
 		struct genz_bridge_dev *br, struct scatterlist *sg, int nents,
 		enum dma_data_direction direction, unsigned long dma_attrs);
-	void (*dma_unmap_sg_attrs)(
+	void (*dma_unmap_sg_attrs)( /* for genz_umem_release */
 		struct genz_bridge_dev *br, struct scatterlist *sg, int nents,
 		enum dma_data_direction direction, unsigned long dma_attrs);
 	int (*alloc_queues)(struct genz_bridge_dev *br,
@@ -421,6 +444,11 @@ static inline uint64_t genz_pg_addr(struct genz_page_grid *genz_pg)
 enum space_type {
 	GENZ_DATA    = 0,
 	GENZ_CONTROL = 1
+};
+
+enum genz_xdm_cmd {
+	GENZ_XDM_READ      = 0x1,
+	GENZ_XDM_WRITE     = 0x2
 };
 
 enum uuid_type {
@@ -693,5 +721,6 @@ bool genz_gcid_is_local(struct genz_bridge_dev *br, uint32_t gcid);
 int genz_alloc_queues(struct genz_bridge_dev *br,
 		      struct genz_xdm_info *xdmi, struct genz_rdm_info *rdmi);
 int genz_free_queues(struct genz_xdm_info *xdmi, struct genz_rdm_info *rdmi);
+int genz_sgl_request(struct genz_dev *zdev, struct genz_sgl_info *sgli);
 
 #endif /* LINUX_GENZ_H */

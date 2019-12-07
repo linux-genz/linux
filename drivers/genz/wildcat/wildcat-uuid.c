@@ -37,9 +37,10 @@
 #include <linux/genz.h>
 #include "wildcat.h"
 
-void wildcat_generate_uuid(struct bridge *bridge, uuid_t *uuid)
+void wildcat_generate_uuid(struct genz_bridge_dev *gzbr, uuid_t *uuid)
 {
-	uint32_t cid = bridge->gcid;
+	struct bridge *br = wildcat_gzbr_to_br(gzbr);
+	uint32_t      cid = br->gcid;
 
 	uuid_gen(uuid);
 	/* insert local bridge 28-bit Global CID */

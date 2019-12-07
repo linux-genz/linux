@@ -123,6 +123,8 @@ def main():
             rsp1G.rsp_zaddr, sz1G))
         print('user_send3 --blk --uuid {} --start {:#x} --length {:#x}'.format(
             init.uuid, rsp1G.rsp_zaddr, sz1G))
+        if args.keyboard:
+            set_trace()
         try:
             signal.pause()
         except KeyboardInterrupt:

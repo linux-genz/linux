@@ -255,6 +255,8 @@ struct func1_bar0 {
 #define WILDCAT_MIN_NONVISIBLE_ADDR  TB(256)
 #define WILDCAT_MAX_NONVISIBLE_ADDR  (-1ull)
 
+#define WILDCAT_XDM_MAX_XFER  GB(2)
+
 struct slice {
 	struct func1_bar0   *bar;        /* kernel mapping of BAR */
 	phys_addr_t         phys_base;   /* physical address of BAR */

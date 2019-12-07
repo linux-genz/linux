@@ -73,10 +73,7 @@ int genz_free_queues(struct genz_xdm_info *xdmi, struct genz_rdm_info *rdmi)
 	if (xdmi && rdmi && xdmi->br != rdmi->br)
 		return -EINVAL;
 
-	if (xdmi)
-		br = xdmi->br;
-	else
-		br = rdmi->br;
+	br = (xdmi) ? xdmi->br : rdmi->br;
 
 	/* Revisit: finish this */
 	ret = br->zbdrv->free_queues(xdmi, rdmi);
@@ -84,3 +81,14 @@ int genz_free_queues(struct genz_xdm_info *xdmi, struct genz_rdm_info *rdmi)
 	return ret;
 }
 EXPORT_SYMBOL(genz_free_queues);
+
+int genz_sgl_request(struct genz_dev *zdev, struct genz_sgl_info *sgli)
+{
+	struct genz_bridge_dev *zbr = zdev->zbdev;
+
+	if (!zbr || !zbr->zbdrv || !zbr->zbdrv->sgl_request)
+		return -EOPNOTSUPP;
+
+	return zbr->zbdrv->sgl_request(zdev, sgli);
+}
+EXPORT_SYMBOL(genz_sgl_request);

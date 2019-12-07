@@ -199,7 +199,8 @@ out:
 	return ret;
 }
 
-int msg_xdm_get_cmpl(struct xdm_info *xdmi, struct wildcat_cq_entry *entry)
+/* Revisit: no longer msg-specific - move elsewhere */
+int wildcat_xdm_get_cmpl(struct xdm_info *xdmi, struct wildcat_cq_entry *entry)
 {
 	struct genz_xdm_info *gzxi = xdmi->gzxi;
 	int ret;
@@ -240,8 +241,9 @@ static int _msg_xdm_get_cmpls(struct xdm_info *xdmi)
 	return ret;
 }
 
-static int msg_xdm_queue_cmd(struct xdm_info *xdmi,
-                             union wildcat_hw_wq_entry *cmd)
+/* Revisit: no longer msg-specific - move elsewhere */
+int wildcat_xdm_queue_cmd(struct xdm_info *xdmi,
+			  union wildcat_hw_wq_entry *cmd, bool discard_cmpls)
 {
 	struct genz_xdm_info *gzxi = xdmi->gzxi;
 	int ret = 0;
@@ -266,7 +268,10 @@ restart_head:
 			goto restart_head;
 		ret = -EBUSY;
 	} else if (xdmi->active_cmds + 1 >= gzxi->cmplq_ent) {
-		ret = _msg_xdm_get_cmpls(xdmi);
+		if (discard_cmpls)
+			ret = _msg_xdm_get_cmpls(xdmi);
+		else
+			ret = -EXFULL;
 	}
 	if (ret < 0) {
 		/* Revisit: add to workqueue for later processing */
@@ -462,7 +467,7 @@ static inline int msg_send_cmd(struct xdm_info *xdmi,
 	size = min(sizeof(*msg), sizeof(cmd.enqa.payload));
 	memcpy(&cmd.enqa.payload, msg, size);
 	/* send cmd */
-	return msg_xdm_queue_cmd(xdmi, &cmd);
+	return wildcat_xdm_queue_cmd(xdmi, &cmd, true);
 }
 
 static int msg_insert_send_cmd(struct xdm_info *xdmi,

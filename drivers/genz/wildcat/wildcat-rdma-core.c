@@ -387,7 +387,6 @@ static int wildcat_rdma_user_req_INIT(struct io_entry *entry)
 	uint32_t               ro_rkey, rw_rkey;
 	int                    status = 0;
 	ulong                  flags;
-	struct bridge          *br = wildcat_gzbr_to_br(fdata->md.bridge);
 
 	rsp->init.global_shared_offset = fdata->global_shared_zmap->offset;
 	rsp->init.global_shared_size =
@@ -396,7 +395,7 @@ static int wildcat_rdma_user_req_INIT(struct io_entry *entry)
 	rsp->init.local_shared_size =
 		fdata->local_shared_zmap->zpages->hdr.size;
 
-	wildcat_generate_uuid(br, &rsp->init.uuid);
+	wildcat_generate_uuid(fdata->md.bridge, &rsp->init.uuid);
 	uu = genz_uuid_tracker_alloc_and_insert(
 		&rsp->init.uuid, UUID_TYPE_LOCAL,
 		0, &fdata->md, GFP_KERNEL, &status);

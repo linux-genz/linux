@@ -46,27 +46,30 @@ static struct genz_device_id genz_blk_id_table[] = {
 
 MODULE_DEVICE_TABLE(genz, genz_blk_id_table);
 
-struct genz_blk_state {  /* one per genz_blk_probe */
-	struct list_head       bdev_list;  /* list of genz_bdevs */
-	struct mutex           lock;
-	struct genz_dev        *zdev;
-	wait_queue_head_t      block_io_queue;
-	int                    block_io_ready;
-	struct genz_mem_data   mem_data;
-};
-
 struct genz_blk_bridge { /* one per bridge */
 	struct list_head       bbr_node;
 	struct genz_bridge_dev *zbdev;
 	struct blk_mq_tag_set  *tag_set;
 	struct blk_mq_tag_set  __tag_set;
 	struct genz_blk_ctx    *bctx;
-	/* Revisit: other stuff */
+	struct genz_mem_data   mem_data;
+	uuid_t                 uuid;
+};
+
+struct genz_blk_state {  /* one per genz_blk_probe */
+	struct list_head       bdev_list;  /* list of genz_bdevs */
+	struct mutex           lock;
+	struct genz_dev        *zdev;
+	struct genz_blk_bridge *bbr;
+	wait_queue_head_t      block_io_queue;
+	int                    block_io_ready;
 };
 
 struct genz_blk_ctx {  /* one per XDM */
 	struct genz_blk_bridge *bbr;
 	struct genz_xdm_info   xdmi;
+	struct genz_rdm_info   rdmi;
+	bool                   have_rdmi;
 	/* Revisit: other stuff */
 };
 
@@ -89,17 +92,19 @@ struct genz_bdev {  /* one per genz_resource == genz_bdev_probe */
 
 struct genz_blk_cmd {  /* one per request */
 	struct scatterlist sg[GENZ_BLK_MAX_SG];
-	/* Revisit: copied from null_blk - what do we actually need? */
-	struct list_head list;
-	struct llist_node ll_list;
-	struct __call_single_data csd;
-	struct request *rq;
-	struct bio *bio;
-	u32 tag;
+	int nents;
+	unsigned short segments;
 	blk_status_t error;
+	struct genz_sgl_info sgli;
+	/* Revisit: copied from null_blk - what do we actually need? */
+	//struct list_head list;
+	//struct llist_node ll_list;
+	//struct __call_single_data csd;
+	//struct bio *bio;
 	//struct nullb_queue *nq;
-	struct hrtimer timer;
+	//struct hrtimer timer;
 };
+#define to_genz_blk_cmd(x) container_of(x, struct genz_blk_cmd, sgli)
 
 static uint genz_blk_index = 0;
 DEFINE_MUTEX(genz_blk_lock);  /* used only during initialization */
@@ -108,55 +113,15 @@ DEFINE_MUTEX(genz_blk_lock);  /* used only during initialization */
  *                    THE BDEV FILE OPS
  * ============================================================ */
 
-struct bdev_bio {
-	struct bio *bio;
-	int size;
-	int remaining;
-	dma_addr_t mem;
-	int dma_dir;
-	int status;
-};
-struct tag_dma_info {
-	dma_addr_t mem;
-	int len;
-	int dma_dir;
-	int remaining;
-	int unmap;
-};
-struct tag_info {
-	struct bdev_bio *bbio;
-	struct tag_dma_info *tag_dma;
-};
-static uint bdev_get_tag(struct bdev_bio *bbio, struct tag_dma_info *tag_dma);
-static void bdev_end_tag(uint tag);
-static int bdev_bio_chunk_done(struct device *dev, struct tag_info *ti,
-			       int bytes_completed, int status);
-static struct bdev_bio *bdev_get_bbio(struct bio *bio, int size);
-static void bdev_free_bbio(struct bdev_bio *bbio);
-static struct tag_dma_info * bdev_get_tag_dma(dma_addr_t mem, int len,
-					      int dma_dir, int unmap);
-static void bdev_free_tag_dma(struct tag_dma_info *tag_dma);
 static int genz_bdev_major = 0;
 static uint genz_bdev_start_minor = 0;
 
-#ifdef OLD_GZD
-static uint bdev_current_tag = 0;
-DEFINE_SPINLOCK(bdev_tag_lock);
-#define MAX_TAG	1024
-static struct tag_info bdev_tag_data[MAX_TAG] = {{0}};
-#endif
-
 #define GENZ_BLOCK_SIZE	512
-#define MAX_BIO_REQ_ID	32768
 #define GENZ_BDEV_MINORS 16
 
-/* Block Control register */
-#define	BIO_COMP_REQ_ID	0x00FF0000 /* bits 47:32 */
-#define BIO_DONE	0x00000100 /* bit 8 */
-
 /*
- * We can tweak our hardware sector size, but the kernel talks to us
- * in terms of small sectors, always.
+ * We can tweak our hardware sector size, but the kernel block layer
+ * talks to us in terms of 512-byte sectors, always.
  */
 #define KERNEL_SECTOR_SHIFT	9
 #define KERNEL_SECTOR_SIZE	(1<<KERNEL_SECTOR_SHIFT)
@@ -254,85 +219,6 @@ static irqreturn_t genz_bdev_irq_handler(int irq, void *data)
 	return (handled) ? IRQ_HANDLED : IRQ_NONE;
 }
 
-static uint bdev_get_tag(struct bdev_bio *bbio, struct tag_dma_info *tag_dma)
-{
-	uint tag;
-	int i;
-	ulong flags;
-
-	spin_lock_irqsave(&bdev_tag_lock, flags);
-	for (i = 0; i < MAX_TAG; i++) {
-		tag = bdev_current_tag++;
-		/* Check for wrapping */
-		if (bdev_current_tag == MAX_TAG) {
-			bdev_current_tag = 0;
-		}
-		/* Make sure this is an unused tag. */
-		if (bdev_tag_data[tag].bbio || bdev_tag_data[tag].tag_dma)
-			continue;
-		else
-			break;
-	}
-	BUG_ON(i == MAX_TAG);
-	bdev_tag_data[tag].bbio = bbio;
-	bdev_tag_data[tag].tag_dma = tag_dma;
-	spin_unlock_irqrestore(&bdev_tag_lock, flags);
-	return tag;
-}
-
-static void bdev_end_tag(uint tag)
-{
-	ulong flags;
-
-	spin_lock_irqsave(&bdev_tag_lock, flags);
-	bdev_tag_data[tag].bbio = 0;
-	bdev_tag_data[tag].tag_dma = 0;
-	spin_unlock_irqrestore(&bdev_tag_lock, flags);
-	return;
-}
-#endif
-
-static struct bdev_bio *bdev_get_bbio(struct bio *bio, int size)
-{
-	struct bdev_bio *bbio;
-
-	bbio = kzalloc(sizeof(struct bdev_bio), GFP_KERNEL);
-	if (!bbio)
-		return NULL;
-	bbio->bio = bio;
-	bbio->size = size;
-	bbio->remaining = size;
-
-	return bbio;
-}
-
-static void bdev_free_bbio(struct bdev_bio *bbio)
-{
-	kfree(bbio);
-}
-
-static struct tag_dma_info * bdev_get_tag_dma(dma_addr_t mem, int len,
-					      int dma_dir, int unmap)
-{
-	struct tag_dma_info *tag_dma;
-
-	tag_dma = kzalloc(sizeof(struct tag_dma_info), GFP_KERNEL);
-	if (!tag_dma)
-		return NULL;
-	tag_dma->mem = mem;
-	tag_dma->len = len;
-	tag_dma->dma_dir = dma_dir;
-	tag_dma->remaining = len;
-	tag_dma->unmap = unmap;
-
-	return tag_dma;
-}
-
-static void bdev_free_tag_dma(struct tag_dma_info *tag_dma)
-{
-	kfree(tag_dma);
-}
-
 static int bdev_bio_chunk_done(struct device *dev,
 			       struct tag_info *ti, int bytes_completed, int status)
 {
@@ -368,130 +254,9 @@ static int bdev_bio_chunk_done(struct device *dev,
 	else
 		return bbio->remaining;
 }
+#endif
 
 #define GENZ_BLK_WAIT_TIME (2 * HZ) /* 2 seconds */  /* Revisit */
-
-/*
- * Process a single bvec of a bio.
- */
-static int bdev_do_bvec(struct genz_bdev *zbd, struct genz_blk_ctx *bctx,
-			struct page *page,
-			unsigned int len, unsigned int off, int rw,
-			sector_t sector, struct bdev_bio *bbio)
-{
-	dma_addr_t mem;
-	uint32_t dgcid = zbd->gcid;
-	uint64_t genz_addr;
-	int tag;
-	int retry, ret = 0;
-	void * pg_addr;
-	int dma_dir;
-	struct tag_dma_info *tag_dma;
-	long err;
-
-	genz_addr = (uint64_t)zbd->base_zaddr + (sector*KERNEL_SECTOR_SIZE);
-
-	pg_addr = page_address(page);
-	dma_dir = ((rw == READ) ? DMA_FROM_DEVICE : DMA_TO_DEVICE);
-	pr_debug("bstate=%p, dma_map_page pg_addr=0x%p, off=%u, len=%u, dma_dir=%s\n",
-		 zbd->bstate, pg_addr, off, len,
-		 (dma_dir == DMA_FROM_DEVICE) ? "dma_from_dev" : "dma_to_dev");
-	mem = dma_map_page(bctx->xdmi.dma_dev, page, off, len, dma_dir);
-	if (dma_mapping_error(bctx->xdmi.dma_dev, mem)) {
-		pr_err("%s: dma_map_page failed\n", __func__);
-		ret = -1;
-		goto out;
-	}
-	tag_dma = bdev_get_tag_dma(mem, len, dma_dir, 1);
-	dma_sync_single_for_device(bctx->xdmi.dma_dev, mem, len, dma_dir);
-	tag = bdev_get_tag(bbio, tag_dma);
-	retry = 0;
- retry:
-	pr_debug("bdev_do_bvec: block_io_request host_addr 0x%px, genz_addr 0x%llx, size %d, tag %d, dgcid 0x%x, %s%s\n",
-		 (void *)mem, genz_addr, len, tag, dgcid,
-		 (rw == READ) ? "read" : "write", (retry) ? " (retry)" : "");
-#ifdef OLD_GZD
-	ret = genz_blk_driver.block_io_request(
-		(void *)zbd->card_data->hw,
-		(dma_addr_t) mem+chunk,
-		genz_addr+chunk, chunk_sz, tag, dcid,
-		((rw == READ) ? GZD_READ : GZD_WRITE));
-#endif
-	if (ret == -EBUSY) {
-		/* sleep for a bit to clear the fifo */
-		pr_debug("%s: sleeping due to block_io_request EBUSY, tag %d\n",
-			 __func__, tag);
-		err = wait_event_interruptible_timeout(zbd->bstate->block_io_queue,
-						       zbd->bstate->block_io_ready,
-						       GENZ_BLK_WAIT_TIME);
-		if (err == 0) {  /* timeout expired */
-			pr_err("%s: timeout expired, tag %d\n", __func__, tag);
-			ret = -EIO;
-		} else {
-			retry = 1;
-			goto retry;
-		}
-	}
-	if (ret) {
-		pr_err("%s: block_io_request failed with return %d tag %d\n",
-		       __func__, ret, tag);
-	}
-
- out:
-	return ret;
-}
-
-#ifdef OLD_GZD
-static blk_qc_t bdev_make_request(struct request_queue *q, struct bio *bio)
-{
-	struct block_device *bdev = bio->bi_bdev;
-	struct genz_bdev *dev = bdev->bd_disk->private_data;
-	int rw;
-	struct bio_vec bvec;
-	sector_t sector;
-	struct bvec_iter iter;
-	struct bdev_bio *bbio;
-	struct genz_blk_ctx *bctx;  /* Revisit: assign from where? */
-	int bvec_ret = 0;
-
-	sector = bio->bi_iter.bi_sector;
-	if (bio_end_sector(bio) > get_capacity(bdev->bd_disk)) {
-		pr_err("%s: end_sector > capacity\n", __func__);
-		goto io_error;
-	}
-
-/* LATER
-   if (unlikely(bio->bi_rw & REQ_DISCARD)) {
-   if (sector & ((PAGE_SIZE >> SECTOR_SHIFT) - 1) ||
-   bio->bi_iter.bi_size & ~PAGE_MASK)
-   goto io_error;
-   discard_from_brd(brd, sector, bio->bi_iter.bi_size);
-   goto outo
-   }
-*/
-
-	rw = bio_data_dir(bio);
-	bbio = bdev_get_bbio(bio, bio->bi_iter.bi_size);
-	if (bbio == NULL) {
-		pr_err("%s: bdev_get_bbio failed\n", __func__);
-		goto io_error;
-	}
-	bio_for_each_segment(bvec, bio, iter) {
-		unsigned int len = bvec.bv_len;
-
-		bvec_ret = bdev_do_bvec(dev, bctx, bvec.bv_page, len,
-					bvec.bv_offset, rw, sector, bbio);
-		if (bvec_ret)
-			goto io_error;
-		sector += len >> KERNEL_SECTOR_SHIFT;
-	}
-
-	return BLK_QC_T_NONE;
- io_error:
-	bio_io_error(bio);
-	return BLK_QC_T_NONE;
-}
-#endif
 
 static const struct block_device_operations genz_bdev_ops = {
 	.owner   = THIS_MODULE,
@@ -500,47 +265,91 @@ static const struct block_device_operations genz_bdev_ops = {
 	.ioctl   = genz_bdev_ioctl,
 };
 
-#ifdef OLD_GZD
-int gzdb_prep(struct request_queue *queue, struct request *rq)
+static void genz_blk_sgl_cmpl(struct genz_dev *zdev,
+			      struct genz_sgl_info *sgli)
 {
-	int ret;
+	struct genz_blk_cmd *cmd = to_genz_blk_cmd(sgli);
+	struct request *req = blk_mq_rq_from_pdu(cmd);
 
-	ret = blk_queue_start_tag(queue, rq);
-	pr_debug("blk_queue_start_tag returns %d and gave tag %d\n", ret, req->tag);
-
-	return ret;
+	dma_unmap_sg(sgli->xdmi->dma_dev, cmd->sg, cmd->nents,
+		     rq_dma_dir(req));
+	cmd->error = errno_to_blk_status(sgli->status);
+	dev_dbg(&zdev->dev, "req=%px, status=%d, error=%d\n",
+		req, sgli->status, cmd->error);
+	blk_mq_end_request(req, cmd->error);
 }
-#endif
 
 static blk_status_t genz_blk_queue_rq(struct blk_mq_hw_ctx *hctx,
 				      const struct blk_mq_queue_data *mqd)
 {
-	struct request *const rq = mqd->rq;
-	struct request_queue *const q = rq->q;
+	struct request *const req = mqd->rq;
+	struct request_queue *const q = req->q;
 	struct genz_bdev *const zbd = q->queuedata;
-	const u32 tag = blk_mq_unique_tag(rq);
-	struct genz_blk_cmd *const cmd = blk_mq_rq_to_pdu(rq);
-	unsigned long flags = 0;
-	const u32 lba = blk_rq_pos(rq);
-	const u32 count = blk_rq_sectors(rq);
-	const int data_dir = rq_data_dir(rq);
+	struct genz_rmr_info *rmri = &zbd->rmr_info;
+	struct device *dev = disk_to_dev(zbd->gd);
+	struct genz_blk_ctx *bctx = hctx->driver_data;
+	struct genz_dev *zdev = zbd->bstate->zdev;
+	const u32 tag = blk_mq_unique_tag(req);
+	struct genz_blk_cmd *const cmd = blk_mq_rq_to_pdu(req);
+	const u32 lba = blk_rq_pos(req);
+	const u32 count = blk_rq_sectors(req);
+	const int data_dir = rq_data_dir(req);
+	unsigned short segments = blk_rq_nr_phys_segments(req);
+	blk_status_t ret = BLK_STS_OK;
+	int nr_mapped, err;
 
-	/* Revisit: implement this */
 	might_sleep_if(hctx->flags & BLK_MQ_F_BLOCKING);
 
-	blk_mq_start_request(rq);
+	/* setup cmd */
+	cmd->segments = segments;
+	cmd->sgli.rmri = rmri;
+	cmd->sgli.xdmi = &bctx->xdmi;
+	cmd->sgli.cmd = (data_dir == WRITE) ? GENZ_XDM_WRITE : GENZ_XDM_READ;
+	cmd->sgli.tag = tag;
+	cmd->sgli.offset = (loff_t)lba * KERNEL_SECTOR_SIZE;
+	cmd->sgli.sg = cmd->sg;
+	cmd->sgli.cmpl_fn = genz_blk_sgl_cmpl;
+	dev_dbg_ratelimited(dev, "cmd=%s, tag=%u, lba=%u, count=%u, segments=%hu, offset=%llu\n",
+			    (cmd->sgli.cmd == GENZ_XDM_WRITE) ? "WR" : "RD",
+			    tag, lba, count, cmd->segments,
+			    cmd->sgli.offset);
+	/* map data */
+	/* Revisit: add non-XDM version */
+	cmd->nents = blk_rq_map_sg(q, req, cmd->sg);
+	if (!cmd->nents) {
+		ret = BLK_STS_RESOURCE;
+		goto out;
+	}
+	if (cmd->segments > 0) {
+		nr_mapped = dma_map_sg_attrs(bctx->xdmi.dma_dev,
+					     cmd->sg, cmd->nents,
+					     rq_dma_dir(req), DMA_ATTR_NO_WARN);
+		if (!nr_mapped) {
+			ret = BLK_STS_RESOURCE;
+			goto out;
+		}
+		cmd->sgli.nr_sg = nr_mapped;
+	}
+	blk_mq_start_request(req);
+	/* submit cmd */
+	err = genz_sgl_request(zdev, &cmd->sgli);
+	if (err < 0)
+		ret = errno_to_blk_status(err);
 
-	cmd->tag = tag;
-
-	return BLK_STS_NOTSUPP;
+out:
+	if (ret != BLK_STS_OK) {
+		/* Revisit: unmap data */
+	}
+	return ret;
 }
 
-static void genz_blk_complete_rq(struct request *rq)
-{
-	struct genz_blk_cmd *cmd = blk_mq_rq_to_pdu(rq);
-
-	blk_mq_end_request(cmd->rq, cmd->error);
-}
+/* Revisit: currently unused */
+//static void genz_blk_complete_rq(struct request *req)
+//{
+//	struct genz_blk_cmd *cmd = blk_mq_rq_to_pdu(req);
+//
+//	blk_mq_end_request(req, cmd->error);
+//}
 
 static enum blk_eh_timer_return genz_blk_timeout_rq(struct request *rq,
 						    bool reserved)
@@ -555,11 +364,12 @@ static enum blk_eh_timer_return genz_blk_timeout_rq(struct request *rq,
 	return BLK_EH_RESET_TIMER;
 }
 
-static int genz_blk_init_rq(struct blk_mq_tag_set *set, struct request *rq,
+static int genz_blk_init_rq(struct blk_mq_tag_set *set, struct request *req,
 			    uint hctx_idx, uint numa_node)
 {
-	struct genz_blk_cmd *const cmd = blk_mq_rq_to_pdu(rq);
+	struct genz_blk_cmd *const cmd = blk_mq_rq_to_pdu(req);
 
+	pr_debug("hctx_idx=%u, cmd=%px\n", hctx_idx, cmd);
 	//skreq->state = SKD_REQ_STATE_IDLE; /* Revisit: copied */
 	//skreq->sg = (void *)(skreq + 1);
 	sg_init_table(cmd->sg, GENZ_BLK_MAX_SG);
@@ -567,11 +377,12 @@ static int genz_blk_init_rq(struct blk_mq_tag_set *set, struct request *rq,
 	return 0;
 }
 
-static void genz_blk_exit_rq(struct blk_mq_tag_set *set,
-			     struct request *rq, uint hctx_idx)
-{
-	struct genz_blk_cmd *const cmd = blk_mq_rq_to_pdu(rq);
-}
+/* Revisit: currently empty */
+//static void genz_blk_exit_rq(struct blk_mq_tag_set *set,
+//			     struct request *rq, uint hctx_idx)
+//{
+//	struct genz_blk_cmd *const cmd = blk_mq_rq_to_pdu(rq);
+//}
 
 #define QFACTOR  16  /* Revisit: compute or make tunable */
 
@@ -580,18 +391,30 @@ static int genz_blk_init_hctx(struct blk_mq_hw_ctx *hctx, void *data,
 {
 	struct genz_blk_bridge *bbr = (struct genz_blk_bridge *)data;
 	struct genz_blk_ctx *bctx;
+	struct genz_bridge_info *br_info = &bbr->zbdev->br_info;
+	struct genz_rdm_info *rdmi = NULL;
 	int ret;
 
 	pr_debug("bbr=%px, index=%u\n", bbr, index);
 	/* fill in genz_blk_ctx */
 	bctx = &bbr->bctx[index];
 	bctx->bbr = bbr;
+	/* Revisit: add non-XDM mode */
 	bctx->xdmi.cmdq_ent = bbr->tag_set->queue_depth * QFACTOR;
 	bctx->xdmi.cmplq_ent = bctx->xdmi.cmdq_ent;
 	bctx->xdmi.traffic_class = GENZ_TC_0;
 	bctx->xdmi.priority = 0;
-	/* allocate XDM queue */
-	ret = genz_alloc_queues(bbr->zbdev, &bctx->xdmi, NULL);
+	bctx->xdmi.driver_data = hctx;
+	if (!br_info->xdm_cmpl_intr && br_info->loopback &&
+	    br_info->rdm && br_info->rdm_cmpl_intr) {
+		/* use loopback to RDM as source of cmpl interrupts */
+		rdmi = &bctx->rdmi;
+		rdmi->cmplq_ent = bctx->xdmi.cmplq_ent;
+		rdmi->driver_data = hctx;
+		bctx->have_rdmi = true;
+	}
+	/* allocate XDM (and maybe RDM) queue */
+	ret = genz_alloc_queues(bbr->zbdev, &bctx->xdmi, rdmi);
 	if (ret < 0)
 		goto free;
 	hctx->driver_data = bctx;
@@ -607,18 +430,19 @@ static void genz_blk_exit_hctx(struct blk_mq_hw_ctx *hctx, uint index)
 {
 	struct genz_blk_ctx *bctx = (struct genz_blk_ctx *)hctx->driver_data;
 	struct genz_blk_bridge *bbr = bctx->bbr;
+	struct genz_rdm_info *rdmi = (bctx->have_rdmi) ? &bctx->rdmi : NULL;
 
-	pr_debug("bbr=%px, index=%u\n", bbr, index);
-	/* free XDM queue */
-	(void)genz_free_queues(&bctx->xdmi, NULL);
+	pr_debug("bbr=%px, index=%u, rdmi=%px\n", bbr, index, rdmi);
+	/* free XDM (and maybe RDM) queue */
+	(void)genz_free_queues(&bctx->xdmi, rdmi);
 }
 
 static const struct blk_mq_ops genz_blk_mq_ops = {
 	.queue_rq       = genz_blk_queue_rq,
-	.complete	= genz_blk_complete_rq,
+//	.complete	= genz_blk_complete_rq, /* Revisit: needed? */
 	.timeout	= genz_blk_timeout_rq,
 	.init_request	= genz_blk_init_rq,
-	.exit_request	= genz_blk_exit_rq,  /* Revisit: currently empty */
+//	.exit_request	= genz_blk_exit_rq,  /* Revisit: currently empty */
 	.init_hctx      = genz_blk_init_hctx,
 	.exit_hctx      = genz_blk_exit_hctx,
 };
@@ -665,6 +489,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	set_capacity(gd, zbd->size/KERNEL_SECTOR_SIZE);
 	pr_info("%s: set capacity to %zu 512 byte sectors\n",
 		gd->disk_name, zbd->size/KERNEL_SECTOR_SIZE);
+	/* Revisit: blk device appears under devices/virtual/block */
 	add_disk(gd);
 
  out:
@@ -675,7 +500,6 @@ static int genz_blk_construct_bdev(struct genz_bdev *zbd,
 				   struct genz_blk_bridge *bbr)
 {
 	int err = 0;
-	int depth;
 
 	zbd->queue = blk_mq_init_queue(bbr->tag_set);
 	if (IS_ERR(zbd->queue)) {
@@ -684,13 +508,11 @@ static int genz_blk_construct_bdev(struct genz_bdev *zbd,
 	}
 	zbd->queue->queuedata = zbd;
 	blk_queue_logical_block_size(zbd->queue, GENZ_BLOCK_SIZE);
-
-/*
-  blk_queue_max_phys_segments(zbd->queue, 1);
-*/
-	blk_queue_max_segments(zbd->queue, 1);
-	blk_queue_max_hw_sectors(zbd->queue, PAGE_SIZE/KERNEL_SECTOR_SIZE);
-	blk_queue_max_segment_size(zbd->queue, PAGE_SIZE);
+	blk_queue_max_segments(zbd->queue, GENZ_BLK_MAX_SG);
+	blk_queue_max_hw_sectors(zbd->queue,
+			 bbr->zbdev->br_info.xdm_max_xfer/KERNEL_SECTOR_SIZE);
+	blk_queue_max_segment_size(zbd->queue,
+				   bbr->zbdev->br_info.xdm_max_xfer);
 	/* Gen-Z does not need bouncing. */
 	blk_queue_bounce_limit(zbd->queue, BLK_BOUNCE_ANY);
 	blk_queue_write_cache(zbd->queue, false, false);
@@ -732,12 +554,15 @@ LIST_HEAD(genz_blk_bbr_list);
 static struct genz_blk_bridge *find_bbr(struct genz_bridge_dev *zbdev)
 {
 	struct genz_blk_bridge *bbr = NULL;
+	struct uuid_tracker *uu;
 	int err;
 
 	mutex_lock(&genz_blk_lock);
 	list_for_each_entry(bbr, &genz_blk_bbr_list, bbr_node) {
-		if (bbr->zbdev == zbdev)
-			return bbr;
+		if (bbr->zbdev == zbdev) {
+			pr_debug("found bbr=%px\n", bbr);
+			goto unlock;
+		}
 	}
 	/* not found - allocate a new one */
 	bbr = kzalloc(sizeof(*bbr), GFP_KERNEL);
@@ -748,9 +573,18 @@ static struct genz_blk_bridge *find_bbr(struct genz_bridge_dev *zbdev)
 	bbr->zbdev = zbdev;
 	err = genz_blk_init_tag_set(bbr);
 	if (err < 0) {
-		bbr = ERR_PTR(err);
 		goto free;
 	}
+	genz_init_mem_data(&bbr->mem_data, zbdev);
+	wildcat_generate_uuid(zbdev, &bbr->uuid);  /* Revisit: wildcat-specific */
+	uu = genz_uuid_tracker_alloc_and_insert(&bbr->uuid, UUID_TYPE_LOCAL,
+						0, &bbr->mem_data, GFP_KERNEL,
+						&err);
+	if (!uu) {
+		goto free;
+	}
+
+	bbr->mem_data.local_uuid = uu;
 	/* Revisit: we need a kref to keep track of when to free bbr */
 	list_add_tail(&bbr->bbr_node, &genz_blk_bbr_list);
 	mutex_unlock(&genz_blk_lock);
@@ -760,6 +594,8 @@ out:
 
 free:
 	kzfree(bbr);
+	if (err < 0)
+		bbr = ERR_PTR(err);
 unlock:
 	mutex_unlock(&genz_blk_lock);
 	goto out;
@@ -775,10 +611,13 @@ static int genz_bdev_probe(struct genz_blk_state *bstate,
 	struct genz_mem_data *mdata;
 	struct genz_dev *zdev = bstate->zdev;
 	struct genz_bridge_dev *zbdev = zdev->zbdev;
+	struct genz_bridge_info *br_info = &zbdev->br_info;
 	uint32_t gcid = genz_dev_gcid(zdev, 0);
 	uint64_t access;
 	uint32_t rkey;
 
+	dev_dbg(&zdev->dev, "allocating genz_bdev: bstate=%px, zres=%px\n",
+		bstate, zres);
 	zbd = kzalloc(sizeof(*zbd), GFP_KERNEL);
 	if (!zbd) {
 		err = -ENOMEM;
@@ -808,20 +647,17 @@ static int genz_bdev_probe(struct genz_blk_state *bstate,
 	zbd->base_zaddr = bdev_start;
 	zbd->size = bdev_size;
 	zbd->gcid = gcid;
-	mdata = &bstate->mem_data;
+	bbr = bstate->bbr;
+	mdata = &bbr->mem_data;
 	/* Revisit: use zres to choose RO/RW access & rkey */
-	access = GENZ_MR_WRITE_REMOTE|GENZ_MR_REQ_CPU|GENZ_MR_INDIVIDUAL;
+	access = GENZ_MR_WRITE_REMOTE|GENZ_MR_INDIVIDUAL;
+	access |= (br_info->load_store) ? GENZ_MR_REQ_CPU : 0;
 	rkey = zres->rw_rkey;
 	err = genz_rmr_import(mdata, &zdev->instance_uuid, gcid,
 			      zbd->base_zaddr, zbd->size, access,
 			      rkey, &zbd->rmr_info);
 	if (err < 0)
 		goto fail;  /* Revisit: other cleanup */
-	bbr = find_bbr(zbdev);
-	if (IS_ERR(bbr)) {
-		err = PTR_ERR(bbr);
-		goto fail;  /* Revisit: other cleanup */
-	}
 	err = genz_blk_construct_bdev(zbd, bbr);
 	if (err < 0)
 		goto fail;  /* Revisit: other cleanup */
@@ -832,18 +668,18 @@ static int genz_bdev_probe(struct genz_blk_state *bstate,
 
 	return 0;
 
-unlock:
-	mutex_unlock(&genz_blk_lock);
 fail:
 	return err;
 }
 
 static int genz_bdev_remove(struct genz_bdev *zbd)
 {
-	struct genz_blk_state *bstate = zbd->bstate;
-	struct genz_mem_data *mdata = &bstate->mem_data;
+	struct genz_blk_state  *bstate = zbd->bstate;
+	struct genz_blk_bridge *bbr    = bstate->bbr;
+	struct genz_mem_data   *mdata  = &bbr->mem_data;
 	int err;
 
+	dev_dbg(&bstate->zdev->dev, "entered\n");
 	mutex_lock(&bstate->lock);
 	list_del(&zbd->bdev_node);
 	mutex_unlock(&bstate->lock);
@@ -856,8 +692,10 @@ static int genz_bdev_remove(struct genz_bdev *zbd)
 static int genz_blk_probe(struct genz_dev *zdev,
 			  const struct genz_device_id *zdev_id)
 {
-	struct genz_blk_state *bstate;
-	struct genz_resource  *zres;
+	struct genz_blk_state  *bstate;
+	struct genz_resource   *zres;
+	struct genz_blk_bridge *bbr;
+	struct genz_bridge_dev *zbdev = zdev->zbdev;
 	int ret = 0;
 
 	/* allocate & initialize state structure */
@@ -872,13 +710,19 @@ static int genz_blk_probe(struct genz_dev *zdev,
 	mutex_init(&bstate->lock);
 	bstate->zdev = zdev;
 	init_waitqueue_head(&bstate->block_io_queue);
-	genz_init_mem_data(&bstate->mem_data, zdev->zbdev);
 	genz_set_drvdata(zdev, bstate);
 
-	/* Revisit: need non-wildcat-specific UUID_IMPORT */
+	bbr = find_bbr(zbdev);
+	if (IS_ERR(bbr)) {
+		ret = PTR_ERR(bbr);
+		goto out;  /* Revisit: other cleanup */
+	}
+	bstate->bbr = bbr;
 	dev_dbg(&zdev->dev, "instance_uuid=%pUb\n", &zdev->instance_uuid);
-	ret = wildcat_kernel_UUID_IMPORT(&bstate->mem_data,
-					 &zdev->instance_uuid, 0, GFP_KERNEL);
+	/* Revisit: need non-wildcat-specific UUID_IMPORT */
+	/* Revisit: should not need UUID_IS_FAM */
+	ret = wildcat_kernel_UUID_IMPORT(&bbr->mem_data, &zdev->instance_uuid,
+					 UUID_IS_FAM, GFP_KERNEL);
 	if (ret < 0)
 		goto out; /* Revisit: undo bstate */
 	for (zres = genz_get_first_resource(zdev); zres != NULL;
@@ -898,7 +742,8 @@ out:
 
 static int genz_blk_remove(struct genz_dev *zdev)
 {
-	struct genz_blk_state *bstate = genz_get_drvdata(zdev);
+	struct genz_blk_state  *bstate = genz_get_drvdata(zdev);
+	struct genz_blk_bridge *bbr    = bstate->bbr;
 	int ret = 0;
 	uint32_t uu_flags = 0;
 	bool local;
@@ -910,7 +755,7 @@ static int genz_blk_remove(struct genz_dev *zdev)
 	}
 
 	/* Revisit: need non-wildcat-specific UUID_FREE */
-	ret = wildcat_common_UUID_FREE(&bstate->mem_data,
+	ret = wildcat_common_UUID_FREE(&bbr->mem_data,
 				       &zdev->instance_uuid, &uu_flags, &local);
 	kfree(bstate);
 	return ret;

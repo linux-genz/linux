@@ -910,10 +910,14 @@ static struct genz_bridge_info wildcat_br_info = {
 	.rsp_zmmu            = 1,
 	.xdm                 = 1,
 	.rdm                 = 1,
+	.xdm_cmpl_intr       = 0,
+	.rdm_cmpl_intr       = 1,
+	.load_store          = 0, /* Revisit */
 	.nr_xdm_queues       = XDM_QUEUES_PER_SLICE,
 	.nr_rdm_queues       = RDM_QUEUES_PER_SLICE,
 	.xdm_qlen            = MAX_SW_XDM_QLEN,
 	.rdm_qlen            = MAX_SW_RDM_QLEN,
+	.xdm_max_xfer        = WILDCAT_XDM_MAX_XFER,
 	.nr_req_page_grids   = WILDCAT_PAGE_GRID_ENTRIES,
 	.nr_rsp_page_grids   = WILDCAT_PAGE_GRID_ENTRIES,
 	.nr_req_ptes         = WILDCAT_REQ_ZMMU_ENTRIES,
@@ -930,6 +934,7 @@ static int wildcat_bridge_info(struct genz_dev *zdev,
 	if (!zdev_is_local_bridge(zdev))
 		return -EINVAL;
 
+	wildcat_br_info.loopback = wildcat_loopback != 0;
 	*info = wildcat_br_info;
 	return 0;
 }
@@ -946,6 +951,7 @@ static struct genz_bridge_driver wildcat_genz_bridge_driver = {
 	.dma_unmap_sg_attrs = wildcat_dma_unmap_sg_attrs,
 	.alloc_queues = wildcat_alloc_queues,
 	.free_queues = wildcat_free_queues,
+	.sgl_request = wildcat_sgl_request,
 };
 
 #define WILDCAT_ZMMU_XDM_RDM_HSR_BAR 0
