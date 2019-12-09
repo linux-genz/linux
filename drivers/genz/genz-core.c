@@ -540,7 +540,8 @@ struct genz_resource *genz_get_first_resource(struct genz_dev *zdev)
 
 	if (zdev == NULL)
 		return NULL;
-	zres = list_first_entry(&zdev->zres_list, struct genz_zres, zres_node);
+	zres = list_first_entry_or_null(&zdev->zres_list,
+					struct genz_zres, zres_node);
 	if (zres == NULL)
 		return NULL;
 	return &zres->zres;
@@ -550,13 +551,16 @@ EXPORT_SYMBOL(genz_get_first_resource);
 struct genz_resource *genz_get_next_resource(struct genz_dev *zdev,
 		struct genz_resource *res)
 {
-	struct genz_zres *pos, *zres;
+	struct genz_zres *pos, *zres, *last;
 
 	pos = to_genz_res(res);
 	if (pos == NULL) {
 		pr_debug("%s to_genz_res failed\n", __func__);
 		return NULL;
 	}
+	last = list_last_entry(&zdev->zres_list, struct genz_zres, zres_node);
+	if (pos == last)
+		return NULL;
 	zres = list_next_entry(pos, zres_node);
 	if (zres == NULL)
 		return NULL;

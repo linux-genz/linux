@@ -44,6 +44,7 @@ int genz_init_component(struct genz_component *zcomp, struct genz_subnet *s, uin
 void genz_free_component(struct kref *kref);
 struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric);
 int genz_init_dev(struct genz_dev *zdev, struct genz_fabric *fabric);
+void genz_device_initialize(struct genz_dev *zdev);
 int genz_device_add(struct genz_dev *zdev);
 struct genz_subnet *genz_find_subnet(uint32_t sid, struct genz_fabric *f);
 int genz_device_probe(struct device *dev);

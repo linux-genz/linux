@@ -656,19 +656,23 @@ struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric)
         return zdev;
 }
 
-int genz_device_add(struct genz_dev *zdev)
+void genz_device_initialize(struct genz_dev *zdev)
 {
-	int ret;
-	
         zdev->dev.bus = &genz_bus_type;
 	zdev->dev.parent = &zdev->zcomp->dev;
 	zdev->dev.release = genz_release_dev;
 	zdev->zbdev = genz_zdev_bridge(zdev);
 	if (zdev->zbdev == NULL) {
-		pr_debug("genz_device_add failed to find a bridge\n");
+		pr_debug("genz_device_initialize failed to find a bridge\n");
 	}
 	device_initialize(&zdev->dev);
+}
 
+int genz_device_add(struct genz_dev *zdev)
+{
+	int ret = 0;
+
+	genz_device_initialize(zdev);
 	ret = device_add(&zdev->dev);
 	if (ret)
 		pr_debug("device_add failed with %d\n", ret);

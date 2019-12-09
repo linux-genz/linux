@@ -190,37 +190,34 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 					GENZ_CONTROL_STR_LEN,
 					"control%d",
 					&zdev->zres_list);
-				if (ret)
+				if (ret) {
+					pr_debug("genz_setup_zres control failed with %d\n", ret);
 					goto error;
+				}
 
-			}
-			else if (mem_type == GENZ_DATA) {
+			} else if (mem_type == GENZ_DATA) {
 				ret = genz_setup_zres(zres, zdev, GENZ_DATA,
 					(zres->zres.res.flags & ~IORESOURCE_GENZ_CONTROL),
 					GENZ_DATA_STR_LEN,
 					"data%d",
 					&zdev->zres_list);
-				if (ret)
+				if (ret) {
+					pr_debug("genz_setup_zres data failed with %d\n", ret);
 					goto error;
-			}
-			ret = genz_create_attr(zdev, zres);
-			if (ret) {
-				pr_debug("genz_create_attr failed with %d\n", ret);
+				}
+			} else {
+				pr_debug("invalid memory region mem_type %d\n", mem_type);
 				goto error;
 			}
-			/* Revisit: how to get the parent resource?
-			ret = insert_resource(&zres->res, &zdev->parent_res);
-			if (ret < 0) {
-				pr_debug("insert_resource failed with %d\n", ret);
-			}
-			*/
 			/* Add this resource to the genz_dev's list */
 			list_add_tail(&zres->zres_node, &zdev->zres_list);
 		}	
 		pr_debug("\t\t\tMR_START: 0x%llx\n\t\t\t\tMR_LENGTH: %lld\n\t\t\t\tMR_TYPE: %s\n\t\t\t\tRO_RKEY: 0x%x\n\t\t\t\tRW_KREY 0x%x\n", mem_start, mem_len, (mem_type == GENZ_DATA ? "DATA":"CONTROL"), ro_rkey, rw_rkey);
 	}
 	pr_debug("\t\tend of Memory Region List\n");
+	return ret;
 error:
+	pr_debug("\t\tparse_mr_list failed with %d\n", ret);
 	return ret;
 }
 
@@ -284,7 +281,7 @@ static int parse_resource_list(const struct nlattr *resource_list,
 			zdev->class = nla_get_u16(u_attrs[GENZ_A_U_CLASS]);
 			pr_debug("\t\tClass = %d\n",
 				(uint32_t) zdev->class);
-			if (zdev->class < genz_hardware_classes_nelems) {
+			if (zdev->class > 0 || zdev->class <= genz_hardware_classes_nelems) {
 				condensed_class =
 				      genz_hardware_classes[zdev->class].value;
 				condensed_name =
@@ -302,19 +299,28 @@ static int parse_resource_list(const struct nlattr *resource_list,
 			dev_set_name(&zdev->dev, "%s%d", condensed_name,
 				zdev->zcomp->resource_count[condensed_class]++);
 		} 
-		ret = genz_device_add(zdev);
-		if (ret) {
-			pr_debug("\tgenz_device_add failed with %d\n", ret);
-		}
-		ret = genz_create_uuid_file(zdev);
-		if (ret) {
-			pr_debug("\tgenz_create_uuid_file failed with %d\n", ret);
-		}
+		genz_device_initialize(zdev);
 		if (u_attrs[GENZ_A_U_MRL]) {
 			ret = parse_mr_list(zdev, u_attrs[GENZ_A_U_MRL]);
 			if (ret) {
 				pr_debug("\tparse of MRL failed\n");
 			}
+		}
+		/*
+		 * The device add triggers the driver bind/probe. All of the
+		 * resources must be in place for the driver probe. The
+		 * sysfs files are created after the new device is added.
+		 */
+		ret = device_add(&zdev->dev);
+		if (ret)
+			pr_debug("device_add failed with %d\n", ret);
+		ret = genz_create_uuid_file(zdev);
+		if (ret) {
+			pr_debug("\tgenz_create_uuid_file failed with %d\n", ret);
+		}
+		ret = genz_create_attrs(zdev);
+		if (ret) {
+			pr_debug("\tgenz_create_attrs failed with %d\n", ret);
 		}
 	}
 	pr_debug("\tend of RESOURCE_LIST\n");
@@ -412,7 +418,7 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		ret = -EINVAL;
 		goto err;
 	}
-	if (zcomp->cclass >= genz_hardware_classes_nelems) {
+	if (zcomp->cclass <= 0 || zcomp->cclass > genz_hardware_classes_nelems) {
 		pr_debug("CCLASS invalid\n");
 		ret = -EINVAL;
 		goto err;
