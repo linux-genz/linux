@@ -38,14 +38,19 @@
 struct genz_fabric *genz_find_fabric(uint32_t fabric_num);
 struct genz_fabric * genz_dev_to_fabric(struct device *dev);
 void genz_free_fabric(struct device *dev);
-struct genz_component *genz_find_component(struct genz_subnet *s, uint32_t cid);
+struct genz_component *genz_lookup_component(struct genz_subnet *s,
+		uint32_t cid);
+struct genz_component *genz_add_component(struct genz_subnet *s, uint32_t cid);
 struct genz_component *genz_alloc_component(void);
-int genz_init_component(struct genz_component *zcomp, struct genz_subnet *s, uint32_t cid);
+int genz_init_component(struct genz_component *zcomp, struct genz_subnet *s,
+		uint32_t cid);
 void genz_free_component(struct kref *kref);
 struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric);
 int genz_init_dev(struct genz_dev *zdev, struct genz_fabric *fabric);
+void genz_device_initialize(struct genz_dev *zdev);
 int genz_device_add(struct genz_dev *zdev);
-struct genz_subnet *genz_find_subnet(uint32_t sid, struct genz_fabric *f);
+struct genz_subnet *genz_lookup_subnet(uint32_t sid, struct genz_fabric *f);
+struct genz_subnet *genz_add_subnet(uint32_t sid, struct genz_fabric *f);
 int genz_device_probe(struct device *dev);
 const struct genz_device_id *genz_match_device(struct genz_driver *zdrv,
 					       struct genz_dev *zdev);

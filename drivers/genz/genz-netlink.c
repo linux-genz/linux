@@ -190,37 +190,34 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 					GENZ_CONTROL_STR_LEN,
 					"control%d",
 					&zdev->zres_list);
-				if (ret)
+				if (ret) {
+					pr_debug("genz_setup_zres control failed with %d\n", ret);
 					goto error;
+				}
 
-			}
-			else if (mem_type == GENZ_DATA) {
+			} else if (mem_type == GENZ_DATA) {
 				ret = genz_setup_zres(zres, zdev, GENZ_DATA,
 					(zres->zres.res.flags & ~IORESOURCE_GENZ_CONTROL),
 					GENZ_DATA_STR_LEN,
 					"data%d",
 					&zdev->zres_list);
-				if (ret)
+				if (ret) {
+					pr_debug("genz_setup_zres data failed with %d\n", ret);
 					goto error;
-			}
-			ret = genz_create_attr(zdev, zres);
-			if (ret) {
-				pr_debug("genz_create_attr failed with %d\n", ret);
+				}
+			} else {
+				pr_debug("invalid memory region mem_type %d\n", mem_type);
 				goto error;
 			}
-			/* Revisit: how to get the parent resource?
-			ret = insert_resource(&zres->res, &zdev->parent_res);
-			if (ret < 0) {
-				pr_debug("insert_resource failed with %d\n", ret);
-			}
-			*/
 			/* Add this resource to the genz_dev's list */
 			list_add_tail(&zres->zres_node, &zdev->zres_list);
 		}
 		pr_debug("\t\t\tMR_START: 0x%llx\n\t\t\t\tMR_LENGTH: %lld\n\t\t\t\tMR_TYPE: %s\n\t\t\t\tRO_RKEY: 0x%x\n\t\t\t\tRW_KREY 0x%x\n", mem_start, mem_len, (mem_type == GENZ_DATA ? "DATA":"CONTROL"), ro_rkey, rw_rkey);
 	}
 	pr_debug("\t\tend of Memory Region List\n");
+	return ret;
 error:
+	pr_debug("\t\tparse_mr_list failed with %d\n", ret);
 	return ret;
 }
 
@@ -284,7 +281,7 @@ static int parse_resource_list(const struct nlattr *resource_list,
 			zdev->class = nla_get_u16(u_attrs[GENZ_A_U_CLASS]);
 			pr_debug("\t\tClass = %d\n",
 				(uint32_t) zdev->class);
-			if (zdev->class < genz_hardware_classes_nelems) {
+			if (zdev->class > 0 && zdev->class <= genz_hardware_classes_nelems) {
 				condensed_class =
 				      genz_hardware_classes[zdev->class].value;
 				condensed_name =
@@ -302,19 +299,28 @@ static int parse_resource_list(const struct nlattr *resource_list,
 			dev_set_name(&zdev->dev, "%s%d", condensed_name,
 				zdev->zcomp->resource_count[condensed_class]++);
 		}
+		genz_device_initialize(zdev);
 		if (u_attrs[GENZ_A_U_MRL]) {
 			ret = parse_mr_list(zdev, u_attrs[GENZ_A_U_MRL]);
 			if (ret) {
 				pr_debug("\tparse of MRL failed\n");
 			}
 		}
-		ret = genz_device_add(zdev);
-		if (ret) {
-			pr_debug("\tgenz_device_add failed with %d\n", ret);
-		}
+		/*
+		 * The device add triggers the driver bind/probe. All of the
+		 * resources must be in place for the driver probe. The
+		 * sysfs files are created after the new device is added.
+		 */
+		ret = device_add(&zdev->dev);
+		if (ret)
+			pr_debug("device_add failed with %d\n", ret);
 		ret = genz_create_uuid_file(zdev);
 		if (ret) {
 			pr_debug("\tgenz_create_uuid_file failed with %d\n", ret);
+		}
+		ret = genz_create_attrs(zdev);
+		if (ret) {
+			pr_debug("\tgenz_create_attrs failed with %d\n", ret);
 		}
 	}
 	pr_debug("\tend of RESOURCE_LIST\n");
@@ -385,14 +391,14 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		pr_debug("GCID is invalid.\n");
 		return -EINVAL;
 	}
-	s = genz_find_subnet(genz_get_sid(gcid), f);
+	s = genz_add_subnet(genz_get_sid(gcid), f);
 	if (s == NULL) {
-		pr_debug("genz_find_subnet failed\n");
+		pr_debug("genz_add_subnet failed\n");
 		return -ENOMEM;
 	}
-	zcomp = genz_find_component(s, genz_get_cid(gcid));
+	zcomp = genz_add_component(s, genz_get_cid(gcid));
 	if (zcomp == NULL) {
-		pr_debug("genz_find_component failed\n");
+		pr_debug("genz_add_component failed\n");
 		return -ENOMEM;
 	}
 /*
@@ -412,7 +418,7 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		ret = -EINVAL;
 		goto err;
 	}
-	if (zcomp->cclass >= genz_hardware_classes_nelems) {
+	if (zcomp->cclass <= 0 || zcomp->cclass > genz_hardware_classes_nelems) {
 		pr_debug("CCLASS invalid\n");
 		ret = -EINVAL;
 		goto err;
@@ -463,11 +469,65 @@ err:
 
 static int genz_remove_os_component(struct sk_buff *skb, struct genl_info *info)
 {
-	/*
-	 * message handling code goes here; return 0 on success,
-	 * negative value on failure.
-	 */
-	return 0;
+	int ret = 0;
+	uint32_t gcid;
+	struct genz_fabric *f;
+	struct genz_subnet *s;
+	struct genz_component *zcomp = NULL;
+	struct uuid_tracker *uu;
+	uuid_t mgr_uuid;
+
+	pr_debug("genz_remove_os_component\n");
+	if (info->attrs[GENZ_A_MGR_UUID]) {
+		uint8_t * uuid_str;
+
+		uuid_str = nla_data(info->attrs[GENZ_A_MGR_UUID]);
+		bytes_to_uuid(&mgr_uuid, uuid_str);
+		pr_debug("\tMGR_UUID: %pUb\n", &mgr_uuid);
+	} else {
+		pr_debug("missing required MGR_UUID\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	uu = genz_uuid_search(&mgr_uuid);
+	if (!uu) {
+		pr_debug("did not find matching MGR_UUID\n");
+		goto err;
+	}
+	f = uu->fabric->fabric;
+	if (info->attrs[GENZ_A_GCID]) {
+		gcid = nla_get_u32(info->attrs[GENZ_A_GCID]);
+		pr_debug("\tGCID: %d ", gcid);
+	} else {
+		pr_debug("missing required GCID\n");
+		ret = -EINVAL;
+		goto mgr_uuid;
+	}
+	/* validate the GCID */
+	if (gcid > MAX_GCID) {
+		pr_debug("GCID is invalid.\n");
+		ret = -EINVAL;
+		goto mgr_uuid;
+	}
+	s = genz_lookup_subnet(genz_get_sid(gcid), f);
+	if (s == NULL) {
+		pr_debug("genz_lookup_subnet failed\n");
+		ret = -EINVAL;
+		goto mgr_uuid;
+	}
+	zcomp = genz_lookup_component(s, genz_get_cid(gcid));
+	if (zcomp == NULL) {
+		pr_debug("genz_lookup_component failed\n");
+		ret = -EINVAL;
+		goto mgr_uuid;
+	}
+	/* remove the component */
+	device_unregister(&zcomp->dev);
+mgr_uuid:
+	/* genz_uuid_search takes a refcount. decrement it here */
+	genz_uuid_remove(uu);
+err:
+	return ret;
 }
 
 static int genz_symlink_os_component(struct sk_buff *skb, struct genl_info *info)
