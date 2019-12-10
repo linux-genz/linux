@@ -76,11 +76,45 @@ int genz_create_attr(struct genz_dev *zdev, struct genz_zres *zres)
 	res_attr->read = genz_read_control;
 	res_attr->write = genz_write_control;
 	res_attr->mmap = NULL;
-	pr_debug("%s: zdev->dev.kobj is %px\n", __func__, &zdev->dev.kobj);
+	pr_debug("%s: zdev->dev.kobj is %px res_attr %s\n", __func__, &zdev->dev.kobj, zres->zres.res.name);
 	ret = sysfs_create_bin_file(&zdev->dev.kobj, res_attr);
 	if (ret) {
 		printk(KERN_ERR "sysfs_create_bin_file failed with %d\n", ret);
 	}
+	return ret;
+}
+
+int genz_create_attrs(struct genz_dev *zdev)
+{
+	int ret = 0;
+	struct genz_zres *zres, *last;
+
+	if (zdev == NULL) {
+		pr_debug("error zdev is NULL\n");
+		return -EINVAL;
+	}
+	zres = list_first_entry_or_null(&zdev->zres_list,
+		struct genz_zres, zres_node);
+	if (zres == NULL) {
+		pr_debug("empty zres_list\n");
+		return ret;
+	}
+
+	last = list_last_entry(&zdev->zres_list, struct genz_zres, zres_node);
+	if (last == NULL) {
+		pr_debug("last entry is NULL\n");
+		return ret;
+	}
+
+	while (zres != NULL) {
+		ret = genz_create_attr(zdev, zres);
+		if (ret)
+			return ret;
+		if (zres == last)
+			break;
+		zres = list_next_entry(zres, zres_node);
+	}
+
 	return ret;
 }
 

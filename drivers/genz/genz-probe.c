@@ -360,13 +360,10 @@ static int genz_init_subnet(struct genz_subnet *s,
 	return ret;
 }
 
-struct genz_subnet *genz_find_subnet(uint32_t sid, struct genz_fabric *f)
+struct genz_subnet *genz_lookup_subnet(uint32_t sid, struct genz_fabric *f)
 {
 	struct genz_subnet *s, *found = NULL;
-	int ret = 0;
 	unsigned long flags;
-
-	pr_debug( "in %s\n", __func__);
 
 	spin_lock_irqsave(&f->subnets_lock, flags);
 	list_for_each_entry(s, &f->subnets, node) {
@@ -379,6 +376,20 @@ struct genz_subnet *genz_find_subnet(uint32_t sid, struct genz_fabric *f)
 		}
 	}
 	spin_unlock_irqrestore(&f->subnets_lock, flags);
+
+	return found;
+}
+
+struct genz_subnet *genz_add_subnet(uint32_t sid, struct genz_fabric *f)
+{
+	struct genz_subnet *found = NULL;
+	int ret = 0;
+	unsigned long flags;
+
+	pr_debug( "in %s\n", __func__);
+
+	found = genz_lookup_subnet(sid, f);
+
 	if (!found) {
 		pr_debug( "sid %d is not in the subnets list yet\n", sid);
 		/* Allocate a new genz_subnet and add to list */
@@ -534,11 +545,10 @@ void print_components(struct genz_fabric *f)
 
 }
 
-struct genz_component *genz_find_component(struct genz_subnet *s,
+struct genz_component *genz_lookup_component(struct genz_subnet *s,
 		uint32_t cid)
 {
 	struct genz_component *c, *found = NULL;
-	int ret = 0;
 	unsigned long flags;
 
 	spin_lock_irqsave(&s->fabric->components_lock, flags);
@@ -549,6 +559,18 @@ struct genz_component *genz_find_component(struct genz_subnet *s,
 		}
 	}
 	spin_unlock_irqrestore(&s->fabric->components_lock, flags);
+	return found;
+}
+
+struct genz_component *genz_add_component(struct genz_subnet *s,
+		uint32_t cid)
+{
+	struct genz_component *found = NULL;
+	int ret = 0;
+	unsigned long flags;
+
+	found = genz_lookup_component(s, cid);
+
 	if (!found) {
 		pr_debug( "cid %d is not in the components list yet\n", cid);
 		/* Allocate a new genz_component and add to list */
@@ -654,19 +676,23 @@ struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric)
 	return zdev;
 }
 
-int genz_device_add(struct genz_dev *zdev)
+void genz_device_initialize(struct genz_dev *zdev)
 {
-	int ret;
-
 	zdev->dev.bus = &genz_bus_type;
 	zdev->dev.parent = &zdev->zcomp->dev;
 	zdev->dev.release = genz_release_dev;
 	zdev->zbdev = genz_zdev_bridge(zdev);
 	if (zdev->zbdev == NULL) {
-		pr_debug("genz_device_add failed to find a bridge\n");
+		pr_debug("genz_device_initialize failed to find a bridge\n");
 	}
 	device_initialize(&zdev->dev);
+}
 
+int genz_device_add(struct genz_dev *zdev)
+{
+	int ret = 0;
+
+	genz_device_initialize(zdev);
 	ret = device_add(&zdev->dev);
 	if (ret)
 		pr_debug("device_add failed with %d\n", ret);

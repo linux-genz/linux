@@ -270,9 +270,9 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 		pr_debug("genz_control_read_sid returned %d\n", ret);
 		goto error;
 	}
-	s = genz_find_subnet(sid, f);
+	s = genz_add_subnet(sid, f);
 	if (s == NULL) {
-		pr_debug("%s: genz_find_subnet failed\n", __func__);
+		pr_debug("%s: genz_add_subnet failed\n", __func__);
 		ret = -ENOMEM;
 		goto error;
 	}
@@ -281,9 +281,9 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 		pr_debug("genz_control_read_cid returned %d\n", ret);
 		goto error;
 	}
-	zbdev->zdev.zcomp = genz_find_component(s, cid);
+	zbdev->zdev.zcomp = genz_add_component(s, cid);
 	if (zbdev->zdev.zcomp == NULL) {
-		pr_debug("%s: genz_find_component failed\n", __func__);
+		pr_debug("%s: genz_add_component failed\n", __func__);
 		ret = -ENOMEM;
 		goto error;
 	}

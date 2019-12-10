@@ -1290,9 +1290,9 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 		return -EINVAL;
 	}
 	f = zbdev->fabric;
-	s = genz_find_subnet(sid, f);
+	s = genz_add_subnet(sid, f);
 	if (s == NULL) {
-		pr_debug("genz_find_subnet failed\n");
+		pr_debug("genz_add_subnet failed\n");
 		return -ENOMEM;
 	}
 	ret =  genz_control_read_cid0(zdev, &cid);
@@ -1300,9 +1300,9 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 		pr_debug("couldn't read cid for bridge\n");
 		return -EINVAL;
 	}
-	zcomp = genz_find_component(s, cid);
+	zcomp = genz_add_component(s, cid);
 	if (zcomp == NULL) {
-		pr_debug("genz_find_component failed\n");
+		pr_debug("genz_add_component failed\n");
 		return -ENOMEM;
 	}
 
