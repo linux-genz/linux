@@ -36,5 +36,6 @@
  */
 
 extern const struct device_type genz_dev_type;
+int genz_create_attrs(struct genz_dev *zdev);
 int genz_create_attr(struct genz_dev *zdev, struct genz_zres *zres);
 void genz_remove_attr(struct genz_dev *zdev, struct genz_zres *zres);
