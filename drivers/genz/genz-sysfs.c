@@ -87,32 +87,16 @@ int genz_create_attr(struct genz_dev *zdev, struct genz_zres *zres)
 int genz_create_attrs(struct genz_dev *zdev)
 {
 	int ret = 0;
-	struct genz_zres *zres, *last;
+	struct genz_zres *zres;
 
 	if (zdev == NULL) {
 		pr_debug("error zdev is NULL\n");
 		return -EINVAL;
 	}
-	zres = list_first_entry_or_null(&zdev->zres_list,
-		struct genz_zres, zres_node);
-	if (zres == NULL) {
-		pr_debug("empty zres_list\n");
-		return ret;
-	}
-
-	last = list_last_entry(&zdev->zres_list, struct genz_zres, zres_node);
-	if (last == NULL) {
-		pr_debug("last entry is NULL\n");
-		return ret;
-	}
-
-	while (zres != NULL) {
+	genz_for_each_zres(zres, zdev) {
 		ret = genz_create_attr(zdev, zres);
 		if (ret)
 			return ret;
-		if (zres == last)
-			break;
-		zres = list_next_entry(zres, zres_node);
 	}
 
 	return ret;

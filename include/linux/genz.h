@@ -108,6 +108,16 @@ bool genz_is_data_resource(struct genz_resource *res);
 bool genz_is_control_resource(struct genz_resource *res);
 const char *genz_resource_name(struct genz_resource *res);
 
+/** genz_for_each_resource  -       iterate over list of resources
+ * @pos:        the struct genz_resource
+ * @zdev:       the struct genz_dev with resources
+ */
+#define genz_for_each_resource(pos, zdev)                          \
+	for (pos = genz_get_first_resource(zdev);                  \
+		pos != NULL;                                       \
+		pos = genz_get_next_resource(zdev, pos))
+
+
 /*
  * Use these macros so that KBUILD_MODNAME and THIS_MODULE can be expanded
  */

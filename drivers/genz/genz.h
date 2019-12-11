@@ -62,6 +62,15 @@ struct genz_zres { /* subsystem private version of genz_resource */
 };
 #define to_genz_res(n) container_of(n, struct genz_zres, zres)
 
+/** genz_for_each_zres  -       iterate over list of struct zres
+ * @pos:        the struct genz_zres
+ * @zdev:       the struct genz_dev with resources
+ */
+#define genz_for_each_zres(pos, zdev)                                      \
+	for (pos = to_genz_res(genz_get_first_resource(zdev));             \
+		pos != NULL;                                               \
+		pos = to_genz_res(genz_get_next_resource(zdev, &pos->zres)))
+
 struct genz_fabric {
 	struct list_head node;	/* node in list of fabrics */
 	uint32_t number;		/* fabric_number */
