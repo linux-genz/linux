@@ -725,8 +725,7 @@ static int genz_blk_probe(struct genz_dev *zdev,
 					 UUID_IS_FAM, GFP_KERNEL);
 	if (ret < 0)
 		goto out; /* Revisit: undo bstate */
-	for (zres = genz_get_first_resource(zdev); zres != NULL;
-	     zres = genz_get_next_resource(zdev, zres)) {
+	genz_for_each_resource(zres, zdev) {
 		if (genz_is_data_resource(zres)) {
 			ret = genz_bdev_probe(bstate, zres);
 			/* Revisit: error handling */

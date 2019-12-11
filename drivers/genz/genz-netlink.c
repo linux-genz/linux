@@ -249,7 +249,8 @@ static int parse_resource_list(const struct nlattr *resource_list,
 		zdev = genz_alloc_dev(fabric);
 		if (!zdev)  {
 			/* Revisit: clean up fabric? */
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto err;
 		}
 		zdev->zcomp = zcomp;
 
@@ -259,6 +260,7 @@ static int parse_resource_list(const struct nlattr *resource_list,
 		if (ret < 0) {
 			pr_debug("nla_parse_nested of UUID list returned %d\n",
 				 ret);
+			goto err;
 		}
 		if (u_attrs[GENZ_A_U_CLASS_UUID]) {
 			uint8_t *uuid;
@@ -281,7 +283,7 @@ static int parse_resource_list(const struct nlattr *resource_list,
 			zdev->class = nla_get_u16(u_attrs[GENZ_A_U_CLASS]);
 			pr_debug("\t\tClass = %d\n",
 				(uint32_t) zdev->class);
-			if (zdev->class > 0 && zdev->class <= genz_hardware_classes_nelems) {
+			if (zdev->class > 0 && zdev->class < genz_hardware_classes_nelems) {
 				condensed_class =
 				      genz_hardware_classes[zdev->class].value;
 				condensed_name =
@@ -304,6 +306,7 @@ static int parse_resource_list(const struct nlattr *resource_list,
 			ret = parse_mr_list(zdev, u_attrs[GENZ_A_U_MRL]);
 			if (ret) {
 				pr_debug("\tparse of MRL failed\n");
+				goto err;
 			}
 		}
 		/*
@@ -312,18 +315,25 @@ static int parse_resource_list(const struct nlattr *resource_list,
 		 * sysfs files are created after the new device is added.
 		 */
 		ret = device_add(&zdev->dev);
-		if (ret)
+		if (ret) {
 			pr_debug("device_add failed with %d\n", ret);
+			goto err;
+		}
 		ret = genz_create_uuid_file(zdev);
 		if (ret) {
 			pr_debug("\tgenz_create_uuid_file failed with %d\n", ret);
+			goto err;
 		}
 		ret = genz_create_attrs(zdev);
 		if (ret) {
 			pr_debug("\tgenz_create_attrs failed with %d\n", ret);
+			goto err;
 		}
 	}
 	pr_debug("\tend of RESOURCE_LIST\n");
+	return ret;
+err:
+	/* Revisit: cleanup  */
 	return ret;
 }
 
@@ -418,7 +428,7 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		ret = -EINVAL;
 		goto err;
 	}
-	if (zcomp->cclass <= 0 || zcomp->cclass > genz_hardware_classes_nelems) {
+	if (zcomp->cclass <= 0 || zcomp->cclass >= genz_hardware_classes_nelems) {
 		pr_debug("CCLASS invalid\n");
 		ret = -EINVAL;
 		goto err;
