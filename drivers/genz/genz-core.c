@@ -153,10 +153,11 @@ static void genz_shutdown(struct device *dev)
 }
 
 struct bus_type genz_bus_type = {
-	.name =	"genz",
-	.match =	genz_bus_match,
-	.uevent =	genz_uevent,
-	.probe =	genz_device_probe,
+	.name     =	"genz",
+	.match    =	genz_bus_match,
+	.uevent   =	genz_uevent,
+	.probe    =	genz_device_probe,
+	.remove   =	genz_device_remove,
 	.shutdown =	genz_shutdown,
 };
 EXPORT_SYMBOL(genz_bus_type);
