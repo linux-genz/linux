@@ -184,6 +184,22 @@ int genz_device_probe(struct device *dev)
 	return ret;
 }
 
+int genz_device_remove(struct device *dev)
+{
+	struct genz_dev *zdev = to_genz_dev(dev);
+	struct genz_driver *zdrv = to_genz_driver(dev->driver);
+
+	if (zdrv) {
+		if (zdrv->remove) {
+			zdrv->remove(zdev);
+		}
+		zdev->zdrv = NULL;
+	}
+
+	genz_dev_put(zdev);
+	return 0;
+}
+
 static struct genz_fabric *genz_alloc_fabric(void)
 {
 	struct genz_fabric *f;

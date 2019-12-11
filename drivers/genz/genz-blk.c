@@ -748,6 +748,7 @@ static int genz_blk_remove(struct genz_dev *zdev)
 	bool local;
 	struct genz_bdev *zbd, *next;
 
+	dev_dbg(&zdev->dev, "entered\n");
 	list_for_each_entry_safe(zbd, next, &bstate->bdev_list, bdev_node) {
 		ret = genz_bdev_remove(zbd);
 		/* Revisit: error handling */
