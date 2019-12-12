@@ -804,4 +804,6 @@ module_init(genz_blk_init);
 module_exit(genz_blk_exit);
 
 MODULE_LICENSE("GPL v2");
+MODULE_IMPORT_NS(drivers/genz/genz);
+MODULE_IMPORT_NS(drivers/genz/wildcat/wildcat); /* Revisit: remove dependency */
 MODULE_DESCRIPTION("Block driver for Gen-Z");
