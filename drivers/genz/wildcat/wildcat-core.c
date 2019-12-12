@@ -94,6 +94,7 @@ module_init(wildcat_init);
 module_exit(wildcat_exit);
 
 MODULE_LICENSE("GPL v2");
+MODULE_IMPORT_NS(drivers/genz/genz);
 
 struct bridge    wildcat_bridge = { 0 };
 
