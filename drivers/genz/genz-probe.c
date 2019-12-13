@@ -402,7 +402,7 @@ struct genz_subnet *genz_add_subnet(uint32_t sid, struct genz_fabric *f)
 	int ret = 0;
 	unsigned long flags;
 
-	pr_debug( "in %s\n", __func__);
+	pr_debug( "entered\n");
 
 	found = genz_lookup_subnet(sid, f);
 
@@ -486,7 +486,7 @@ static int genz_create_component_files(struct device *dev)
 {
 	int ret = 0;
 
-	pr_debug("%s: create_file for device %px\n", __func__, dev);
+	pr_debug("create_file for device %px\n", dev);
 	ret = device_create_file(dev, &dev_attr_gcid);
 	ret = device_create_file(dev, &dev_attr_cclass);
 	ret = device_create_file(dev, &dev_attr_fru_uuid);
