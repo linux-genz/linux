@@ -76,7 +76,7 @@ int genz_create_attr(struct genz_dev *zdev, struct genz_zres *zres)
 	res_attr->read = genz_read_control;
 	res_attr->write = genz_write_control;
 	res_attr->mmap = NULL;
-	pr_debug("%s: zdev->dev.kobj is %px res_attr %s\n", __func__, &zdev->dev.kobj, zres->zres.res.name);
+	pr_debug("zdev->dev.kobj is %px res_attr %s\n", &zdev->dev.kobj, zres->zres.res.name);
 	ret = sysfs_create_bin_file(&zdev->dev.kobj, res_attr);
 	if (ret) {
 		printk(KERN_ERR "sysfs_create_bin_file failed with %d\n", ret);
