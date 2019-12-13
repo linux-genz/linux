@@ -87,20 +87,20 @@ struct genz_zres *genz_alloc_and_add_zres(struct genz_dev *zdev)
 {
 	struct genz_zres *zres;
 
-	pr_debug("%s: zdev is %px\n", __func__, zdev);
+	pr_debug("zdev is %px\n", zdev);
 
 	if (zdev == NULL) {
-		pr_debug("%s: passed a NULL zdev\n", __func__);
+		pr_debug("passed a NULL zdev\n");
 		return NULL;
 	}
 	zres = kzalloc(sizeof(struct genz_zres), GFP_KERNEL);
-	pr_debug("%s:kzalloc of zres %px\n", __func__, zres);
+	pr_debug("kzalloc of zres %px\n", zres);
 	if (zres == NULL)
 		return NULL;
-	pr_debug("%s:&(zres->zres_node) %px\n", __func__, &(zres->zres_node));
-	pr_debug("%s:&zdev->zres_list %px\n", __func__, &(zdev->zres_list));
+	pr_debug("&(zres->zres_node) %px\n", &(zres->zres_node));
+	pr_debug("&zdev->zres_list %px\n", &(zdev->zres_list));
 	list_add_tail(&(zres->zres_node), &(zdev->zres_list));
-	pr_debug("%s: after list_add_tail\n", __func__);
+	pr_debug("after list_add_tail\n");
 	return(zres);
 }
 
