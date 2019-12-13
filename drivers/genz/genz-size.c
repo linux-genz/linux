@@ -40,7 +40,7 @@
 ssize_t genz_control_structure_size(struct genz_control_info *ci)
 {
 	if (ci == NULL) {
-		pr_debug("%s: genz_control_info is NULL\n", __func__);
+		pr_debug("genz_control_info is NULL\n");
 		return 0;
 	}
 	/*
@@ -59,12 +59,12 @@ ssize_t genz_c_access_r_key_size(struct genz_control_info *ci)
 	struct genz_component_c_access_structure c_access;
 
 	if (ci == NULL) {
-		pr_debug("%s: genz_control_info is NULL\n", __func__);
+		pr_debug("genz_control_info is NULL\n");
 		return 0;
 	}
 	if (ci->type != GENZ_COMPONENT_C_ACCESS_STRUCTURE) {
-		pr_debug("%s: expected Component C-Access Structure and got %d\n",
-			__func__, ci->type);
+		pr_debug("expected Component C-Access Structure and got %d\n",
+			ci->type);
 		return 0;
 	}
 	/* Read the 40 bit C-Access Table Size field at offset 0x18 */
@@ -72,8 +72,8 @@ ssize_t genz_c_access_r_key_size(struct genz_control_info *ci)
 	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
 			ci->start, sizeof(c_access), &c_access, 0);
 	if (ret) {
-		pr_debug("%s: control read of c_access structure failed with %d\n",
-			 __func__, ret);
+		pr_debug("control read of c_access structure failed with %d\n",
+			 ret);
 		return -1;
 	}
 	num_entries = c_access.c_access_table_size;
@@ -98,12 +98,12 @@ ssize_t genz_oem_data_size(struct genz_control_info *ci)
 	int ret;
 
 	if (ci == NULL) {
-		pr_debug("%s: genz_control_info is NULL\n", __func__);
+		pr_debug("genz_control_info is NULL\n");
 		return -1;
 	}
 	if (ci->type != GENZ_COMPONENT_MEDIA_STRUCTURE) {
-		pr_debug("%s: expected Component Media Structure and got %d\n",
-			__func__, ci->type);
+		pr_debug("expected Component Media Structure and got %d\n",
+			ci->type);
 		return -1;
 	}
 
@@ -111,16 +111,16 @@ ssize_t genz_oem_data_size(struct genz_control_info *ci)
 	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
 			ci->start+0x90, 4, &oem_data_ptr, 0);
 	if (ret || !oem_data_ptr) {
-		pr_debug("%s: control read of OEM Data PTR failed with %d\n",
-			 __func__, ret);
+		pr_debug("control read of OEM Data PTR failed with %d\n",
+			 ret);
 		return -1;
 	}
 	/* Read the table size in bytes from the first 2 bytes of the table */
 	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
 			oem_data_ptr, 2, &sz, 0);
 	if (ret) {
-		pr_debug("%s: control read of OEM Data table size failed with %d\n",
-			 __func__, ret);
+		pr_debug("control read of OEM Data table size failed with %d\n",
+			 ret);
 		return -1;
 	}
 	return sz;
@@ -135,12 +135,12 @@ ssize_t genz_elog_size(struct genz_control_info *ci)
 	int ret;
 
 	if (ci == NULL) {
-		pr_debug("%s: genz_control_info is NULL\n", __func__);
+		pr_debug("genz_control_info is NULL\n");
 		return -1;
 	}
 	if (ci->type != GENZ_COMPONENT_ERROR_AND_SIGNAL_EVENT_STRUCTURE) {
-		pr_debug("%s: expected Component Error and Signal Event Structure and got %d\n",
-			__func__, ci->type);
+		pr_debug("expected Component Error and Signal Event Structure and got %d\n",
+			ci->type);
 		return -1;
 	}
 
@@ -149,16 +149,16 @@ ssize_t genz_elog_size(struct genz_control_info *ci)
 	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
 			ci->start+0x14, 4, &elog_ptr, 0);
 	if (ret || !elog_ptr) {
-		pr_debug("%s: control read of ELog PTR failed with %d\n",
-			 __func__, ret);
+		pr_debug("control read of ELog PTR failed with %d\n",
+			 ret);
 		return -1;
 	}
 	/* Read the table size in bytes from the first 2 bytes of the table */
 	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
 			elog_ptr, 2, &num_entries, 0);
 	if (ret) {
-		pr_debug("%s: control read of ELog table size failed with %d\n",
-			 __func__, ret);
+		pr_debug("control read of ELog table size failed with %d\n",
+			 ret);
 		return -1;
 	}
 	if (num_entries == 0) {
