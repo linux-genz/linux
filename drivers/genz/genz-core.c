@@ -273,7 +273,7 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	}
 	s = genz_add_subnet(sid, f);
 	if (s == NULL) {
-		pr_debug("%s: genz_add_subnet failed\n", __func__);
+		pr_debug("genz_add_subnet failed\n");
 		ret = -ENOMEM;
 		goto error;
 	}
@@ -284,7 +284,7 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	}
 	zbdev->zdev.zcomp = genz_add_component(s, cid);
 	if (zbdev->zdev.zcomp == NULL) {
-		pr_debug("%s: genz_add_component failed\n", __func__);
+		pr_debug("genz_add_component failed\n");
 		ret = -ENOMEM;
 		goto error;
 	}
@@ -446,9 +446,9 @@ struct genz_bridge_dev *genz_zdev_bridge(struct genz_dev *zdev)
 	struct genz_fabric *fabric;
 	unsigned long flags;
 
-	pr_debug("%s: zdev->zcomp is %px\n", __func__, zdev->zcomp);
-	pr_debug("%s: zdev->zcomp->subnet is %px\n", __func__, zdev->zcomp->subnet);
-	pr_debug("%s: zdev->zcomp->subnet->fabric is %px\n", __func__, zdev->zcomp->subnet->fabric);
+	pr_debug("zdev->zcomp is %px\n", zdev->zcomp);
+	pr_debug("zdev->zcomp->subnet is %px\n", zdev->zcomp->subnet);
+	pr_debug("zdev->zcomp->subnet->fabric is %px\n", zdev->zcomp->subnet->fabric);
 
 	fabric = zdev->zcomp->subnet->fabric;
 	dev_dbg(&zdev->dev, "fabric=%px\n", fabric);
@@ -556,7 +556,7 @@ struct genz_resource *genz_get_next_resource(struct genz_dev *zdev,
 
 	pos = to_genz_res(res);
 	if (pos == NULL) {
-		pr_debug("%s to_genz_res failed\n", __func__);
+		pr_debug("to_genz_res failed\n");
 		return NULL;
 	}
 	last = list_last_entry(&zdev->zres_list, struct genz_zres, zres_node);
@@ -603,7 +603,7 @@ static void force_dev_cleanup(void)
 	struct genz_fabric *f, *f_tmp;
 	struct genz_bridge_dev *cur, *cur_tmp;
 
-	pr_debug("in %s\n", __func__);
+	pr_debug("entered\n");
 	/* go through each bridge */
 	list_for_each_entry_safe(cur, cur_tmp, &genz_bridge_list, bridge_node) {
 		genz_fabric_uuid_tracker_free(&cur->fabric->mgr_uuid);
@@ -649,7 +649,7 @@ static int __init genz_init(void)
 {
 	int ret = 0;
 
-	pr_debug("%s\n", __func__);
+	pr_debug("entered\n");
 
 	if (genz_disabled())
 		return -ENODEV;
@@ -680,7 +680,7 @@ module_init(genz_init);
 
 static void __exit genz_exit(void)
 {
-	pr_debug("in %s\n", __func__);
+	pr_debug("entered\n");
 	force_dev_cleanup();
 	bus_unregister(&genz_bus_type);
 	genz_nl_exit();
