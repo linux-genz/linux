@@ -1149,89 +1149,59 @@ int wildcat_free_queues(struct genz_xdm_info *gzxi, struct genz_rdm_info *gzri)
 	return ret;
 }
 
-static int _xdm_get_matching_cmpl(struct xdm_info *xdmi, void *match,
-				  struct wildcat_cq_entry *entry)
+static int _xdm_get_sgli_cmpl(struct xdm_info *xdmi,
+			      struct genz_sgl_info **sgli,
+			      struct wildcat_cq_entry *entry)
 {
 	struct genz_xdm_info *gzxi = xdmi->gzxi;
 	int ret = 0;
-	bool done = false;
-	bool update_head = true;
-	uint cur_valid = xdmi->cur_valid;
-	uint next_cur_valid = cur_valid, new_cur_valid;
 	uint head, next_head, cmdq_ent, cmpl_index;
-	uint new_head = -1u;
-	struct wildcat_cq_entry *xdm_entry;
+	struct wildcat_cq_entry *cmpl_entry;
 	union wildcat_hw_wq_entry *xdm_cmd;
+	struct genz_sgl_info *cmpl_sgli;
 	void *cmpl_addr, *cmd_addr;
 
 	/* caller must hold xdm_info_lock */
 
+	/* Return -EBUSY if no valid cmpl entry
+	 * Return 0 if cmpl did not match (sgli is updated)
+	 * Return 1 if cmpl did match
+	 */
+
 	cmdq_ent = gzxi->cmdq_ent;
 	cmd_addr = xdmi->cmdq_zpage->dma.cpu_addr;
 	cmpl_addr = xdmi->cmplq_zpage->dma.cpu_addr;
+	head = xdmi->cmplq_head;
+	cmpl_entry = &(((struct wildcat_cq_entry *)cmpl_addr)[head]);
 
-	/* When scanning the cmplq, the each entry can be:
-	 *   invalid  - return -EBUSY
-	 *   ignore   - ignore and keep scanning
-	 *   mismatch - ignore it, but keep scanning, cmplq_head no longer
-	 *              advances
-	 *   match    - stop scan & return entry
-	 */
-	for (head = xdmi->cmplq_head; !done;
-	     head = next_head, cur_valid = next_cur_valid) {
-		xdm_entry = &(((struct wildcat_cq_entry *)cmpl_addr)[head]);
-		/* check valid bit */
-		if (xdm_entry->valid != cur_valid) {
-			ret = -EBUSY;
-			break;
-		}
-		/* do mod-add to compute next head value */
-		next_head = (head + 1) % gzxi->cmplq_ent;
-		/* Revisit: can this loop wrap more than once? */
-		/* toggle our local cur_valid on wrap */
-		if (next_head < head) {
-			next_cur_valid = !cur_valid;
-		}
-		/* skip to next entry if cmpl_index is "ignore" */
-		/* Revisit: use some other field for "ignore" */
-		cmpl_index = xdm_entry->index;
-		if (cmpl_index == -1u) {  /* Revisit: symbolic name */
-			if (update_head) {
-				new_head = next_head;
-				new_cur_valid = next_cur_valid;
-			}
-			continue;
-		}
-		xdm_cmd = &(((union wildcat_hw_wq_entry *)cmd_addr)[cmpl_index]);
-		if (xdm_cmd->dma.driver_data == match) {
-			xdmi->active_cmds--;
-			/* copy XDM completion entry to caller */
-			*entry = *xdm_entry;
-			if (update_head) {
-				new_head = next_head;
-				new_cur_valid = next_cur_valid;
-			} else {  /* mark completion as "handled" */
-				xdm_entry->index = (uint16_t)-1u;  /* Revisit: symbolic name */
-			}
-			done = true;
-		} else {  /* mismatch */
-			/* cannot advance cmplq_head beyond this entry */
-			if (update_head) {
-				new_head = head;
-				new_cur_valid = cur_valid;
-				update_head = false;
-			}
-		}
+	/* check valid bit */
+	if (cmpl_entry->valid != xdmi->cur_valid) {
+		return -EBUSY;
 	}
-
+	xdmi->active_cmds--;
+	/* copy XDM completion entry to caller */
+	*entry = *cmpl_entry;
+	/* use cmpl index to find sgli and check if it is a match */
+	cmpl_index = cmpl_entry->index;
+	xdm_cmd = &(((union wildcat_hw_wq_entry *)cmd_addr)[cmpl_index]);
+	cmpl_sgli = (struct genz_sgl_info *)xdm_cmd->dma.driver_data;
+	if (cmpl_sgli == *sgli) {  /* match */
+		ret = 1;
+	} else {  /* not a match */
+		*sgli = cmpl_sgli;
+		ret = 0;
+	}
+	/* do mod-add to compute next head value */
+	next_head = (head + 1) % gzxi->cmplq_ent;
+	/* toggle cur_valid on wrap */
+	if (next_head < head)
+		xdmi->cur_valid = !xdmi->cur_valid;
 	/* update cmplq_head - SW-only */
-	if (new_head != -1u) {
-		xdmi->cmplq_head = new_head;
-		xdmi->cur_valid = new_cur_valid;
-	}
-
+	/* must not reference cmpl_entry after this point */
+	xdmi->cmplq_head = next_head;
 	/* update cmdq_head_shadow if this completion moves it forward */
-	if (done && cmpl_index < cmdq_ent) {
+	/* must not reference xdm_cmd after this point */
+	if (cmpl_index < cmdq_ent) {
 		if (((xdmi->cmdq_tail_shadow - cmpl_index) % cmdq_ent) <
 		    ((xdmi->cmdq_tail_shadow - xdmi->cmdq_head_shadow) %
 		     cmdq_ent))
@@ -1241,31 +1211,58 @@ static int _xdm_get_matching_cmpl(struct xdm_info *xdmi, void *match,
 	return ret;
 }
 
-static int wildcat_sgl_poll_cmpls(struct genz_dev *zdev,
-				  struct genz_sgl_info *sgli)
+#define NS                    1000000000
+#define WILDCAT_CMPL_TIMEOUT  ((u64)2 * NS)
+
+static void wildcat_sgl_poll_cmpls(struct genz_dev *zdev,
+				   struct genz_sgl_info *sgli)
 {
 	struct wildcat_cq_entry cq_entry;
 	struct genz_xdm_info *gzxi = sgli->xdmi;
 	struct xdm_info      *xdmi = (struct xdm_info *)gzxi->br_driver_data;
-	uint                 more = sgli->nr_sg;
-	int ret, err = 0;
+	struct genz_sgl_info *cmpl_sgli;
+	uint                 cmpl_index;
+	bool                 req_done;
+	int ret, this_cpu;
+	u64 start, now;
 	ulong flags;
 
+	/* Revisit: better to lock/unlock each loop interation? */
 	spin_lock_irqsave(&gzxi->xdm_info_lock, flags);
-	while (more) {
-		ret = _xdm_get_matching_cmpl(xdmi, sgli, &cq_entry);
-		/* Revisit: busy-wait */
-		if (ret == -EBUSY) {
-			continue;  /* Revisit: timeout */
-		} else if (ret == 0) {
+	start = ktime_get_ns();
+	this_cpu = smp_processor_id();
+	/* Revisit: debug */
+	dev_dbg_ratelimited(&zdev->dev,
+			    "spin_lock, tag=%#x, nr_cmpls=%u, cpu=%d\n",
+			    sgli->tag, atomic_read(&sgli->nr_cmpls), this_cpu);
+	while (atomic_read(&sgli->nr_cmpls) > 0) {
+		cmpl_sgli = sgli;
+		ret = _xdm_get_sgli_cmpl(xdmi, &cmpl_sgli, &cq_entry);
+		now = ktime_get_ns();
+		if (ret >= 0) {  /* we have a completion */
 			if (cq_entry.status != 0) {
-				err = -EIO;
+				cmpl_index = cq_entry.index;
+				dev_err(&zdev->dev,
+					"XDM error: tag=%#x, cmpl_index=%u, status=0x%x\n",
+					sgli->tag, cmpl_index, cq_entry.status);
+				cmpl_sgli->status = -EIO;
 			}
-			more--;
+			/* Revisit: req_done unused */
+			req_done = atomic_dec_and_test(&cmpl_sgli->nr_cmpls);
+		}
+		/* Revisit: busy-wait */
+		if ((now - start) > WILDCAT_CMPL_TIMEOUT) {
+			dev_err(&zdev->dev,
+				"XDM cmpl timeout: tag=%#x\n", sgli->tag);
+			sgli->status = -ETIMEDOUT;
+			break;
 		}
 	}
+	/* Revisit: debug */
+	dev_dbg_ratelimited(&zdev->dev,
+			    "spin_unlock, tag=%#x, status=%d, cpu=%d\n",
+			    sgli->tag, sgli->status, this_cpu);
 	spin_unlock_irqrestore(&gzxi->xdm_info_lock, flags);
-	return err;
 }
 
 int wildcat_sgl_request(struct genz_dev *zdev, struct genz_sgl_info *sgli)
@@ -1301,25 +1298,25 @@ int wildcat_sgl_request(struct genz_dev *zdev, struct genz_sgl_info *sgli)
 			wc_cmd.dma.rd_addr = zaddr;
 			wc_cmd.dma.wr_addr = sg_dma_address(sg);
 		}
-		dev_dbg(&zdev->dev,
-			"%s: rd_addr=0x%llx, wr_addr=0x%llx, len=%u\n",
-			cmd_name, wc_cmd.dma.rd_addr, wc_cmd.dma.wr_addr,
-			dma_len);
 		/* submit cmd */
 		ret = wildcat_xdm_queue_cmd(xdmi, &wc_cmd, false);
+		/* Revisit: debug */
+		dev_dbg_ratelimited(&zdev->dev,
+			"%s: tag=%#x, rd_addr=0x%llx, wr_addr=0x%llx, len=%u, ret=%d\n",
+			cmd_name, sgli->tag, wc_cmd.dma.rd_addr,
+			wc_cmd.dma.wr_addr, dma_len, ret);
 		if (ret < 0)  {  /* Revisit: handle EBUSY/EXFULL */
-			dev_dbg(&zdev->dev,
-				"wildcat_xdm_queue_cmd error, ret=%d\n", ret);
-			/* Revisit: cleanup submitted cmds */
-			return ret;
+			/* cleanup submitted cmds */
+			wildcat_sgl_poll_cmpls(zdev, sgli);
+			goto out;
 		}
+		atomic_inc(&sgli->nr_cmpls);
 		zaddr += dma_len;
 	}
 
 	/* Revisit: poll for completion */
-	ret = wildcat_sgl_poll_cmpls(zdev, sgli);
-	sgli->status = ret;
+	wildcat_sgl_poll_cmpls(zdev, sgli);
 	sgli->cmpl_fn(zdev, sgli);
-
+out:
 	return ret;
 }

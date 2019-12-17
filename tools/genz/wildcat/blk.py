@@ -69,6 +69,10 @@ def parse_args():
                         help='a 1G hugepage test file')
     parser.add_argument('-l', '--loopback', action='store_true',
                         help='enable loopback mode')
+    parser.add_argument('-A', '--anonymous', action='store_true',
+                        help='use an anonymous mmap instead of hugefile')
+    parser.add_argument('-S', '--size', default='1', type=int,
+                        help='set the anonymous mmap size')
     parser.add_argument('-k', '--keyboard', action='store_true',
                         help='invoke interactive keyboard')
     parser.add_argument('-v', '--verbosity', action='count', default=0,
@@ -77,9 +81,9 @@ def parse_args():
 
 def main():
     '''summary of MR_REG regions:
-    name       | access   | args     | mmap  | v         | sz  |
-    -----------+----------+----------+-------+-----------+-----+
-    rsp1G      |GRPRIC    |always    | mm1G  | v1G       | 1G  |
+    name       | access   | args     | mmap  | v         | sz    |
+    -----------+----------+----------+-------+-----------+-------+
+    rsp1G      |GRPRIC    |always    | mm1G  | v1G       | sz*1G |
     '''
     global args
     args = parse_args()
@@ -101,28 +105,35 @@ def main():
             #conn.do_UUID_IMPORT(zuu, 0, None)
             conn.do_UUID_IMPORT(zuu, UU.IS_FAM, None) # Revisit: debug
 
-        sz1G = 1<<30
+        sz = sz1G = 1<<30
 
-        hugesize = os.path.getsize(args.hugefile)
-        if args.verbosity:
-            print('opening hugefile "{}"'.format(args.hugefile))
-        f1G = open(args.hugefile, 'rb+')
-        if args.verbosity:
-            print('mmapping hugefile')
-        mm1G = mmap.mmap(f1G.fileno(), 0, access=mmap.ACCESS_WRITE)
+        if args.anonymous:
+            if args.size:
+                sz = sz1G * args.size
+            if args.verbosity:
+                print('mmapping anonymous region, size={}'.format(sz))
+            mm1G = mmap.mmap(-1, sz, access=mmap.ACCESS_WRITE)
+        else:
+            hugesize = os.path.getsize(args.hugefile)
+            if args.verbosity:
+                print('opening hugefile "{}"'.format(args.hugefile))
+            f1G = open(args.hugefile, 'rb+')
+            if args.verbosity:
+                print('mmapping hugefile')
+            mm1G = mmap.mmap(f1G.fileno(), 0, access=mmap.ACCESS_WRITE)
         #print('initializing hugefile with random data')
         #mm1G[0:hugesize//2] = os.urandom(hugesize//2)
         v1G, l1G = wildcat.mmap_vaddr_len(mm1G)
 
         # individual, cpu-visible, 1G mapping allowing
         # GET_REMOTE/PUT_REMOTE
-        #rsp1G = conn.do_MR_REG(v1G, sz1G, MR.GRPRIC) # huge: REMOTE, 1G
+        #rsp1G = conn.do_MR_REG(v1G, sz, MR.GRPRIC) # huge: REMOTE, szG
         # Revisit: non-cpu-visible for now
-        rsp1G = conn.do_MR_REG(v1G, sz1G, MR.GRPRI) # huge: REMOTE, 1G
+        rsp1G = conn.do_MR_REG(v1G, sz, MR.GRPRI) # huge: REMOTE, szG
         print('do_MR_REG: rsp_zaddr={:#x}, len={}'.format(
-            rsp1G.rsp_zaddr, sz1G))
-        print('user_send3 --blk --uuid {} --start {:#x} --length {:#x}'.format(
-            init.uuid, rsp1G.rsp_zaddr, sz1G))
+            rsp1G.rsp_zaddr, sz))
+        print('user_send3 --blk --uuid {} --gcid {} --start {:#x} --length {:#x}'.format(
+            init.uuid, init.uuid.gcid_str, rsp1G.rsp_zaddr, sz))
         if args.keyboard:
             set_trace()
         try:

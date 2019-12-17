@@ -246,19 +246,24 @@ int wildcat_xdm_queue_cmd(struct xdm_info *xdmi,
 			  union wildcat_hw_wq_entry *cmd, bool discard_cmpls)
 {
 	struct genz_xdm_info *gzxi = xdmi->gzxi;
-	int ret = 0;
+	int ret = 0, this_cpu;
 	uint head, tail, next_tail;
 	union wildcat_hw_wq_entry *xdm_entry;
 	void *cpu_addr;
 	ulong flags;
 
 	spin_lock_irqsave(&gzxi->xdm_info_lock, flags);
+	this_cpu = smp_processor_id();
 	/* Revisit: add support for cmd buffers */
 	tail = xdmi->cmdq_tail_shadow;
 	/* do mod-add to compute next tail value */
 	next_tail = (tail + 1) % gzxi->cmdq_ent;
 restart_head:
 	head = xdmi->cmdq_head_shadow;
+	/* Revisit: debug */
+	dev_dbg_ratelimited(&gzxi->br->zdev.dev,
+			    "spin_lock, head=%u, tail=%u, cpu=%d\n",
+			    head, tail, this_cpu);
 	if (next_tail == head) {  /* cmdq appears to be full */
 		/* our cmdq_head_shadow might be out-of-date - read HW */
 		xdmi->cmdq_head_shadow =
@@ -289,6 +294,10 @@ restart_head:
 	ret = tail;
 
 out:
+	/* Revisit: debug */
+	dev_dbg_ratelimited(&gzxi->br->zdev.dev,
+			    "spin_unlock, head=%u, next_tail=%u, ret=%d, cpu=%d\n",
+			    head, next_tail, ret, this_cpu);
 	spin_unlock_irqrestore(&gzxi->xdm_info_lock, flags);
 	return ret;
 }
@@ -623,7 +632,7 @@ static int msg_req_UUID_IMPORT(struct rdm_info *rdmi, struct xdm_info *xdmi,
 			 genz_gcid_str(req_hdr->sgcid, gcstr, sizeof(gcstr)));
 		goto respond;
 	}
-	if (!wildcat_uuid_is_local(rdmi->br, tgt_uuid)) {
+	if (!wildcat_uuid_is_local(gzri->br, tgt_uuid)) {
 		status = WILDCAT_MSG_ERR_UUID_NOT_LOCAL;
 		pr_debug("tgt_uuid=%pUb not local\n", tgt_uuid);
 		goto respond;
@@ -718,7 +727,7 @@ static int msg_req_UUID_FREE(struct rdm_info *rdmi, struct xdm_info *xdmi,
 		      genz_gcid_str(req_hdr->sgcid, gcstr, sizeof(gcstr)));
 		goto respond;
 	}
-	if (!wildcat_uuid_is_local(rdmi->br, tgt_uuid)) {
+	if (!wildcat_uuid_is_local(gzri->br, tgt_uuid)) {
 		status = WILDCAT_MSG_ERR_UUID_NOT_LOCAL;
 		pr_debug("tgt_uuid=%pUb not local\n", tgt_uuid);
 		goto respond;
