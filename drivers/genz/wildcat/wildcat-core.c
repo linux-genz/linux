@@ -100,13 +100,6 @@ struct bridge    wildcat_bridge = { 0 };
 
 #define TRACKER_MAX     (256)
 
-/* Revisit Carbon: Gen-Z Global CID should come from bridge Core
- * Structure, but for now, it's a module parameter
- */
-uint genz_gcid = 0x0000001;  /* Revisit Carbon: carbon node 1 */
-module_param(genz_gcid, uint, S_IRUGO);
-MODULE_PARM_DESC(genz_gcid, "Gen-Z bridge global CID");
-
 uint wildcat_loopback = 1;
 module_param(wildcat_loopback, uint, S_IRUGO);
 MODULE_PARM_DESC(wildcat_loopback, "Wildcat Gen-Z loopback mode (default=1)");
@@ -1199,7 +1192,6 @@ static int __init wildcat_init(void)
 		goto err_out;
 	}
 	ret = -ENOMEM;
-	wildcat_bridge.gcid = genz_gcid;
 	spin_lock_init(&wildcat_bridge.zmmu_lock);
 	mutex_init(&wildcat_bridge.csr_mutex);
 	for (sl = 0; sl < SLICES; sl++) {

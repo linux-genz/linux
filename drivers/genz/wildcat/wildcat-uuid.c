@@ -39,8 +39,7 @@
 
 void wildcat_generate_uuid(struct genz_bridge_dev *gzbr, uuid_t *uuid)
 {
-	struct bridge *br = wildcat_gzbr_to_br(gzbr);
-	uint32_t      cid = br->gcid;
+	uint32_t cid = genz_dev_gcid(&gzbr->zdev, 0);
 
 	uuid_gen(uuid);
 	/* insert local bridge 28-bit Global CID */
@@ -169,7 +168,7 @@ int wildcat_common_UUID_IMPORT(struct genz_mem_data *mdata, uuid_t *uuid,
 		status = -EINVAL;
 		goto out;
 	}
-	if (wildcat_uuid_is_local(br, uuid)) {
+	if (wildcat_uuid_is_local(mdata->bridge, uuid)) {
 		if (loopback) {
 			type = UUID_TYPE_LOOPBACK;
 		} else {  /* only remote UUIDs can be imported */

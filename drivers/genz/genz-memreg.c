@@ -451,8 +451,8 @@ struct genz_umem *genz_umem_get(struct genz_mem_data *mdata, uint64_t vaddr,
 	kref_init(&umem->refcount);
 	kref_init(&info->refcount);
 
-	pr_debug("vaddr = 0x%016llx, size = 0x%zx, access = 0x%llx\n",
-		 vaddr, size, access);
+	pr_debug("vaddr=0x%016llx, size=0x%zx, access=0x%llx, pasid=%u, kernel=%u\n",
+		 vaddr, size, access, pasid, kernel);
 
 	found = umem_insert(umem);
 	if (found != umem) {

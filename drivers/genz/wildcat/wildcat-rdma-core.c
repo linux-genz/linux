@@ -1463,7 +1463,6 @@ int wildcat_rdma_user_req_RMR_IMPORT(struct io_entry *entry)
 	int                     status = 0;
 	uuid_t                  *uuid = &req->rmr_import.uuid;
 	struct genz_mem_data    *mdata = &entry->fdata->md;
-	struct bridge           *br = wildcat_gzbr_to_br(mdata->bridge);
 	struct genz_rmr         *rmr;
 	struct zmap             *zmap;
 	struct genz_rmr_info    rmri;
@@ -1486,7 +1485,8 @@ int wildcat_rdma_user_req_RMR_IMPORT(struct io_entry *entry)
 		 uuid, rsp_zaddr,
 		 len, access, remote, writable, cpu_visible, individual);
 
-	if (!remote || (wildcat_uuid_is_local(br, uuid) && !wildcat_loopback)) {
+	if (!remote || (wildcat_uuid_is_local(mdata->bridge, uuid) &&
+			!wildcat_loopback)) {
 		status = -EINVAL;  /* only remote access & UUIDs allowed */
 		goto out;
 	}
