@@ -97,7 +97,7 @@ int genz_create_mgr_uuid_file(struct device *dev)
 {
 	int ret = 0;
 
-	pr_debug("%s: create_file for dev %px\n", __func__, dev);
+	pr_debug("create_file for dev %px\n", dev);
 	ret = device_create_file(dev, &dev_attr_mgr_uuid);
 	return ret;
 }
@@ -186,39 +186,36 @@ static int validate_ci(struct genz_control_info *ci,
 
 	*zdev = ci->zdev;
 	if (ci->zdev == NULL) {
-		pr_debug("%s: genz_control_info has NULL zdev\n", __func__);
+		pr_debug("genz_control_info has NULL zdev\n");
 		return -EINVAL;
 	}
 	*bridge_zdev = (*zdev)->zbdev;
 	if (*bridge_zdev == NULL) {
-		pr_debug("%s: bridge_zdev is NULL\n", __func__);
+		pr_debug("bridge_zdev is NULL\n");
 		return -EINVAL;
 	}
 	zdriver = (*bridge_zdev)->zbdrv;
 	if (zdriver == NULL) {
-		pr_debug("%s: zdriver is NULL\n", __func__);
+		pr_debug("zdriver is NULL\n");
 		return -EINVAL;
 	}
 	if (zdriver->control_read == NULL) {
-		pr_debug(
-			"%s: zdriver has NULL control_read function\n",
-			__func__);
+		pr_debug("zdriver has NULL control_read function\n");
 		return -EINVAL;
 	}
 	if (offset > ci->size) {
-		pr_debug(
-			"%s: requested offset (%lld) is outside control structure size (%ld)\n", __func__,
+		pr_debug("requested offset (%lld) is outside control structure size (%ld)\n",
 			offset, ci->size);
 		return -EINVAL;
 	}
 	if (offset+size > ci->size) {
 		pr_debug(
-			"%s: requested offset+size (%lld + %ld) is outside control structure size (%ld)\n", __func__,
+			"requested offset+size (%lld + %ld) is outside control structure size (%ld)\n",
 			offset, size, ci->size);
 		return -EINVAL;
 	}
 	if (data == NULL) {
-		pr_debug("%s: data pointer is NULL\n", __func__);
+		pr_debug("data pointer is NULL\n");
 		return -EINVAL;
 	}
 	return 0;
@@ -240,15 +237,14 @@ static ssize_t read_control_structure(struct file *fd,
 	ci = to_genz_control_info(kobj);
 	err = validate_ci(ci, offset, size, data, &zdev, &bridge_zdev);
 	if (err < 0) {
-		pr_debug("%s: arguments invalid error: %d\n", __func__, err);
+		pr_debug("arguments invalid error: %d\n", err);
 		/* Revisit: what should it return on error? */
 		return err;
 	}
 	ret = bridge_zdev->zbdrv->control_read(zdev, ci->start+offset,
 					       size, (void *)data, 0);
 	if (ret) {
-		pr_debug("%s: control read failed with %ld\n",
-			__func__, ret);
+		pr_debug("control read failed with %ld\n", ret);
 		return ret;
 	}
 	return size;
@@ -270,14 +266,13 @@ static ssize_t write_control_structure(struct file *fd,
 	ci = to_genz_control_info(kobj);
 	err = validate_ci(ci, offset, size, data, &zdev, &bridge_zdev);
 	if (err < 0) {
-		pr_debug("%s: arguments invalid error: %d\n", __func__, err);
+		pr_debug("arguments invalid error: %d\n", err);
 		return err;
 	}
 	ret = bridge_zdev->zbdrv->control_write(zdev, ci->start+offset,
 						size, (void *)data, 0);
 	if (ret) {
-		pr_debug("%s: control write failed with %ld\n",
-			__func__, ret);
+		pr_debug("control write failed with %ld\n", ret);
 		return ret;
 	}
 	return size;
@@ -695,8 +690,7 @@ static int read_header_at_offset(struct genz_dev *zdev,
 	ret = zdev->zbdev->zbdrv->control_read(zdev, start+offset,
 				(int)psize, (void *)hdr_offset, 0);
 	if (ret) {
-		pr_debug("%s: control read of pointer failed with %d\n",
-			__func__, ret);
+		pr_debug("control read of pointer failed with %d\n", ret);
 		return ret;
 	}
 
@@ -708,8 +702,8 @@ static int read_header_at_offset(struct genz_dev *zdev,
 	ret = zdev->zbdev->zbdrv->control_read(zdev, *hdr_offset,
 		sizeof(struct genz_control_structure_header), (void *)hdr, 0);
 	if (ret) {
-		pr_debug("%s: control read of header structure failed with %d\n",
-			__func__, ret);
+		pr_debug("control read of header structure failed with %d\n",
+			ret);
 		return ret;
 	}
 	return ret;
@@ -734,8 +728,8 @@ static int read_and_validate_header(struct genz_dev *zdev,
 	/* Validate the header is as expected */
 	if (csp->struct_type != GENZ_GENERIC_STRUCTURE) {
 		if (hdr->type != csp->struct_type) {
-			pr_debug("%s: expected type %d but found %d\n",
-				__func__, csp->struct_type, hdr->type);
+			pr_debug("expected type %d but found %d\n",
+				csp->struct_type, hdr->type);
 			return -EINVAL;
 		}
 	}
@@ -746,13 +740,13 @@ static int read_and_validate_header(struct genz_dev *zdev,
 	 *  variable size minimum.
 	 */
 	if (hdr->size == 0) {
-		pr_debug("%s: structure size is 0.\n", __func__);
+		pr_debug("structure size is 0.\n");
 		return -EINVAL;
 	}
 	/* Validate the version. */
 	expected_vers = genz_struct_type_to_ptrs[hdr->type].vers;
 	if (hdr->vers != expected_vers) {
-		pr_debug("%s: structure version mismatch expected %d but found %d.\n", __func__, expected_vers, hdr->vers);
+		pr_debug("structure version mismatch expected %d but found %d.\n", expected_vers, hdr->vers);
 		return -EINVAL;
 	}
 	return ret;
@@ -768,8 +762,7 @@ static struct genz_control_info *alloc_control_info(struct genz_dev *zdev,
 	/* Allocate a genz_control_info/kobject for this directory */
 	ci = kzalloc(sizeof(*ci), GFP_KERNEL);
 	if (!ci) {
-		pr_debug("%s: failed to allocate genz_control_info.\n",
-				__func__);
+		pr_debug("failed to allocate genz_control_info.\n");
 		return NULL;
 	}
 
@@ -800,7 +793,7 @@ static int traverse_array(struct genz_dev *zdev,
 	/* Allocate a genz_control_info/kobject for this directory */
 	ci = alloc_control_info(zdev, &hdr, csp->pointer_offset, parent);
 	if (ci == NULL) {
-		pr_debug("%s: failed to allocate control_info\n", __func__);
+		pr_debug("failed to allocate control_info\n");
 		return -ENOMEM;
 	}
 
@@ -879,7 +872,7 @@ static off_t find_chain_offset(struct genz_control_ptr_info *pinfo)
 		if (csp[i].ptr_type == GENZ_CONTROL_POINTER_CHAINED) {
 			if (chain_offset != -ENOENT) {
 				/* Already found a CHAIN. */
-				pr_debug("%s: Already found a CHAIN offset %d. New one: %d\n", __func__, chain_offset, csp[i].pointer_offset);
+				pr_debug("Already found a CHAIN offset %d. New one: %d\n", chain_offset, csp[i].pointer_offset);
 				return -EINVAL;
 			}
 			chain_offset = csp[i].pointer_offset;
@@ -887,7 +880,7 @@ static off_t find_chain_offset(struct genz_control_ptr_info *pinfo)
 	}
 	if (chain_offset == -ENOENT) {
 		/* Failed to find a CHAIN. */
-		pr_debug("%s: Did not find a CHAIN offset for structure %s.\n", __func__, pinfo->name);
+		pr_debug("Did not find a CHAIN offset for structure %s.\n", pinfo->name);
 		return -ENOENT;
 	}
 	return chain_offset;
@@ -932,14 +925,14 @@ static int traverse_chained_control_pointers(struct genz_dev *zdev,
 	/* Find the offset for the chained field in this structure type. */
 	chain_offset = find_chain_offset(&genz_struct_type_to_ptrs[hdr.type]);
 	if (chain_offset < 0) {
-		pr_debug("%s: could not find the chain pointer\n", __func__);
+		pr_debug("could not find the chain pointer\n");
 		return (int)chain_offset;
 	}
 
 	/* Create the container directory for all the chained structures */
 	struct_dir = alloc_control_info(zdev, &hdr, hdr_offset, parent);
 	if (struct_dir == NULL) {
-		pr_debug("%s: failed to allocate control_info\n", __func__);
+		pr_debug("failed to allocate control_info\n");
 		return -ENOMEM;
 	}
 
@@ -956,7 +949,7 @@ static int traverse_chained_control_pointers(struct genz_dev *zdev,
 		/* Allocate a genz_control_info/kobject for this directory */
 		ci = alloc_control_info(zdev, &hdr, hdr_offset, struct_dir);
 		if (ci == NULL) {
-			pr_debug("%s: failed to allocate control_info\n", __func__);
+			pr_debug("failed to allocate control_info\n");
 			return -ENOMEM;
 		}
 
@@ -1024,7 +1017,7 @@ static int traverse_structure(struct genz_dev *zdev,
 	/* Allocate a genz_control_info with a kobject for this directory */
 	ci = alloc_control_info(zdev, &hdr, hdr_offset, parent);
 	if (ci == NULL) {
-		pr_debug("%s: failed to allocate control_info\n", __func__);
+		pr_debug("failed to allocate control_info\n");
 		return -ENOMEM;
 	}
 
@@ -1132,35 +1125,34 @@ int genz_control_read_structure(struct genz_dev *zdev,
 	struct genz_bridge_driver *zbdrv;
 
 	if (zdev == NULL) {
-		pr_debug("%s: zdev is NULL\n", __func__);
+		pr_debug("zdev is NULL\n");
 		return -EINVAL;
 	}
 	zbdev = zdev->zbdev;
 	if (!zdev_is_local_bridge(zdev)) {
-		pr_debug("%s: zbdev not a bridge\n", __func__);
+		pr_debug("zbdev not a bridge\n");
 		return -EINVAL;
 	}
 	zbdrv = zbdev->zbdrv;
 	if (zbdrv == NULL) {
-		pr_debug("%s: zbdrv is NULL\n", __func__);
+		pr_debug("zbdrv is NULL\n");
 		return -EINVAL;
 	}
 	if (zbdrv->control_read == NULL) {
-		pr_debug("%s: missing control_read()\n", __func__);
+		pr_debug("missing control_read()\n");
 		return -EINVAL;
 	}
 	if (buf == NULL) {
-		pr_debug("%s: buf is NULL\n", __func__);
+		pr_debug("buf is NULL\n");
 		return -EINVAL;
 	}
 	if (field_size == 0) {
-		pr_debug("%s: field_size is 0\n", __func__);
+		pr_debug("field_size is 0\n");
 		return -EINVAL;
 	}
 	ret = zbdrv->control_read(zdev, cs_offset+field_offset, field_size, buf, 0);
 	if (ret) {
-		pr_debug("%s: control read failed with %d\n",
-			__func__, ret);
+		pr_debug("control read failed with %d\n", ret);
 		return ret;
 	}
 
@@ -1182,7 +1174,7 @@ int genz_control_read_cid0(struct genz_dev *zdev, uint16_t *cid0)
 	if (ret)
 		return ret;
 	*cid0 = ((buf >> 8) & 0xFFF);
-	pr_debug("%s: 0x%x\n", __func__, *cid0);
+	pr_debug("0x%x\n", *cid0);
 	return ret;
 }
 
@@ -1193,7 +1185,7 @@ int genz_control_read_sid(struct genz_dev *zdev, uint16_t *sid)
 	ret = genz_control_read_structure(zdev, sid, 0,
 			0xB8, /* Revisit: how to get offsets better */
 			sizeof(*sid));
-	pr_debug("%s: 0x%x\n", __func__, *sid);
+	pr_debug("0x%x\n", *sid);
 	return ret;
 }
 
@@ -1204,7 +1196,7 @@ int genz_control_read_cclass(struct genz_dev *zdev, uint16_t *cclass)
 	ret = genz_control_read_structure(zdev, cclass, 0,
 			0x18, /* Revisit: how to get offsets better */
 			sizeof(*cclass));
-	pr_debug("%s: 0x%x\n", __func__, *cclass);
+	pr_debug("0x%x\n", *cclass);
 	return ret;
 }
 
@@ -1215,7 +1207,7 @@ int genz_control_read_fru_uuid(struct genz_dev *zdev, uuid_t *fru_uuid)
 	ret = genz_control_read_structure(zdev, fru_uuid, 0,
 			0x1F0, /* Revisit: how to get offsets better */
 			sizeof(*fru_uuid));
-	pr_debug("%s: %pUb\n", __func__, fru_uuid);
+	pr_debug("%pUb\n", fru_uuid);
 	return ret;
 }
 
@@ -1226,7 +1218,7 @@ int genz_control_read_c_uuid(struct genz_dev *zdev, uuid_t *c_uuid)
 	ret = genz_control_read_structure(zdev, c_uuid, 0,
 			0x1E0, /* Revisit: how to get offsets better */
 			sizeof(*c_uuid));
-	pr_debug("%s: %pUb\n", __func__, c_uuid);
+	pr_debug("%pUb\n", c_uuid);
 	return ret;
 }
 
@@ -1409,7 +1401,7 @@ int genz_create_sysfs_dev_files(struct genz_dev *zdev)
 	struct device *fab_dev;
 
 	if (zdev == NULL) {
-		pr_debug("%s: zdev is NULL\n", __func__);
+		pr_debug("zdev is NULL\n");
 		return -EINVAL;
 	}
 
