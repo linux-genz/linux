@@ -56,9 +56,12 @@ static inline int wildcat_uuid_cmp(const uuid_t *u1, const uuid_t *u2)
 	return memcmp(u1, u2, sizeof(uuid_t));
 }
 
-static inline bool wildcat_uuid_is_local(struct bridge *br, uuid_t *uuid)
+static inline bool wildcat_uuid_is_local(struct genz_bridge_dev *gzbr,
+					 uuid_t *uuid)
 {
-	return wildcat_gcid_from_uuid(uuid) == br->gcid;
+	uint32_t gcid = genz_dev_gcid(&gzbr->zdev, 0);
+
+	return wildcat_gcid_from_uuid(uuid) == gcid;
 }
 
 #endif /* _WILDCAT_UUID_H_ */

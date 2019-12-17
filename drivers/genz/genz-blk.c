@@ -93,16 +93,8 @@ struct genz_bdev {  /* one per genz_resource == genz_bdev_probe */
 struct genz_blk_cmd {  /* one per request */
 	struct scatterlist sg[GENZ_BLK_MAX_SG];
 	int nents;
-	unsigned short segments;
 	blk_status_t error;
 	struct genz_sgl_info sgli;
-	/* Revisit: copied from null_blk - what do we actually need? */
-	//struct list_head list;
-	//struct llist_node ll_list;
-	//struct __call_single_data csd;
-	//struct bio *bio;
-	//struct nullb_queue *nq;
-	//struct hrtimer timer;
 };
 #define to_genz_blk_cmd(x) container_of(x, struct genz_blk_cmd, sgli)
 
@@ -256,8 +248,6 @@ static int bdev_bio_chunk_done(struct device *dev,
 }
 #endif
 
-#define GENZ_BLK_WAIT_TIME (2 * HZ) /* 2 seconds */  /* Revisit */
-
 static const struct block_device_operations genz_bdev_ops = {
 	.owner   = THIS_MODULE,
 	.open    = genz_bdev_open,
@@ -274,8 +264,10 @@ static void genz_blk_sgl_cmpl(struct genz_dev *zdev,
 	dma_unmap_sg(sgli->xdmi->dma_dev, cmd->sg, cmd->nents,
 		     rq_dma_dir(req));
 	cmd->error = errno_to_blk_status(sgli->status);
-	dev_dbg(&zdev->dev, "req=%px, status=%d, error=%d\n",
-		req, sgli->status, cmd->error);
+	/* Revisit: debug */
+	dev_dbg_ratelimited(&zdev->dev, "tag=0x%x, req=%px, cpu=%d, status=%d, error=%d\n",
+			    sgli->tag, req, smp_processor_id(),
+			    sgli->status, cmd->error);
 	blk_mq_end_request(req, cmd->error);
 }
 
@@ -294,52 +286,65 @@ static blk_status_t genz_blk_queue_rq(struct blk_mq_hw_ctx *hctx,
 	const u32 lba = blk_rq_pos(req);
 	const u32 count = blk_rq_sectors(req);
 	const int data_dir = rq_data_dir(req);
-	unsigned short segments = blk_rq_nr_phys_segments(req);
 	blk_status_t ret = BLK_STS_OK;
 	int nr_mapped, err;
 
 	might_sleep_if(hctx->flags & BLK_MQ_F_BLOCKING);
 
 	/* setup cmd */
-	cmd->segments = segments;
+	cmd->sgli.nr_sg = 0;
 	cmd->sgli.rmri = rmri;
 	cmd->sgli.xdmi = &bctx->xdmi;
 	cmd->sgli.cmd = (data_dir == WRITE) ? GENZ_XDM_WRITE : GENZ_XDM_READ;
 	cmd->sgli.tag = tag;
 	cmd->sgli.offset = (loff_t)lba * KERNEL_SECTOR_SIZE;
 	cmd->sgli.sg = cmd->sg;
+	atomic_set(&cmd->sgli.nr_cmpls, 0);
 	cmd->sgli.cmpl_fn = genz_blk_sgl_cmpl;
-	dev_dbg_ratelimited(dev, "cmd=%s, tag=%u, lba=%u, count=%u, segments=%hu, offset=%llu\n",
-			    (cmd->sgli.cmd == GENZ_XDM_WRITE) ? "WR" : "RD",
-			    tag, lba, count, cmd->segments,
-			    cmd->sgli.offset);
 	/* map data */
 	/* Revisit: add non-XDM version */
 	cmd->nents = blk_rq_map_sg(q, req, cmd->sg);
 	if (!cmd->nents) {
+		dev_dbg(dev, "nents is 0: tag=0x%x, req=%px\n", tag, req);
 		ret = BLK_STS_RESOURCE;
 		goto out;
 	}
-	if (cmd->segments > 0) {
+	if (cmd->nents > 0) {
 		nr_mapped = dma_map_sg_attrs(bctx->xdmi.dma_dev,
 					     cmd->sg, cmd->nents,
 					     rq_dma_dir(req), DMA_ATTR_NO_WARN);
 		if (!nr_mapped) {
+			dev_dbg(dev, "nr_sg is 0: tag=0x%x, req=%px\n",
+				tag, req);
 			ret = BLK_STS_RESOURCE;
 			goto out;
 		}
 		cmd->sgli.nr_sg = nr_mapped;
 	}
+	/* Revisit: debug */
+	dev_dbg_ratelimited(dev, "cmd=%s, tag=0x%x, req=%px, lba=%u, count=%u, nr_sg=%d, offset=%llu, cpu=%d\n",
+			    (cmd->sgli.cmd == GENZ_XDM_WRITE) ? "WR" : "RD",
+			    tag, req, lba, count, cmd->sgli.nr_sg,
+			    cmd->sgli.offset, smp_processor_id());
 	blk_mq_start_request(req);
 	/* submit cmd */
 	err = genz_sgl_request(zdev, &cmd->sgli);
-	if (err < 0)
-		ret = errno_to_blk_status(err);
-
-out:
-	if (ret != BLK_STS_OK) {
-		/* Revisit: unmap data */
+	if (err < 0) {
+		dev_dbg(dev, "cmd=%s, tag=0x%x, err=%d\n",
+			(cmd->sgli.cmd == GENZ_XDM_WRITE) ? "WR" : "RD",
+			tag, err);
+		if (err == -EBUSY || err == -EXFULL)
+			ret = BLK_STS_DEV_RESOURCE;
+		else
+			ret = errno_to_blk_status(err);
 	}
+
+	if (ret != BLK_STS_OK) {
+		/* unmap data */
+		dma_unmap_sg(bctx->xdmi.dma_dev, cmd->sg, cmd->nents,
+			     rq_dma_dir(req));
+	}
+out:
 	return ret;
 }
 
@@ -516,6 +521,10 @@ static int genz_blk_construct_bdev(struct genz_bdev *zbd,
 	/* Gen-Z does not need bouncing. */
 	blk_queue_bounce_limit(zbd->queue, BLK_BOUNCE_ANY);
 	blk_queue_write_cache(zbd->queue, false, false);
+
+        /* Tell the block layer that this is not a rotational device */
+        blk_queue_flag_set(QUEUE_FLAG_NONROT, zbd->queue);
+        blk_queue_flag_clear(QUEUE_FLAG_ADD_RANDOM, zbd->queue);
 
 	return genz_blk_register_gendisk(zbd);
 }
@@ -720,9 +729,8 @@ static int genz_blk_probe(struct genz_dev *zdev,
 	bstate->bbr = bbr;
 	dev_dbg(&zdev->dev, "instance_uuid=%pUb\n", &zdev->instance_uuid);
 	/* Revisit: need non-wildcat-specific UUID_IMPORT */
-	/* Revisit: should not need UUID_IS_FAM */
 	ret = wildcat_kernel_UUID_IMPORT(&bbr->mem_data, &zdev->instance_uuid,
-					 UUID_IS_FAM, GFP_KERNEL);
+					 0, GFP_KERNEL);
 	if (ret < 0)
 		goto out; /* Revisit: undo bstate */
 	genz_for_each_resource(zres, zdev) {

@@ -355,7 +355,6 @@ struct rdm_info {
 };
 
 struct bridge {
-	uint32_t                gcid;
 	struct slice            slice[SLICES];
 	spinlock_t              zmmu_lock;  /* global bridge zmmu lock */
 	struct genz_xdm_info    msg_xdm;

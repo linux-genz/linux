@@ -137,7 +137,7 @@ static void _zmmu_req_pte_write(struct genz_pte_info *info,
 {
 	struct wildcat_req_pte pte = { 0 }, tmp;
 	uint i, first = info->pte_index, last = first + info->zmmu_pages - 1;
-	uint64_t addr, ps;
+	uint64_t addr, ps, pa;
 	char str[GCID_STRING_LEN+1];
 
 	/* caller must hold slice zmmu_lock & have done kernel_fpu_save() */
@@ -152,20 +152,22 @@ static void _zmmu_req_pte_write(struct genz_pte_info *info,
 	pte.rkey = info->req.rkey;
 	pte.v = valid;
 	ps = BIT_ULL(info->pg->page_grid.page_size_0);
+	pa = genz_zmmu_pte_addr(info, info->addr_aligned);
 	addr = info->addr_aligned;
 
 	for (i = first; i <= last; i++) {
 		pte.addr = addr >> 12;
-		pr_debug("pte[%u]@%px:addr=0x%llx, pasid=0x%x, "
+		pr_debug("pte[%u]@pa=0x%llx:za=0x%llx, pasid=0x%x, "
 			 "dgcid=%s, space_type=%u, rke=%u, rkey=0x%x, "
 			 "traffic_class=%u, dc_grp=%u, v=%u\n",
-			 i, &reqz->pte[i],
-			 (uint64_t)pte.addr, pte.pasid,
+			 i, pa,
+			 (uint64_t)pte.addr << 12, pte.pasid,
 			 genz_gcid_str(pte.dgcid, str, sizeof(str)),
 			 pte.space_type, pte.rke, pte.rkey,
 			 pte.traffic_class, pte.dc_grp, pte.v);
 		iowrite32by(&pte, &reqz->pte[i]);
 		addr += ps;
+		pa += ps;
 	}
 
 	if (sync)  /* ensure visibility */

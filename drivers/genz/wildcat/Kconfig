@@ -5,7 +5,7 @@
 
 menuconfig GENZ_WILDCAT
 	tristate "Gen-Z Wildcat Bridge support"
-	depends on GENZ
+	depends on GENZ && AMD_IOMMU_V2
 	---help---
 	  This option enables the Gen-Z Wildcat bridge driver.
 

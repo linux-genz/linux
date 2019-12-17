@@ -205,6 +205,7 @@ struct genz_sgl_info {
 	struct scatterlist *sg;
 	int nr_sg;
 	int status;
+	atomic_t nr_cmpls;
 	sgl_cmpl_fn cmpl_fn;
 };
 
