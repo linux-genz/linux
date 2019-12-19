@@ -46,14 +46,27 @@ static struct genz_device_id genz_blk_id_table[] = {
 
 MODULE_DEVICE_TABLE(genz, genz_blk_id_table);
 
+uint genz_blk_hw_queues = 2;  /* Revisit: tune default */
+module_param_named(hw_queues, genz_blk_hw_queues, uint, S_IRUGO);
+MODULE_PARM_DESC(hw_queues, "Number of Gen-Z block HW queues (default=2)");
+
+uint genz_blk_queue_depth = 64;  /* Revisit: tune default */
+module_param_named(queue_depth, genz_blk_queue_depth, uint, S_IRUGO);
+MODULE_PARM_DESC(queue_depth, "Gen-Z block queue depth (default=64)");
+
+uint genz_blk_qfactor = 16;  /* Revisit: tune default */
+module_param_named(qfactor, genz_blk_qfactor, uint, S_IRUGO);
+MODULE_PARM_DESC(qfactor, "Gen-Z block XDM qfactor (default=16)");
+
 struct genz_blk_bridge { /* one per bridge */
 	struct list_head       bbr_node;
 	struct genz_bridge_dev *zbdev;
 	struct blk_mq_tag_set  *tag_set;
 	struct blk_mq_tag_set  __tag_set;
-	struct genz_blk_ctx    *bctx;
+	struct genz_blk_ctx    *bctx;      /* array */
 	struct genz_mem_data   mem_data;
 	uuid_t                 uuid;
+	struct kref            kref;
 };
 
 struct genz_blk_state {  /* one per genz_blk_probe */
@@ -69,6 +82,8 @@ struct genz_blk_ctx {  /* one per XDM */
 	struct genz_blk_bridge *bbr;
 	struct genz_xdm_info   xdmi;
 	struct genz_rdm_info   rdmi;
+	struct mutex           lock;
+	struct kref            kref;
 	bool                   have_rdmi;
 	/* Revisit: other stuff */
 };
@@ -389,8 +404,6 @@ static int genz_blk_init_rq(struct blk_mq_tag_set *set, struct request *req,
 //	struct genz_blk_cmd *const cmd = blk_mq_rq_to_pdu(rq);
 //}
 
-#define QFACTOR  16  /* Revisit: compute or make tunable */
-
 static int genz_blk_init_hctx(struct blk_mq_hw_ctx *hctx, void *data,
 			      uint index)
 {
@@ -398,14 +411,22 @@ static int genz_blk_init_hctx(struct blk_mq_hw_ctx *hctx, void *data,
 	struct genz_blk_ctx *bctx;
 	struct genz_bridge_info *br_info = &bbr->zbdev->br_info;
 	struct genz_rdm_info *rdmi = NULL;
-	int ret;
+	int ret = 0;
 
-	pr_debug("bbr=%px, index=%u\n", bbr, index);
-	/* fill in genz_blk_ctx */
+	pr_debug("hctx=%px, bbr=%px, index=%u\n", hctx, bbr, index);
 	bctx = &bbr->bctx[index];
+	mutex_lock(&bctx->lock);
+	hctx->driver_data = bctx;
+	if (bctx->bbr) {
+		kref_get(&bctx->kref);
+		goto unlock;
+	}
+	/* fill in genz_blk_ctx */
+	kref_init(&bctx->kref);
+	kref_get(&bbr->kref);
 	bctx->bbr = bbr;
 	/* Revisit: add non-XDM mode */
-	bctx->xdmi.cmdq_ent = bbr->tag_set->queue_depth * QFACTOR;
+	bctx->xdmi.cmdq_ent = bbr->tag_set->queue_depth * genz_blk_qfactor;
 	bctx->xdmi.cmplq_ent = bctx->xdmi.cmdq_ent;
 	bctx->xdmi.traffic_class = GENZ_TC_0;
 	bctx->xdmi.priority = 0;
@@ -420,26 +441,47 @@ static int genz_blk_init_hctx(struct blk_mq_hw_ctx *hctx, void *data,
 	}
 	/* allocate XDM (and maybe RDM) queue */
 	ret = genz_alloc_queues(bbr->zbdev, &bctx->xdmi, rdmi);
-	if (ret < 0)
-		goto free;
-	hctx->driver_data = bctx;
 
-	return 0;
-
-free:
-	kfree(bctx);
+unlock:
+	mutex_unlock(&bctx->lock);
 	return ret;
+}
+
+static void free_bbr(struct kref *ref)
+{
+	struct genz_blk_bridge *bbr = container_of(
+		ref, struct genz_blk_bridge, kref);
+
+	pr_debug("bbr=%px\n", bbr);
+	mutex_lock(&genz_blk_lock);
+	list_del(&bbr->bbr_node);
+	mutex_unlock(&genz_blk_lock);
+	kfree(bbr->bctx);
+	kfree(bbr);
+}
+
+static void genz_blk_free_queues(struct kref *ref)
+{
+	struct genz_blk_ctx *bctx = container_of(
+		ref, struct genz_blk_ctx, kref);
+	struct genz_rdm_info *rdmi = (bctx->have_rdmi) ? &bctx->rdmi : NULL;
+
+	pr_debug("bctx=%px, rdmi=%px\n", bctx, rdmi);
+	/* free XDM (and maybe RDM) queue */
+	(void)genz_free_queues(&bctx->xdmi, rdmi);
+	kref_put(&bctx->bbr->kref, free_bbr);
+	bctx->bbr = NULL;
 }
 
 static void genz_blk_exit_hctx(struct blk_mq_hw_ctx *hctx, uint index)
 {
 	struct genz_blk_ctx *bctx = (struct genz_blk_ctx *)hctx->driver_data;
 	struct genz_blk_bridge *bbr = bctx->bbr;
-	struct genz_rdm_info *rdmi = (bctx->have_rdmi) ? &bctx->rdmi : NULL;
 
-	pr_debug("bbr=%px, index=%u, rdmi=%px\n", bbr, index, rdmi);
-	/* free XDM (and maybe RDM) queue */
-	(void)genz_free_queues(&bctx->xdmi, rdmi);
+	pr_debug("bbr=%px, index=%u, bctx=%px\n", bbr, index, bctx);
+	mutex_lock(&bctx->lock);
+	kref_put(&bctx->kref, genz_blk_free_queues);
+	mutex_unlock(&bctx->lock);
 }
 
 static const struct blk_mq_ops genz_blk_mq_ops = {
@@ -539,21 +581,24 @@ static void genz_blk_destroy_bdev(struct genz_bdev *zbd)
 static int genz_blk_init_tag_set(struct genz_blk_bridge *bbr)
 {
 	struct genz_blk_ctx *bctx;
+	uint i;
 
 	bbr->tag_set = &bbr->__tag_set; /* Revisit: need this? */
 	bbr->tag_set->ops = &genz_blk_mq_ops;
-	bbr->tag_set->nr_hw_queues = 2; /* Revisit */
-	bbr->tag_set->queue_depth = 64; /* Revisit */
+	bbr->tag_set->nr_hw_queues = genz_blk_hw_queues;
+	bbr->tag_set->queue_depth = genz_blk_queue_depth;
 	bbr->tag_set->cmd_size = sizeof(struct genz_blk_cmd);
 	bbr->tag_set->numa_node = NUMA_NO_NODE;
 	bbr->tag_set->flags = BLK_MQ_F_SHOULD_MERGE |
 		BLK_ALLOC_POLICY_TO_MQ_FLAG(BLK_TAG_ALLOC_FIFO);
-	bbr->tag_set->driver_data = bbr; /* Revisit: need this? */
+	bbr->tag_set->driver_data = bbr;
 	/* allocate array of genz_blk_ctx */
 	bctx = kzalloc(sizeof(*bctx) * bbr->tag_set->nr_hw_queues, GFP_KERNEL);
 	if (!bctx) {
 		return -ENOMEM;
 	}
+	for (i = 0; i < bbr->tag_set->nr_hw_queues; i++)
+		mutex_init(&bctx[i].lock);
 	bbr->bctx = bctx;
 	return blk_mq_alloc_tag_set(bbr->tag_set);
 }
@@ -569,7 +614,9 @@ static struct genz_blk_bridge *find_bbr(struct genz_bridge_dev *zbdev)
 	mutex_lock(&genz_blk_lock);
 	list_for_each_entry(bbr, &genz_blk_bbr_list, bbr_node) {
 		if (bbr->zbdev == zbdev) {
-			pr_debug("found bbr=%px\n", bbr);
+			kref_get(&bbr->kref);
+			pr_debug("found bbr=%px, kref=%u\n",
+				 bbr, kref_read(&bbr->kref));
 			goto unlock;
 		}
 	}
@@ -580,6 +627,7 @@ static struct genz_blk_bridge *find_bbr(struct genz_bridge_dev *zbdev)
 		goto unlock;
 	}
 	bbr->zbdev = zbdev;
+	kref_init(&bbr->kref);
 	err = genz_blk_init_tag_set(bbr);
 	if (err < 0) {
 		goto free;
@@ -721,7 +769,7 @@ static int genz_blk_probe(struct genz_dev *zdev,
 	init_waitqueue_head(&bstate->block_io_queue);
 	genz_set_drvdata(zdev, bstate);
 
-	bbr = find_bbr(zbdev);
+	bbr = find_bbr(zbdev);  /* gets bbr kref */
 	if (IS_ERR(bbr)) {
 		ret = PTR_ERR(bbr);
 		goto out;  /* Revisit: other cleanup */
@@ -765,6 +813,7 @@ static int genz_blk_remove(struct genz_dev *zdev)
 	/* Revisit: need non-wildcat-specific UUID_FREE */
 	ret = wildcat_common_UUID_FREE(&bbr->mem_data,
 				       &zdev->instance_uuid, &uu_flags, &local);
+	kref_put(&bstate->bbr->kref, free_bbr);
 	kfree(bstate);
 	return ret;
 }
