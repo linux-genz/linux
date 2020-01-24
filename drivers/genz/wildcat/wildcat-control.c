@@ -50,6 +50,25 @@
 #define WILDCAT_DVSEC_MBOX_ADDR_OFF  (0x34)
 #define WILDCAT_DVSEC_MBOX_DATAL_OFF (0x38)
 #define WILDCAT_DVSEC_MBOX_DATAH_OFF (0x3C)
+#define WILDCAT_DVSEC_SLINK_BASE_OFF (0x40)
+
+uint64_t wildcat_slink_base(struct bridge *br)
+{
+	struct slice        *sl = &br->slice[0];
+	int                 pos;
+	uint32_t            val;
+	uint64_t            slink_base = 0;
+
+	pos = pci_find_ext_capability(sl->pdev, PCI_EXT_CAP_ID_DVSEC);
+	if (!pos)
+		goto out;
+	pci_read_config_dword(sl->pdev, pos + WILDCAT_DVSEC_SLINK_BASE_OFF,
+			      &val);
+	/* S-link base is in GiB */
+	slink_base = GB((uint64_t)val);
+out:
+	return slink_base;
+}
 
 static int csr_access_rd(struct bridge *br, uint32_t csr, uint64_t *data)
 {

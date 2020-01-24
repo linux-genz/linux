@@ -158,6 +158,7 @@ struct genz_bridge_info {
 	uint64_t max_cpuvisible_addr;
 	uint64_t min_nonvisible_addr;
 	uint64_t max_nonvisible_addr;
+	uint64_t cpuvisible_phys_offset;
 	uint64_t xdm_max_xfer;
 };
 
@@ -346,12 +347,14 @@ struct genz_pte_info {
 };
 
 #define PAGE_GRID_ENTRIES (16)  /* Revisit: make dynamic */
+#define PAGE_GRID_PS_BITS (64)
+
 struct genz_page_grid_info {
 	/* Revisit: make pg and pg_bitmap dynamic */
 	struct genz_page_grid pg[PAGE_GRID_ENTRIES];
 	DECLARE_BITMAP(pg_bitmap, PAGE_GRID_ENTRIES);
-	DECLARE_BITMAP(pg_cpu_visible_ps_bitmap, 64); /* req page grids only */
-	DECLARE_BITMAP(pg_non_visible_ps_bitmap, 64);
+	DECLARE_BITMAP(pg_cpu_visible_ps_bitmap, PAGE_GRID_PS_BITS); /* req page grids only */
+	DECLARE_BITMAP(pg_non_visible_ps_bitmap, PAGE_GRID_PS_BITS);
 	struct radix_tree_root pg_pagesize_tree;
 	uint                   pte_entries;
 	struct rb_root         base_pte_tree;
@@ -554,6 +557,7 @@ struct genz_rmr_info {
 	uint64_t     len;
 	uint64_t     access;
 	void         *cpu_addr;
+	ulong        pfn;
 	uint32_t     pg_ps;
 	uint32_t     gcid;
 };

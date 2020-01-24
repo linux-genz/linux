@@ -915,6 +915,7 @@ int genz_rmr_import(
 	int                     status = 0;
 	struct genz_rmr         *rmr;
 	bool                    remote, cpu_visible, writable, individual;
+	uint64_t cpuvisible_offset = br_info->cpuvisible_phys_offset;
 
 	rmri->rsp_zaddr = rsp_zaddr;
 	rmri->len = len;
@@ -955,11 +956,12 @@ int genz_rmr_import(
 	}
 
 	rmr->req_addr = rmri->req_addr;
-	rmr->mmap_pfn = ROUND_DOWN_PAGE(rmri->req_addr,
-					BIT_ULL(rmri->pg_ps)) >> PAGE_SHIFT;
+	rmr->mmap_pfn = PHYS_PFN(rmr->req_addr + cpuvisible_offset);
 
 	if (cpu_visible) {
-		rmri->cpu_addr = memremap(rmri->req_addr, len, MEMREMAP_WB);
+		rmri->cpu_addr = memremap(PFN_PHYS(rmr->mmap_pfn),
+					  len, MEMREMAP_WB);
+		rmri->pfn = rmr->mmap_pfn;
 	}
 
  out:

@@ -651,12 +651,22 @@ static struct genz_page_grid *zmmu_pg_page_size(struct genz_pte_info *ptei,
 		ptei->addr &= ~(BIT_ULL(ps) - 1ull);
 	} else {
 		length_adjusted = roundup_pow_of_two(ptei->length);
+		addr_aligned = ROUND_DOWN_PAGE(ptei->addr, length_adjusted);
+		if (addr_aligned != ptei->addr)
+			length_adjusted <<= 1;
 		ps = clamp(ilog2(length_adjusted),
 			   GENZ_PAGE_GRID_MIN_PAGESIZE,
 			   GENZ_PAGE_GRID_MAX_PAGESIZE);
+		/* try to find a page the fits the (adjusted) length */
 		ps = find_next_bit(
 			(cpu_visible) ? pgi->pg_cpu_visible_ps_bitmap :
-			pgi->pg_non_visible_ps_bitmap, 64, ps);
+			pgi->pg_non_visible_ps_bitmap, PAGE_GRID_PS_BITS, ps);
+		/* if that fails, then the largest available */
+		if (ps == PAGE_GRID_PS_BITS)
+			ps = find_last_bit((cpu_visible) ?
+					   pgi->pg_cpu_visible_ps_bitmap :
+					   pgi->pg_non_visible_ps_bitmap,
+					   PAGE_GRID_PS_BITS);
 		key = ps + ((cpu_visible) ? GENZ_PAGE_GRID_MAX_PAGESIZE : 0);
 		gz_pg = radix_tree_lookup(&pgi->pg_pagesize_tree, key);
 	}
