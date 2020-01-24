@@ -42,7 +42,8 @@ from ctypes import *
 from enum import Enum, IntEnum
 from collections import defaultdict
 
-pmem = cdll.LoadLibrary('libpmem.so.1')
+mcommit = cdll.LoadLibrary(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), 'libmcommit.so'))
 
 c_u8  = c_ubyte
 c_u16 = c_ushort
@@ -1228,5 +1229,11 @@ def mmap_vaddr_len(mm):
     pythonapi.PyObject_AsReadBuffer(obj, byref(vaddr), byref(length))
     return (vaddr.value, length.value)
 
-def pmem_flush(vaddr, length):
-    pmem.pmem_flush(c_void_p(vaddr), c_size_t(length))
+def invalidate(vaddr, length, fence):
+    mcommit.invalidate(c_void_p(vaddr), c_size_t(length), c_bool(fence))
+
+def flush(vaddr, length, fence):
+    mcommit.flush(c_void_p(vaddr), c_size_t(length), c_bool(fence))
+
+def commit(vaddr, length, fence):
+    mcommit.commit(c_void_p(vaddr), c_size_t(length), c_bool(fence))

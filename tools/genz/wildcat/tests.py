@@ -54,7 +54,7 @@ class Tests():
     sync.opcode = wildcat.XDM_CMD.SYNC|wildcat.XDM_CMD.FENCE
 
     def __init__(self, lmr, lmm, rmr, rmr_sz, rmm, xdm, verbosity=0,
-                 load_store=True):
+                 load_store=True, pagesize=4096):
         self.lmr = lmr
         self.lmm = lmm
         self.rmr = rmr
@@ -66,8 +66,8 @@ class Tests():
         self.maxsz = min(self.lmm_l, rmr_sz)
         if rmm is not None:
             self.rmm_v, self.rmm_l = wildcat.mmap_vaddr_len(rmm)
-        self.pg_sz = 1 << rmr.pg_ps
-        mask = (-self.pg_sz) & ((1 << 64) - 1)
+        self.pagesize = pagesize
+        mask = (-self.pagesize) & ((1 << 64) - 1)
         self.pg_off = rmr.req_addr & ~mask
 
     def test_load_store(self, offset=0):
@@ -82,8 +82,8 @@ class Tests():
                   .format(offset, rmm_off, self.rmm_v))
         self.rmm[rmm_off:rmm_off+Tests.len1] = Tests.str1
         self.rmm[rmm_off+Tests.len1:rmm_off+Tests.len1_2] = Tests.str2
-        # flush rmm writes, so rmm reads will generate new Gen-Z packets
-        wildcat.pmem_flush(self.rmm_v+rmm_off, Tests.len1_2)
+        # invalidate rmm writes, so rmm reads will generate new Gen-Z packets
+        wildcat.invalidate(self.rmm_v+rmm_off, Tests.len1_2, True)
         expected = Tests.str1 + Tests.str2
         if self.verbosity:
             print('rmm[{}:{}] after load/store="{}"'.format(
@@ -91,10 +91,10 @@ class Tests():
                 self.rmm[rmm_off:rmm_off+Tests.len1_2].decode()))
         if self.rmm[rmm_off:rmm_off+Tests.len1_2] != expected:
             raise IOError
-        # flush rmm again, so cache is empty for next test
-        wildcat.pmem_flush(self.rmm_v+rmm_off, Tests.len1_2)
+        # invalidate rmm after reads, so cache is empty for next test
+        wildcat.invalidate(self.rmm_v+rmm_off, Tests.len1_2, True)
 
-    def test_PUT_IMM(self, data=str3, offset=len1_2+1):
+    def test_PUT_IMM(self, data=str3, offset=len1_2+64):
         sz = len(data)
         if sz < 1 or sz > 32:
             raise ValueError
@@ -123,8 +123,8 @@ class Tests():
                     rmm_off, rmm_off+sz, self.rmm[rmm_off:rmm_off+sz].decode()))
             if self.rmm[rmm_off:rmm_off+sz] != data:
                 raise IOError
-            # flush rmm, so cache is empty for next test
-            wildcat.pmem_flush(self.rmm_v+rmm_off, sz)
+            # invalidate rmm after reads, so cache is empty for next test
+            wildcat.invalidate(self.rmm_v+rmm_off, sz, True)
 
     def test_GET_IMM(self, offset=0, sz=len1_2):
         if sz < 1 or sz > 32:
@@ -150,8 +150,8 @@ class Tests():
             if bytes(cmpl.getimm.payload[0:sz]) != self.rmm[rmm_off:rmm_off+sz]:
                 raise IOError
             # Revisit: check that payload bytes beyond sz are 0
-            # flush rmm, so cache is empty for next test
-            wildcat.pmem_flush(self.rmm_v+rmm_off, sz)
+            # invalidate rmm after reads, so cache is empty for next test
+            wildcat.invalidate(self.rmm_v+rmm_off, sz, True)
 
     def test_PUT(self, loc_offset=0, rem_offset=0, sz=None):
         if sz is None:
@@ -167,6 +167,10 @@ class Tests():
         if self.verbosity:
             print('test_PUT: local_addr={:#x}, sz={}, rem_addr={:#x}'
                   .format(local_addr, sz, rem_addr))
+        if self.rmm is not None:
+            rmm_off = self.pg_off + rem_offset
+            # invalidate rmm before PUT, so cache is empty for later reads
+            wildcat.invalidate(self.rmm_v+rmm_off, sz, True)
         start = time.monotonic()
         self.xdm.queue_cmd(put)
         try:
@@ -183,7 +187,6 @@ class Tests():
         if self.verbosity:
             print('lmm sha256="{}"'.format(lmm_sha256))
         if self.rmm is not None:
-            rmm_off = self.pg_off + rem_offset
             rmm_sha256 = hashlib.sha256(
                 self.rmm[rmm_off:rmm_off+sz]).hexdigest()
             if self.verbosity:
@@ -201,8 +204,8 @@ class Tests():
                     self.rmm[rmm_off:rmm_off+100]))
             if lmm_sha256 != rmm_sha256:
                 raise IOError
-            # flush rmm, so cache is empty for next test
-            wildcat.pmem_flush(self.rmm_v+rmm_off, sz)
+            # invalidate rmm after reads, so cache is empty for next test
+            wildcat.invalidate(self.rmm_v+rmm_off, sz, True)
         # end if self.rmm
         secs = end - start
         if self.verbosity:
@@ -234,7 +237,7 @@ class Tests():
             print('GET cmpl error: {} {:#x} request_id {:#x}'.format(
                 e, e.status, e.request_id))
         # Revisit: need fence/sync/flush to ensure visibility?
-        if self.rmm:
+        if self.rmm is not None:
             rmm_off = self.pg_off + rem_offset
             lmm_sha256 = hashlib.sha256(
                 self.lmm[loc_offset:loc_offset+sz]).hexdigest()
@@ -257,8 +260,8 @@ class Tests():
                     self.rmm[rmm_off:rmm_off+100]))
             if lmm_sha256 != rmm_sha256:
                 raise IOError
-            # flush rmm, so cache is empty for next test
-            wildcat.pmem_flush(self.rmm_v+rmm_off, sz)
+            # invalidate rmm after reads, so cache is empty for next test
+            wildcat.invalidate(self.rmm_v+rmm_off, sz, True)
         # end if self.rmm
         secs = end - start
         if self.verbosity:

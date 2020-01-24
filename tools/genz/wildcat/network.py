@@ -37,6 +37,7 @@
 import json
 import sys
 import mmap
+import subprocess
 from wildcat import zuuid, MR, UU
 from tests import Tests
 from time import time
@@ -72,6 +73,8 @@ class MyProtocol(Protocol):
         self.nodeid = self.factory.nodeid
         self.lc_ping = LoopingCall(self.send_ping)
         self.lastping = time()
+        self.pagesize = int(subprocess.check_output('getconf PAGESIZE',
+                                                    shell=True))
 
     def write(self, line):
         self.transport.write(bytes(line + '\n', 'utf-8'))
@@ -242,27 +245,27 @@ class MyProtocol(Protocol):
                 conn = self.factory.conn
                 rmr = conn.do_RMR_IMPORT(self.remote_nodeid,
                                          rsp_zaddr, sz, access)
-                pg_sz = 1 << rmr.pg_ps
-                mask = (-pg_sz) & ((1 << 64) - 1)
-                mmsz = (sz + (pg_sz - 1)) & mask
-                pg_off = rmr.req_addr & ~mask
+                mask = (-self.pagesize) & ((1 << 64) - 1)
+                mmsz = (sz + (self.pagesize - 1)) & mask
                 if self.factory.load_store:
                     rmm = mmap.mmap(conn.fno, mmsz, offset=rmr.offset)
                 else:
                     rmm = None
                 t = Tests(self.factory.lmr, self.factory.lmm, rmr, sz, rmm,
                           self.factory.xdm, self.factory.verbosity,
-                          self.factory.load_store)
+                          self.factory.load_store, self.pagesize)
                 t.all_tests()
                 conn.do_RMR_FREE(self.remote_nodeid, rsp_zaddr, sz, access,
                                  rmr.req_addr)
             else:
-                print('skipping tests because mr not remote put/get')
+                print('skipping tests because mr lacks remote put/get access')
         # end for v
+        if self.factory.net_exit:
+            reactor.stop()
 
 class MyFactory(Factory):
     def __init__(self, conn, lmr, lmm, xdm, verbosity, load_store,
-                 requester, responder):
+                 requester, responder, net_exit):
         self.conn = conn
         self.lmr = lmr
         self.lmm = lmm
@@ -271,6 +274,7 @@ class MyFactory(Factory):
         self.load_store = load_store
         self.requester = requester
         self.responder = responder
+        self.net_exit = net_exit
         self.nodeid = conn.init.uuid
         super().__init__()
 
