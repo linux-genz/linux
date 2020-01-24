@@ -227,9 +227,8 @@ struct wildcat_rsp_zmmu {
 	uint8_t                       rv2[RSP_RV2_SZ];
 };
 
-/* Can be useful for testing to reduce the queues per slice. 256 in hw */
-#define XDM_QUEUES_PER_SLICE	16  /* Revisit: temporary */
-#define RDM_QUEUES_PER_SLICE	16
+#define XDM_QUEUES_PER_SLICE	256
+#define RDM_QUEUES_PER_SLICE	256
 #define MAX_RDM_QUEUES_PER_SLICE	256  /* for crazy HW intr mapping */
 
 struct rdm_vector_list {
@@ -250,8 +249,8 @@ struct func1_bar0 {
 #define GB(_x)            ((_x)*BIT_ULL(30))
 #define TB(_x)            ((_x)*BIT_ULL(40))
 
-#define WILDCAT_MIN_CPUVISIBLE_ADDR  (GB(4)+TB(1))
-#define WILDCAT_MAX_CPUVISIBLE_ADDR  (WILDCAT_MIN_CPUVISIBLE_ADDR+TB(250)-1ull)
+#define WILDCAT_MIN_CPUVISIBLE_ADDR  (0x2345678000ul) /* Revisit: debug; was 0 */
+#define WILDCAT_MAX_CPUVISIBLE_ADDR  (TB(250)-1ull)
 #define WILDCAT_MIN_NONVISIBLE_ADDR  TB(256)
 #define WILDCAT_MAX_NONVISIBLE_ADDR  (-1ull)
 

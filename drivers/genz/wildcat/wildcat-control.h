@@ -38,6 +38,7 @@
 #define _WILDCAT_CONTROL_H_
 
 /* Function Prototypes */
+uint64_t wildcat_slink_base(struct bridge *br);
 int wildcat_control_read(struct genz_dev *zdev, loff_t offset, size_t size,
 			 void *data, uint flags);
 int wildcat_control_write(struct genz_dev *zdev, loff_t offset, size_t size,

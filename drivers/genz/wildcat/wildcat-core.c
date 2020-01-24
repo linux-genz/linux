@@ -97,6 +97,7 @@ MODULE_LICENSE("GPL v2");
 MODULE_IMPORT_NS(drivers/genz/genz);
 
 struct bridge    wildcat_bridge = { 0 };
+static uint64_t  wildcat_slink_base_offset;
 
 #define TRACKER_MAX     (256)
 
@@ -906,7 +907,6 @@ static struct genz_bridge_info wildcat_br_info = {
 	.rdm                 = 1,
 	.xdm_cmpl_intr       = 0,
 	.rdm_cmpl_intr       = 1,
-	.load_store          = 0, /* Revisit */
 	.nr_xdm_queues       = XDM_QUEUES_PER_SLICE,
 	.nr_rdm_queues       = RDM_QUEUES_PER_SLICE,
 	.xdm_qlen            = MAX_SW_XDM_QLEN,
@@ -929,6 +929,13 @@ static int wildcat_bridge_info(struct genz_dev *zdev,
 		return -EINVAL;
 
 	wildcat_br_info.loopback = wildcat_loopback != 0;
+	/* workaround for S-link translation: the Wildcat bridge does not
+	 * receive the full CPU physical address, but only an offset from
+	 * the start of the S-link region
+	 */
+	wildcat_br_info.cpuvisible_phys_offset = wildcat_slink_base_offset;
+	/* load/store requires non-zero S-link base offset */
+	wildcat_br_info.load_store = wildcat_slink_base_offset != 0;
 	*info = wildcat_br_info;
 	return 0;
 }
@@ -1079,6 +1086,10 @@ static int wildcat_probe(struct pci_dev *pdev,
 	}
 
 	if (sl->id == 0) {
+		wildcat_slink_base_offset = wildcat_slink_base(br);
+		dev_dbg(&pdev->dev,
+			"wildcat_slink_base_offset=0x%llx\n",
+			wildcat_slink_base_offset);
 		/* register with Gen-Z subsystem on slice 0 only */
 		ret = genz_register_bridge(&pdev->dev,
 					   &wildcat_genz_bridge_driver, br);
@@ -1177,6 +1188,31 @@ static struct pci_driver wildcat_pci_driver = {
 	.remove    = wildcat_remove,
 };
 
+bool wildcat_mcommit;
+
+/* Revisit: this should be in cpufeatures.h */
+#ifndef X86_FEATURE_MCOMMIT
+#define X86_FEATURE_MCOMMIT     (13*32+ 8) /* MCOMMIT instruction */
+#endif
+
+/* Revisit: this should be in msr-index.h */
+#ifndef _EFER_MCOMMIT
+#define _EFER_MCOMMIT           (17)
+#define EFER_MCOMMIT            (1ULL<<_EFER_MCOMMIT)
+#endif
+
+static void __init wildcat_enable_mcommit(void *dummy)
+{
+	uint64_t            efer;
+
+	/* Revisit: locking? */
+	rdmsrl(MSR_EFER, efer);
+	if (!(efer & EFER_MCOMMIT)) {
+		efer |= EFER_MCOMMIT;
+		wrmsrl(MSR_EFER, efer);
+	}
+}
+
 static int __init wildcat_init(void)
 {
 	int                 ret;
@@ -1185,11 +1221,26 @@ static int __init wildcat_init(void)
 	struct subprocess_info *helper_info;
 	uint                sl;
 
-	ret = -EINVAL;
-	if (!(wildcat_no_avx || boot_cpu_has(X86_FEATURE_AVX))) {
-		pr_warning("%s:%s:missing required AVX CPU feature.\n",
+	ret = -ENOSYS;
+	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD) {
+		pr_warning("%s:%s:AMD CPU required\n",
 			   wildcat_driver_name, __func__);
 		goto err_out;
+	}
+	ret = -EINVAL;
+	if (!(wildcat_no_avx || boot_cpu_has(X86_FEATURE_AVX))) {
+		pr_warning("%s:%s:missing required AVX CPU feature\n",
+			   wildcat_driver_name, __func__);
+		goto err_out;
+	}
+	if (boot_cpu_has(X86_FEATURE_MCOMMIT)) {
+		on_each_cpu(wildcat_enable_mcommit, NULL, 1);
+		wildcat_mcommit = true;
+		pr_info("%s:%s:mcommit supported and enabled\n",
+			wildcat_driver_name, __func__);
+	} else {
+		pr_warning("%s:%s:mcommit not supported\n",
+			   wildcat_driver_name, __func__);
 	}
 	ret = -ENOMEM;
 	spin_lock_init(&wildcat_bridge.zmmu_lock);
