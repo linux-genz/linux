@@ -94,6 +94,8 @@ def parse_args():
                         help='test FAM at GCID 0x40')
     parser.add_argument('-L', '--load_store', action='store_false',
                         default=True, help='disable load/store tests')
+    parser.add_argument('-X', '--exit', action='store_true',
+                        help='exit immediately after network requester tests')
     return parser.parse_args()
 
 def main():
@@ -257,7 +259,7 @@ def main():
             import network as net
             factory = net.MyFactory(conn, lmr, lmm, xdm,
                                     args.verbosity, args.load_store,
-                                    args.requester, args.responder)
+                                    args.requester, args.responder, args.exit)
             try:
                 factory.setup(args.port, nodes)
             except net.CannotListenError:
@@ -276,19 +278,26 @@ def main():
         len4 = len(str4)
         len5 = len(str5)
         len1_2 = len1 + len2
-        mm2[0:len1] = str1
-        if args.verbosity:
-            print('mm2 (initial)="{}"'.format(mm2[0:len1].decode()))
+        if args.responder or args.loopback:
+            mm2[0:len1] = str1
+            if args.verbosity:
+                print('mm2 (initial)="{}"'.format(mm2[0:len1].decode()))
         if args.loopback and wc_modp.wildcat_loopback:
             if args.load_store:
+                if args.keyboard:
+                    set_trace()  # Revisit: temporary debug
+                # invalidate rmm2 to read fresh data
+                wildcat.invalidate(v_rmm2, len1, True)
                 if args.verbosity:
                     print('rmm2 (remote)="{}"'.format(rmm2[0:len1].decode()))
                 if mm2[0:len1] != rmm2[0:len1]:
                     print('Error: mm2 "{}" != rmm2 "{}"'.format(
                         mm2[0:len1].decode(), rmm2[0:len1].decode()))
                 rmm2[len1:len1_2] = str2
-                # flush rmm2 writes, so mm2 reads will see new data
-                wildcat.pmem_flush(v_rmm2+len1, len2)
+                # commit rmm2 writes, so mm2 reads will see new data
+                wildcat.commit(v_rmm2+len1, len2, True)
+                # invalidate mm2 to read fresh data
+                wildcat.invalidate(v2, len1_2, False)
                 if args.verbosity:
                     print('mm2 after remote update="{}"'.format(
                         mm2[0:len1_2].decode()))
@@ -718,20 +727,23 @@ def main():
             if args.fam:
                 # Assume CID is 0x40 and create a ZUUID
                 fam_zuu = zuuid(gcid=0x1) # Revisit: fpga test for bringup
-                print('FAM zuuid={}'.format(fam_zuu))
+                if args.verbosity:
+                    print('FAM zuuid={}'.format(fam_zuu))
                 # Do a UUID_IMPORT with the IS_FAM flag set
                 conn.do_UUID_IMPORT(fam_zuu, UU.IS_FAM, None)
                 # RMR_IMPORT the FAM at address 0 and size 2M
-                fam_rmr = conn.do_RMR_IMPORT(fam_zuu, 0, sz2M, MR.GRPRIC)
                 if args.load_store:
+                    fam_rmr = conn.do_RMR_IMPORT(fam_zuu, 0, sz2M, MR.GRPRIC)
                     # Do load/store to FAM
                     fam_rmm = mmap.mmap(f.fileno(), sz2M,
                                     offset=fam_rmr.offset)
                     fam_v, fam_l = wildcat.mmap_vaddr_len(fam_rmm)
                     fam_rmm[0:len1] = str1
                     fam_rmm[len1:len1_2] = str2
-                    # flush writes, so reads will see new data
-                    wildcat.pmem_flush(fam_v, len1_2)
+                    # commit writes, so reads will see new data
+                    wildcat.commit(fam_v, len1_2, True)
+                else:
+                    fam_rmr = conn.do_RMR_IMPORT(fam_zuu, 0, sz2M, MR.GRPRI)
                 # do an XDM command to get the data back and check it
                 get_imm = wildcat.xdm_cmd()
                 get_imm.opcode = wildcat.XDM_CMD.GET_IMM
