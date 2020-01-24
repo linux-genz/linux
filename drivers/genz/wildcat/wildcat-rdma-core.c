@@ -1470,6 +1470,8 @@ int wildcat_rdma_user_req_RMR_IMPORT(struct io_entry *entry)
 	uint32_t                dgcid;
 	off_t                   offset = GENZ_BASE_ADDR_ERROR;
 	bool                    remote, cpu_visible, writable, individual;
+	struct genz_bridge_info *br_info = &mdata->bridge->br_info;
+	uint64_t cpuvisible_offset = br_info->cpuvisible_phys_offset;
 
 	CHECK_INIT_STATE(entry, status, out);
 	rsp_zaddr = req->rmr_import.rsp_zaddr;
@@ -1519,8 +1521,7 @@ int wildcat_rdma_user_req_RMR_IMPORT(struct io_entry *entry)
 	}
 
 	rmr->req_addr = rmri.req_addr;
-	rmr->mmap_pfn = ROUND_DOWN_PAGE(rmri.req_addr, BIT_ULL(rmri.pg_ps))
-		>> PAGE_SHIFT;
+	rmr->mmap_pfn = (rmr->req_addr + cpuvisible_offset) >> PAGE_SHIFT;
 
 	if (cpu_visible) {
 		zmap = rmr_zmap_alloc(entry->fdata, rmr);
@@ -2119,10 +2120,13 @@ static int wildcat_rdma_remove(struct genz_dev *zdev)
 	struct wildcat_rdma_state *rstate;
 
 	rstate = genz_get_drvdata(zdev);
-	wildcat_rdma_poll_devices_destroy(rstate);
-	misc_deregister(&rstate->miscdev);
-	/* Revisit: finish this */
-	kfree(rstate);
+	pr_debug("zdev=%px, rstate=%px\n", zdev, rstate);
+	if (rstate) {
+		wildcat_rdma_poll_devices_destroy(rstate);
+		misc_deregister(&rstate->miscdev);
+		/* Revisit: finish this */
+		kfree(rstate);
+	}
 	return 0;
 }
 

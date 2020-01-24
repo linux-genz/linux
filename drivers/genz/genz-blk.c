@@ -33,6 +33,8 @@
 #include <linux/interrupt.h>
 #include <linux/ratelimit.h>
 #include <linux/dma-direction.h>
+#include <linux/dax.h>
+#include <linux/pfn_t.h>
 #include <linux/genz.h>
 #include "wildcat/wildcat.h"  /* Revisit: remove wildcat dependency */
 
@@ -101,6 +103,7 @@ struct genz_bdev {  /* one per genz_resource == genz_bdev_probe */
 	struct gendisk         *gd;
 	struct genz_blk_state  *bstate;
 	struct genz_resource   *zres;
+	struct dax_device      *dax_dev;
 };
 
 #define GENZ_BLK_MAX_SG  256  /* Revisit */
@@ -494,6 +497,64 @@ static const struct blk_mq_ops genz_blk_mq_ops = {
 	.exit_hctx      = genz_blk_exit_hctx,
 };
 
+static long genz_blk_dax_direct_access(struct dax_device *dax_dev,
+		pgoff_t pgoff, long nr_pages, void **kaddr, pfn_t *pfn)
+{
+	struct genz_bdev *zbd = dax_get_private(dax_dev);
+	struct genz_rmr_info *rmri = &zbd->rmr_info;
+	resource_size_t offset = PFN_PHYS(pgoff);
+	u64 pfn_flags = PFN_DEV;  /* Revisit */
+
+	if (kaddr)
+		*kaddr = rmri->cpu_addr + offset;
+	if (pfn)
+		*pfn = phys_to_pfn_t(PFN_PHYS(rmri->pfn) + offset, pfn_flags);
+
+	return PHYS_PFN(zbd->size - offset);
+}
+
+static bool genz_blk_dax_supported(struct dax_device *dax_dev,
+                struct block_device *bdev, int blocksize, sector_t start,
+                sector_t sectors)
+{
+	struct genz_bdev        *zbd = dax_get_private(dax_dev);
+	/* Revisit: simplify this long chain of pointers somehow */
+	struct genz_blk_state   *bstate = zbd->bstate;
+	struct genz_dev         *zdev = bstate->zdev;
+	struct genz_bridge_dev  *zbdev = zdev->zbdev;
+	struct genz_bridge_info *br_info = &zbdev->br_info;
+
+	if (!br_info->load_store)  /* does bridge support load/store? */
+		return false;
+	return generic_fsdax_supported(dax_dev, bdev, blocksize,
+				       start, sectors);
+}
+
+/*
+ * Use the 'no check' versions of copy_from_iter_flushcache() and
+ * copy_to_iter_mcsafe() to bypass HARDENED_USERCOPY overhead. Bounds
+ * checking, both file offset and device offset, is handled by
+ * dax_iomap_actor()
+ */
+static size_t genz_blk_copy_from_iter(struct dax_device *dax_dev, pgoff_t pgoff,
+		void *addr, size_t bytes, struct iov_iter *i)
+{
+	return _copy_from_iter_flushcache(addr, bytes, i);
+}
+
+static size_t genz_blk_copy_to_iter(struct dax_device *dax_dev, pgoff_t pgoff,
+		void *addr, size_t bytes, struct iov_iter *i)
+{
+	return _copy_to_iter_mcsafe(addr, bytes, i);
+}
+
+static const struct dax_operations genz_blk_dax_ops = {
+	.direct_access  = genz_blk_dax_direct_access,
+	.dax_supported  = genz_blk_dax_supported,
+	.copy_from_iter = genz_blk_copy_from_iter,
+	.copy_to_iter   = genz_blk_copy_to_iter,
+};
+
 static int genz_blk_bdev_start_size(struct genz_resource *zres,
 				    size_t *start, size_t *size)
 {
@@ -518,6 +579,8 @@ static int genz_blk_bdev_start_size(struct genz_resource *zres,
 static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 {
 	struct gendisk *gd;
+	struct dax_device *dax_dev;
+	unsigned long dax_flags = 0;
 	int ret = 0;
 
 	zbd->gd = gd = alloc_disk(GENZ_BDEV_MINORS);
@@ -536,11 +599,22 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	set_capacity(gd, zbd->size/KERNEL_SECTOR_SIZE);
 	pr_info("%s: set capacity to %zu 512 byte sectors\n",
 		gd->disk_name, zbd->size/KERNEL_SECTOR_SIZE);
+	dax_dev = alloc_dax(zbd, gd->disk_name, &genz_blk_dax_ops, dax_flags);
+	if (!dax_dev) {
+		ret = -ENOMEM;
+		goto put_disk;
+	}
+	zbd->dax_dev = dax_dev;
 	/* Revisit: blk device appears under devices/virtual/block */
+	/* Revisit: use device_add_disk() ? */
 	add_disk(gd);
 
  out:
 	return ret;
+
+put_disk:
+	put_disk(gd);
+	goto out;
 }
 
 static int genz_blk_construct_bdev(struct genz_bdev *zbd,
@@ -573,6 +647,10 @@ static int genz_blk_construct_bdev(struct genz_bdev *zbd,
 
 static void genz_blk_destroy_bdev(struct genz_bdev *zbd)
 {
+	if (zbd->dax_dev) {
+		kill_dax(zbd->dax_dev);
+		put_dax(zbd->dax_dev);
+	}
 	del_gendisk(zbd->gd);
 	put_disk(zbd->gd);
 	blk_cleanup_queue(zbd->queue);
