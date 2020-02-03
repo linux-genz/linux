@@ -213,7 +213,7 @@ struct genz_control_info {
 	uint32_t		type;		/* type from the control_structure_header */
 	uint8_t			vers;		/* version from the control_structure_header */
 	size_t                  size;		/* size in bytes */
-	struct req_zmmu         *zmmu;	/* placeholder for zmmu entry */
+	struct req_zmmu         *zmmu;		/* placeholder for zmmu entry */
 	struct bin_attribute	battr;
 };
 

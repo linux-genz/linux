@@ -655,8 +655,9 @@ static void genz_release_dev(struct device *dev)
 	spin_lock_irqsave(&f->devices_lock, flags);
 	list_del(&zdev->fab_dev_node);
 	spin_unlock_irqrestore(&f->devices_lock, flags);
-
-	kfree(zdev);
+	/* Revisit: this free's the dev and causes NULL pointer defererence? */
+	/*kfree(zdev); */
+	pr_debug("returning\n");
 }
 
 int genz_init_dev(struct genz_dev *zdev, struct genz_fabric *fabric)

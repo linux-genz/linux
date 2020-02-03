@@ -79,6 +79,10 @@ struct genz_hardware_classes_meta genz_hardware_classes[] = {
      { "Logical PCIe Hierarchy (LPH)",                         "logical_pcie_hierarchy", GENZ_LOGICAL_PCIE_HIERARCHY },
 };
 
+struct genz_control_structure_ptr base_structure_ptr[] = {
+	    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x0, GENZ_GENERIC_STRUCTURE }
+};
+
 struct genz_control_structure_ptr core_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x48, GENZ_GENERIC_STRUCTURE },
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x4c, GENZ_GENERIC_STRUCTURE },
