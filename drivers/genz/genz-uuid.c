@@ -602,6 +602,10 @@ void genz_fabric_uuid_tracker_free(uuid_t *uuid)
 
 	pr_debug("tracker free of fabric_uuid %pUb\n", uuid);
 	uu = genz_uuid_search(uuid);
+	if (uu == NULL) {
+		pr_debug("genz_uuid_search returned NULL meaning it was already freed\n");
+		return;
+	}
 	/* genz_uuid_search gets the refcount, so we need to put it */
 	gone = kref_put(&uu->refcount, genz_uuid_tracker_free);
 	if (gone)

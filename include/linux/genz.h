@@ -373,12 +373,17 @@ struct genz_bridge_dev {
 	struct genz_dev		zdev;
 	struct genz_bridge_driver *zbdrv;
 	struct device		*bridge_dev; /* native device pointer */
+	uint16_t		bridge_num;
 	struct genz_fabric	*fabric;
 	struct genz_bridge_info br_info;
 	spinlock_t              zmmu_lock;  /* global bridge zmmu lock */
 	union genz_zmmu_info    zmmu_info;
 	/* Revisit: add address space */
+	struct kobject		bridge_dir;
+	struct kobject		*control_dir;
 };
+#define to_zbdev(d) container_of(d, struct genz_bridge_dev, bridge_dev)
+#define kobj_to_zbdev(kobj) container_of(kobj, struct genz_bridge_dev, bridge_dir)
 
 static inline bool zdev_is_local_bridge(struct genz_dev *zdev)
 {

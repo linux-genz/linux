@@ -227,6 +227,12 @@ void __genz_unregister_driver(struct genz_driver *zdrv)
 }
 EXPORT_SYMBOL(__genz_unregister_driver);
 
+static atomic_t __bridge_number = ATOMIC_INIT(0);
+static int get_new_bridge_number(void)
+{
+        return atomic_inc_return(&__bridge_number) - 1;
+}
+
 static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 			    struct device *dev,
 			    struct genz_bridge_driver *zbdrv,
@@ -244,6 +250,7 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	zbdev->zdev.zdrv = &zbdrv->zdrv;
 	zbdev->zdev.zbdev = zbdev;
 	zbdev->bridge_dev = dev;
+	zbdev->bridge_num = get_new_bridge_number();
 	spin_lock_init(&zbdev->zmmu_lock);
 	dev_set_drvdata(&zbdev->zdev.dev, driver_data);
 
@@ -427,10 +434,11 @@ int genz_unregister_bridge(struct device *dev)
 	/* Revisit: locking */
 	zbdev = genz_find_bridge(dev);
 	if (zbdev) {
+		genz_bridge_zmmu_clear(zbdev);
 		list_del(&zbdev->bridge_node);
+		list_del(&zbdev->zdev.fab_dev_node);
 		genz_fabric_uuid_tracker_free(&zbdev->fabric->mgr_uuid);
 		genz_bridge_remove_control_files(zbdev);
-		genz_bridge_zmmu_clear(zbdev);
 		kfree(zbdev);
 	} else {
 		ret = -ENODEV;
@@ -609,7 +617,9 @@ static void force_dev_cleanup(void)
 		genz_fabric_uuid_tracker_free(&cur->fabric->mgr_uuid);
 		genz_bridge_remove_control_files(cur);
 		genz_bridge_zmmu_clear(cur);
+		/* Revisit: is this done twice?
 		device_unregister(&cur->zdev.dev);
+		*/
 		list_del(&cur->bridge_node);
 		kfree(cur);
 	}

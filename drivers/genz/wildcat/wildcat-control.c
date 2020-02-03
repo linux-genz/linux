@@ -61,8 +61,10 @@ static int csr_access_rd(struct bridge *br, uint32_t csr, uint64_t *data)
 
 	/* caller must hold br->csr_mutex */
 	pos = pci_find_ext_capability(sl->pdev, PCI_EXT_CAP_ID_DVSEC);
-	if (!pos)
+	if (!pos) {
+		pr_debug("pci_find_ext_capability failed\n");
 		goto out;
+	}
 	pci_read_config_dword(sl->pdev, pos + WILDCAT_DVSEC_MBOX_CTRL_OFF,
 			      &val);
 	if (val & WILDCAT_DVSEC_MBOX_CTRL_TRIG) {
@@ -80,8 +82,10 @@ static int csr_access_rd(struct bridge *br, uint32_t csr, uint64_t *data)
 			sl->pdev, pos + WILDCAT_DVSEC_MBOX_CTRL_OFF, &val);
 		pr_debug("val=0x%x, loops=%d\n", val, i);
 		if (!(val & WILDCAT_DVSEC_MBOX_CTRL_TRIG)) {
-			if (val & WILDCAT_DVSEC_MBOX_CTRL_ERR)
+			if (val & WILDCAT_DVSEC_MBOX_CTRL_ERR) {
+				pr_debug("WILDCAT_DVSEC_MBOX_CTRL_ERR set\n");
 				break;
+			}
 			/* Success */
 			ret = 0;
 			pci_read_config_dword(
@@ -115,10 +119,13 @@ int wildcat_control_read(struct genz_dev *zdev, loff_t offset, size_t size,
 	if (!zdev_is_local_bridge(zdev)) { /* no in-band fabric mgmt */
 		ret = -ENODEV;
 		goto out;
-	} else if (offset >= 0x200) { /* Revisit: only Core Structure for now */
+	}
+	/* Revisit: only Core Structure for now 
+	else if (offset >= 0x200) { 
 		ret = -EPERM;
 		goto out;
 	}
+	*/
 
 	gzbr = zdev->zbdev;
 	br = wildcat_gzbr_to_br(gzbr);
@@ -134,8 +141,8 @@ int wildcat_control_read(struct genz_dev *zdev, loff_t offset, size_t size,
 		mutex_lock(&br->csr_mutex);
 		ret = csr_access_rd(br, csr, &csr_val);
 		mutex_unlock(&br->csr_mutex);
-		dev_dbg(&zdev->dev, "ret=%d, csr=0x%x, csr_val=0x%llx\n",
-			ret, csr, csr_val);
+		dev_dbg(&zdev->dev, "ret=%d, csr=0x%x, csr_val=0x%llx shifted val = 0x%llx size = %lu\n",
+			ret, csr, csr_val, csr_val >> shift, size);
 		if (ret < 0)
 			goto out;
 		if (csr >= 0xD0 && csr <= 0x140)
@@ -151,6 +158,7 @@ int wildcat_control_read(struct genz_dev *zdev, loff_t offset, size_t size,
 	}
 
 out:
+	pr_debug("returning ret = %d val = 0x%llx\n", ret, val);
 	return ret;
 }
 
