@@ -1911,8 +1911,8 @@ static int wildcat_rdma_mmap(struct file *file, struct vm_area_struct *vma)
 
 	offset = vma->vm_pgoff << PAGE_SHIFT;
 	length = vma->vm_end - vma->vm_start;
-	pr_debug("vm_start=0x%lx, vm_end=0x%lx, offset=0x%lx\n",
-		 vma->vm_start, vma->vm_end, offset);
+	pr_debug("vm_start=0x%lx, vm_end=0x%lx, offset=0x%lx, length=%lu\n",
+		 vma->vm_start, vma->vm_end, offset, length);
 	spin_lock(&fdata->zmap_lock);
 	list_for_each_entry(zmap, &fdata->zmap_list, list) {
 		if (offset == zmap->offset &&
@@ -1920,6 +1920,12 @@ static int wildcat_rdma_mmap(struct file *file, struct vm_area_struct *vma)
 			if (!zmap->owner || zmap->owner == fdata)
 				ret = 0;
 			break;
+		} else {
+			if (offset == zmap->offset &&
+			    length != zmap->zpages->hdr.size)
+				pr_debug("offset=0x%lx match but length=%lu != zmap size=%lu\n",
+					 offset, length,
+					 zmap->zpages->hdr.size);
 		}
 	}
 	spin_unlock(&fdata->zmap_lock);

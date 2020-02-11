@@ -238,8 +238,9 @@ class MyProtocol(Protocol):
             test_remote = ((access & put_get_remote) == put_get_remote)
             if self.factory.load_store:
                 access |= MR.REQ_CPU
-            print('mr: rsp_zaddr={:#x}, sz={:#x}, access={:#x}'.format(
-                rsp_zaddr, sz, access))
+            if self.factory.verbosity:
+                print('mr: rsp_zaddr={:#x}, sz={:#x}, access={:#x}'.format(
+                    rsp_zaddr, sz, access))
             
             if test_remote:
                 conn = self.factory.conn
@@ -248,6 +249,9 @@ class MyProtocol(Protocol):
                 mask = (-self.pagesize) & ((1 << 64) - 1)
                 mmsz = (sz + (self.pagesize - 1)) & mask
                 if self.factory.load_store:
+                    if self.factory.verbosity:
+                        print('mr mmap: mmsz={}, offset={:#x}'.format(
+                            mmsz, rmr.offset))
                     rmm = mmap.mmap(conn.fno, mmsz, offset=rmr.offset)
                 else:
                     rmm = None

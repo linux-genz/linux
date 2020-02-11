@@ -368,6 +368,22 @@ int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv,
 	if (ret < 0)
 		goto out; /* Revisit: properly undo stuff */
 
+	if (info->load_store) {
+		zbdev->ld_st_res.start = info->min_cpuvisible_addr +
+			info->cpuvisible_phys_offset;
+		zbdev->ld_st_res.end = info->max_cpuvisible_addr +
+			info->cpuvisible_phys_offset;
+		zbdev->ld_st_res.name = "Gen-Z bridge0";  /* Revisit: bridge number */
+		zbdev->ld_st_res.flags = IORESOURCE_MEM;
+		ret = insert_resource(&iomem_resource, &zbdev->ld_st_res);
+		if (ret < 0) {
+			pr_debug("insert_resource failed: ret=%d, iomem_resource=%px, ld_st_res=%px, iomem_resource.start=0x%llx, iomem_resource.end=0x%llx, ld_st_res.start=0x%llx, ld_st_res.end=0x%llx\n",
+				 ret, &iomem_resource, &zbdev->ld_st_res,
+				 iomem_resource.start, iomem_resource.end,
+				 zbdev->ld_st_res.start, zbdev->ld_st_res.end);
+			/* Revisit: error handling */
+		}
+	}
 	ret = genz_bridge_zmmu_setup(zbdev);
 	if (ret < 0) {
 		pr_debug("genz_bridge_zmmu_setup failed, ret=%d\n", ret);
@@ -431,6 +447,7 @@ int genz_unregister_bridge(struct device *dev)
 		genz_fabric_uuid_tracker_free(&zbdev->fabric->mgr_uuid);
 		genz_bridge_remove_control_files(zbdev);
 		genz_bridge_zmmu_clear(zbdev);
+		remove_resource(&zbdev->ld_st_res);
 		kfree(zbdev);
 	} else {
 		ret = -ENODEV;

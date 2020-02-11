@@ -908,13 +908,13 @@ EXPORT_SYMBOL(genz_mr_reg);
 int genz_rmr_import(
 	struct genz_mem_data *mdata, uuid_t *uuid, uint32_t dgcid,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint32_t rkey,
-	struct genz_rmr_info *rmri)
+	const char *rmr_name, struct genz_rmr_info *rmri)
 {
 	struct genz_bridge_dev  *br = mdata->bridge;
 	struct genz_bridge_info *br_info = &br->br_info;
 	int                     status = 0;
 	struct genz_rmr         *rmr;
-	bool                    remote, cpu_visible, writable, individual;
+	bool                    remote, cpu_visible, writable, individual, kmap;
 	uint64_t cpuvisible_offset = br_info->cpuvisible_phys_offset;
 
 	rmri->rsp_zaddr = rsp_zaddr;
@@ -928,12 +928,14 @@ int genz_rmr_import(
 	writable = !!(access & GENZ_MR_PUT_REMOTE);
 	cpu_visible = !!(access & GENZ_MR_REQ_CPU);
 	individual = !!(access & GENZ_MR_INDIVIDUAL);
+	kmap = !!(access & GENZ_MR_KERN_MAP);
 
 	pr_debug("uuid=%pUb, rsp_zaddr=0x%016llx, "
 		 "len=0x%llx, access=0x%llx, rkey=0x%x, "
-		 "remote=%u, writable=%u, cpu_visible=%u, individual=%u\n",
+		 "remote=%u, writable=%u, cpu_visible=%u, individual=%u, "
+		 "kmap=%u\n",
 		 uuid, rsp_zaddr, len, access, rkey, remote, writable,
-		 cpu_visible, individual);
+		 cpu_visible, individual, kmap);
 
 	if (!remote || !individual || /* Revisit: allow !individual */
 	    (genz_gcid_is_local(mdata->bridge, dgcid) && !br_info->loopback)) {
@@ -959,9 +961,14 @@ int genz_rmr_import(
 	rmr->mmap_pfn = PHYS_PFN(rmr->req_addr + cpuvisible_offset);
 
 	if (cpu_visible) {
-		rmri->cpu_addr = memremap(PFN_PHYS(rmr->mmap_pfn),
-					  len, MEMREMAP_WB);
-		rmri->pfn = rmr->mmap_pfn;
+		if (kmap)
+			rmri->cpu_addr = memremap(PFN_PHYS(rmr->mmap_pfn),
+						  len, MEMREMAP_WB);
+		rmri->res.start = PFN_PHYS(rmr->mmap_pfn);
+		rmri->res.end = rmri->res.start + rmri->len - 1;
+		rmri->res.flags = IORESOURCE_MEM;
+		rmri->res.name = rmr_name;
+		insert_resource(&br->ld_st_res, &rmri->res);
 	}
 
  out:

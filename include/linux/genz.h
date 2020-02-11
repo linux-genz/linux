@@ -167,6 +167,7 @@ struct genz_page_grid {
 	struct rb_node   base_pte_node;  /* rbtree ordered on base_pte_idx */
 	struct rb_node   base_addr_node; /* and another on base_addr */
 	struct rb_root   pte_tree;       /* rbtree root of allocated ptes */
+	struct resource  res;            /* only for requester page_grids */
 	bool             humongous;      /* only allowed once */
 	bool             cpu_visible;    /* only for requester page_grids */
 };
@@ -380,7 +381,7 @@ struct genz_bridge_dev {
 	struct genz_bridge_info br_info;
 	spinlock_t              zmmu_lock;  /* global bridge zmmu lock */
 	union genz_zmmu_info    zmmu_info;
-	/* Revisit: add address space */
+	struct resource         ld_st_res;
 };
 
 static inline bool zdev_is_local_bridge(struct genz_dev *zdev)
@@ -429,10 +430,10 @@ static inline uint64_t genz_pg_addr(struct genz_page_grid *genz_pg)
 #define GENZ_MR_PUT             ((uint32_t)1 << 1)
 #define GENZ_MR_SEND            GENZ_MR_PUT
 #define GENZ_MR_RECV            GENZ_MR_GET
-#define GENZ_MR_READ            GENZ_MR_PUT
-#define GENZ_MR_WRITE           GENZ_MR_GET
 #define GENZ_MR_GET_REMOTE      ((uint32_t)1 << 2)
 #define GENZ_MR_PUT_REMOTE      ((uint32_t)1 << 3)
+#define GENZ_MR_READ            GENZ_MR_GET
+#define GENZ_MR_WRITE           GENZ_MR_PUT
 #define GENZ_MR_READ_REMOTE     GENZ_MR_GET_REMOTE
 #define GENZ_MR_WRITE_REMOTE    GENZ_MR_PUT_REMOTE
 #define GENZ_MR_FLAG0           ((uint32_t)1 << 4) /* Usable by user-space */
@@ -441,6 +442,7 @@ static inline uint64_t genz_pg_addr(struct genz_page_grid *genz_pg)
 #define GENZ_MR_FLAG3           ((uint32_t)1 << 7)
 #define GENZ_MR_REQ             ((uint32_t)1 << 16) /* driver internal */
 #define GENZ_MR_RSP             ((uint32_t)1 << 17) /* driver internal */
+#define GENZ_MR_KERN_MAP        ((uint32_t)1 << 26) /* kernel mapping */
 #define GENZ_MR_REQ_CPU         ((uint32_t)1 << 27) /* CPU visible mapping */
 #define GENZ_MR_REQ_CPU_CACHE   ((uint32_t)3 << 28) /* CPU cache mode */
 #define GENZ_MR_REQ_CPU_WB      ((uint32_t)0 << 28)
@@ -552,14 +554,14 @@ struct genz_umem {
 
 /* Revisit: embed this in genz_rmr? */
 struct genz_rmr_info {
-	uint64_t     rsp_zaddr;
-	uint64_t     req_addr;
-	uint64_t     len;
-	uint64_t     access;
-	void         *cpu_addr;
-	ulong        pfn;
-	uint32_t     pg_ps;
-	uint32_t     gcid;
+	uint64_t        rsp_zaddr;
+	uint64_t        req_addr;
+	uint64_t        len;
+	uint64_t        access;
+	void            *cpu_addr;
+	uint32_t        pg_ps;
+	uint32_t        gcid;
+	struct resource res;
 };
 
 /* Revisit: probably should have equivalent genz_mr_info */
@@ -730,7 +732,7 @@ int genz_mr_reg(struct genz_mem_data *mdata, uint64_t vaddr,
 int genz_rmr_import(
 	struct genz_mem_data *mdata, uuid_t *uuid, uint32_t dgcid,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint32_t rkey,
-	struct genz_rmr_info *rmri);
+	const char *rmr_name, struct genz_rmr_info *rmri);
 int genz_rmr_free(struct genz_mem_data *mdata, struct genz_rmr_info *rmri);
 bool genz_gcid_is_local(struct genz_bridge_dev *br, uint32_t gcid);
 int genz_alloc_queues(struct genz_bridge_dev *br,

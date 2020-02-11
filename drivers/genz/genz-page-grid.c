@@ -432,6 +432,50 @@ static void zmmu_free_pg_addr_range(struct genz_page_grid_info *pgi,
 	pgi->pg[pg_index].page_grid.pg_base_address = 0;
 }
 
+static uint get_uint_len(uint val)
+{
+	uint l = 1;
+
+	while (val > 9) {
+		l++;
+		val /= 10;
+	}
+
+	return l;
+}
+
+char *genz_page_grid_name(uint pg_index)
+{
+	char *name, *base = "Req Page Grid ";
+	size_t len, base_len = strlen(base);
+
+	len = base_len + get_uint_len(pg_index) + 1;
+	name = kmalloc(len, GFP_KERNEL);
+	if (name) {
+		strcpy(name, base);
+		sprintf(&name[base_len], "%u", pg_index);
+	}
+	return name;
+}
+
+void genz_set_page_grid_res(struct genz_page_grid_info *pgi, uint pg_index,
+			    struct genz_bridge_dev *br)
+{
+	struct genz_bridge_info *bri = &br->br_info;
+	struct genz_page_grid   *pg = &pgi->pg[pg_index];
+	uint64_t ps;
+
+	if (!pg->cpu_visible)
+		return;
+
+	ps = BIT_ULL(pg->page_grid.page_size);
+	pg->res.start = genz_pg_addr(pg) + bri->cpuvisible_phys_offset;
+	pg->res.end = pg->res.start + (pg->page_grid.page_count * ps) - 1;
+	pg->res.flags = IORESOURCE_MEM;
+	pg->res.name = genz_page_grid_name(pg_index);
+	insert_resource(&br->ld_st_res, &pg->res);
+}
+
 int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
 			     struct genz_page_grid *grid)
 {
@@ -479,7 +523,7 @@ int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
 		err = -ENOSPC;
 		goto free_pte;
 	}
-
+	genz_set_page_grid_res(&br->zmmu_info.req_zmmu_pg, pg_index, br);
 	set_bit(grid->page_grid.page_size,
 		(grid->cpu_visible) ?
 		br->zmmu_info.req_zmmu_pg.pg_cpu_visible_ps_bitmap :

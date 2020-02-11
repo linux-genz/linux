@@ -250,7 +250,7 @@ struct func1_bar0 {
 #define TB(_x)            ((_x)*BIT_ULL(40))
 
 #define WILDCAT_MIN_CPUVISIBLE_ADDR  (0x2345678000ul) /* Revisit: debug; was 0 */
-#define WILDCAT_MAX_CPUVISIBLE_ADDR  (TB(250)-1ull)
+#define WILDCAT_MAX_CPUVISIBLE_ADDR  (0x100103fffff) /* Revisit: FW workaround */
 #define WILDCAT_MIN_NONVISIBLE_ADDR  TB(256)
 #define WILDCAT_MAX_NONVISIBLE_ADDR  (-1ull)
 

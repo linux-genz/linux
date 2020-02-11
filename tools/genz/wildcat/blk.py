@@ -111,18 +111,18 @@ def main():
             if args.size:
                 sz = sz1G * args.size
             if args.verbosity:
-                print('mmapping anonymous region, size={}'.format(sz))
+                print('mmapping anonymous region, sz={}'.format(sz))
             mm1G = mmap.mmap(-1, sz, access=mmap.ACCESS_WRITE)
         else:
-            hugesize = os.path.getsize(args.hugefile)
+            sz = os.path.getsize(args.hugefile)
             if args.verbosity:
-                print('opening hugefile "{}"'.format(args.hugefile))
+                print('opening hugefile "{}", sz={}'.format(args.hugefile, sz))
             f1G = open(args.hugefile, 'rb+')
             if args.verbosity:
                 print('mmapping hugefile')
             mm1G = mmap.mmap(f1G.fileno(), 0, access=mmap.ACCESS_WRITE)
         #print('initializing hugefile with random data')
-        #mm1G[0:hugesize//2] = os.urandom(hugesize//2)
+        #mm1G[0:sz//2] = os.urandom(sz//2)
         v1G, l1G = wildcat.mmap_vaddr_len(mm1G)
 
         # individual, cpu-visible, 1G mapping allowing
