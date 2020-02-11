@@ -104,6 +104,7 @@ struct genz_bdev {  /* one per genz_resource == genz_bdev_probe */
 	struct genz_blk_state  *bstate;
 	struct genz_resource   *zres;
 	struct dax_device      *dax_dev;
+	struct dev_pagemap     pgmap;
 };
 
 #define GENZ_BLK_MAX_SG  256  /* Revisit */
@@ -503,12 +504,12 @@ static long genz_blk_dax_direct_access(struct dax_device *dax_dev,
 	struct genz_bdev *zbd = dax_get_private(dax_dev);
 	struct genz_rmr_info *rmri = &zbd->rmr_info;
 	resource_size_t offset = PFN_PHYS(pgoff);
-	u64 pfn_flags = PFN_DEV;  /* Revisit */
+	u64 pfn_flags = PFN_DEV|PFN_MAP;
 
 	if (kaddr)
 		*kaddr = rmri->cpu_addr + offset;
 	if (pfn)
-		*pfn = phys_to_pfn_t(PFN_PHYS(rmri->pfn) + offset, pfn_flags);
+		*pfn = phys_to_pfn_t(rmri->res.start + offset, pfn_flags);
 
 	return PHYS_PFN(zbd->size - offset);
 }
@@ -524,8 +525,10 @@ static bool genz_blk_dax_supported(struct dax_device *dax_dev,
 	struct genz_bridge_dev  *zbdev = zdev->zbdev;
 	struct genz_bridge_info *br_info = &zbdev->br_info;
 
-	if (!br_info->load_store)  /* does bridge support load/store? */
+	if (!br_info->load_store) { /* does bridge support load/store? */
+		dev_dbg(&zdev->dev, "bridge does not support load/store\n");
 		return false;
+	}
 	return generic_fsdax_supported(dax_dev, bdev, blocksize,
 				       start, sectors);
 }
@@ -555,6 +558,34 @@ static const struct dax_operations genz_blk_dax_ops = {
 	.copy_to_iter   = genz_blk_copy_to_iter,
 };
 
+/* Revisit: these pagemap funcs were copied from pmem - are they right? */
+static void genz_blk_pagemap_cleanup(struct dev_pagemap *pgmap)
+{
+	struct request_queue *q =
+		container_of(pgmap->ref, struct request_queue, q_usage_counter);
+
+	blk_cleanup_queue(q);
+}
+
+static void genz_blk_pagemap_kill(struct dev_pagemap *pgmap)
+{
+	struct request_queue *q =
+		container_of(pgmap->ref, struct request_queue, q_usage_counter);
+
+	blk_freeze_queue_start(q);
+}
+
+static void genz_blk_pagemap_page_free(struct page *page)
+{
+	wake_up_var(&page->_refcount);
+}
+
+static const struct dev_pagemap_ops genz_blk_fsdax_pagemap_ops = {
+	.page_free		= genz_blk_pagemap_page_free,
+	.kill			= genz_blk_pagemap_kill,
+	.cleanup		= genz_blk_pagemap_cleanup,
+};
+
 static int genz_blk_bdev_start_size(struct genz_resource *zres,
 				    size_t *start, size_t *size)
 {
@@ -578,9 +609,13 @@ static int genz_blk_bdev_start_size(struct genz_resource *zres,
 
 static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 {
+	struct genz_blk_state   *bstate = zbd->bstate;
+	struct genz_dev         *zdev = bstate->zdev;
 	struct gendisk *gd;
 	struct dax_device *dax_dev;
 	unsigned long dax_flags = 0;
+	void *addr;
+	struct device *dev;
 	int ret = 0;
 
 	zbd->gd = gd = alloc_disk(GENZ_BDEV_MINORS);
@@ -599,12 +634,26 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	set_capacity(gd, zbd->size/KERNEL_SECTOR_SIZE);
 	pr_info("%s: set capacity to %zu 512 byte sectors\n",
 		gd->disk_name, zbd->size/KERNEL_SECTOR_SIZE);
-	dax_dev = alloc_dax(zbd, gd->disk_name, &genz_blk_dax_ops, dax_flags);
-	if (!dax_dev) {
-		ret = -ENOMEM;
-		goto put_disk;
+	if (blk_queue_dax(zbd->queue)) {
+		dev = disk_to_dev(zbd->gd);
+		dax_dev = alloc_dax(zbd, gd->disk_name,
+				    &genz_blk_dax_ops, dax_flags);
+		if (!dax_dev) {
+			ret = -ENOMEM;
+			goto put_disk;
+		}
+		zbd->dax_dev = dax_dev;
+		/* fsdax setup */
+		zbd->pgmap.ref = &zbd->queue->q_usage_counter;
+		zbd->pgmap.type = MEMORY_DEVICE_FS_DAX;
+		zbd->pgmap.res = zbd->rmr_info.res;
+		zbd->pgmap.ops = &genz_blk_fsdax_pagemap_ops;
+		/* Revisit: support struct pages on device with pgmap->altmap */
+		addr = devm_memremap_pages(dev, &zbd->pgmap);
+		/* Revisit: error handling */
+		zbd->rmr_info.cpu_addr = addr;
+		dev_dbg(&zdev->dev, "cpu_addr=%px\n", addr);
 	}
-	zbd->dax_dev = dax_dev;
 	/* Revisit: blk device appears under devices/virtual/block */
 	/* Revisit: use device_add_disk() ? */
 	add_disk(gd);
@@ -620,6 +669,11 @@ put_disk:
 static int genz_blk_construct_bdev(struct genz_bdev *zbd,
 				   struct genz_blk_bridge *bbr)
 {
+	/* Revisit: simplify this long chain of pointers somehow */
+	struct genz_blk_state   *bstate = zbd->bstate;
+	struct genz_dev         *zdev = bstate->zdev;
+	struct genz_bridge_dev  *zbdev = zdev->zbdev;
+	struct genz_bridge_info *br_info = &zbdev->br_info;
 	int err = 0;
 
 	zbd->queue = blk_mq_init_queue(bbr->tag_set);
@@ -638,9 +692,14 @@ static int genz_blk_construct_bdev(struct genz_bdev *zbd,
 	blk_queue_bounce_limit(zbd->queue, BLK_BOUNCE_ANY);
 	blk_queue_write_cache(zbd->queue, false, false);
 
-        /* Tell the block layer that this is not a rotational device */
-        blk_queue_flag_set(QUEUE_FLAG_NONROT, zbd->queue);
-        blk_queue_flag_clear(QUEUE_FLAG_ADD_RANDOM, zbd->queue);
+	/* Tell the block layer that this is not a rotational device */
+	blk_queue_flag_set(QUEUE_FLAG_NONROT, zbd->queue);
+	blk_queue_flag_clear(QUEUE_FLAG_ADD_RANDOM, zbd->queue);
+
+	/* enable DAX support */
+	if (br_info->load_store) {
+		blk_queue_flag_set(QUEUE_FLAG_DAX, zbd->queue);
+	}
 
 	return genz_blk_register_gendisk(zbd);
 }
@@ -790,7 +849,7 @@ static int genz_bdev_probe(struct genz_blk_state *bstate,
 	rkey = zres->rw_rkey;
 	err = genz_rmr_import(mdata, &zdev->instance_uuid, gcid,
 			      zbd->base_zaddr, zbd->size, access,
-			      rkey, &zbd->rmr_info);
+			      rkey, zres->res.name, &zbd->rmr_info);
 	if (err < 0)
 		goto fail;  /* Revisit: other cleanup */
 	err = genz_blk_construct_bdev(zbd, bbr);

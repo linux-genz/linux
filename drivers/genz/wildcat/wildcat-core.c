@@ -427,7 +427,7 @@ union zpages *_wildcat_rmr_zpages_alloc(const char *callf, uint line,
 		goto done;
 
 	ret->rmrz.page_type = RMR_PAGE;
-	ret->rmrz.size = rmr->pte_info->length_adjusted;
+	ret->rmrz.size = rmr->pte_info->length;
 	ret->rmrz.rmr = rmr;
 
 done:
