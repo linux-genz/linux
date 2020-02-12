@@ -975,8 +975,8 @@ static int __init genz_blk_init(void)
 	}
 	ret = genz_register_driver(&genz_blk_driver);
 	if (ret < 0) {
-		pr_warning("%s:%s:genz_register_driver returned %d\n",
-		       GENZ_BLK_DRV_NAME, __func__, ret);
+		pr_warn("%s:%s:genz_register_driver returned %d\n",
+			GENZ_BLK_DRV_NAME, __func__, ret);
 		goto unregister_blkdev;
 	}
 

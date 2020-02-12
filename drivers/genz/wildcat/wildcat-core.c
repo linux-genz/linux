@@ -209,11 +209,11 @@ void wildcat_queue_zpages_free(union zpages *zpages)
 	for (i = 0; i < npages; i++) {
 		page = virt_to_page(zpages->queue.pages[i]);
 		if (page_count(page) != 1 || page_mapcount(page) != 0)
-			pr_warning("%s,%u:i %lu ptr/page/pfn 0x%p/0x%p/0x%lx c %d/%d\n",
-				   __func__, __LINE__,
-				   i, zpages->queue.pages[i],
-				   page, page_to_pfn(page), page_count(page),
-				   page_mapcount(page));
+			pr_warn("%s,%u:i %lu ptr/page/pfn 0x%p/0x%p/0x%lx c %d/%d\n",
+				__func__, __LINE__,
+				i, zpages->queue.pages[i],
+				page, page_to_pfn(page), page_count(page),
+				page_mapcount(page));
 		do_free_pages(zpages->queue.pages[i], 0);
 	}
 }
@@ -498,9 +498,9 @@ static int iommu_invalid_ppr_cb(struct pci_dev *pdev, int pasid,
 				unsigned long address, u16 flags)
 
 {
-	pr_warning("%s:%s IOMMU PRR failure device = %s, pasid = %d address = 0x%lx flags = %ux\n",
-		   wildcat_driver_name, __func__, pci_name(pdev), pasid,
-		   address, flags);
+	pr_warn("%s:%s IOMMU PRR failure device = %s, pasid = %d address = 0x%lx flags = %ux\n",
+		wildcat_driver_name, __func__, pci_name(pdev), pasid,
+		address, flags);
 
 	return AMD_IOMMU_INV_PRI_RSP_INVALID;
 }
@@ -1223,14 +1223,14 @@ static int __init wildcat_init(void)
 
 	ret = -ENOSYS;
 	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD) {
-		pr_warning("%s:%s:AMD CPU required\n",
-			   wildcat_driver_name, __func__);
+		pr_warn("%s:%s:AMD CPU required\n",
+			wildcat_driver_name, __func__);
 		goto err_out;
 	}
 	ret = -EINVAL;
 	if (!(wildcat_no_avx || boot_cpu_has(X86_FEATURE_AVX))) {
-		pr_warning("%s:%s:missing required AVX CPU feature\n",
-			   wildcat_driver_name, __func__);
+		pr_warn("%s:%s:missing required AVX CPU feature\n",
+			wildcat_driver_name, __func__);
 		goto err_out;
 	}
 	if (boot_cpu_has(X86_FEATURE_MCOMMIT)) {
@@ -1239,8 +1239,8 @@ static int __init wildcat_init(void)
 		pr_info("%s:%s:mcommit supported and enabled\n",
 			wildcat_driver_name, __func__);
 	} else {
-		pr_warning("%s:%s:mcommit not supported\n",
-			   wildcat_driver_name, __func__);
+		pr_warn("%s:%s:mcommit not supported\n",
+			wildcat_driver_name, __func__);
 	}
 	ret = -ENOMEM;
 	spin_lock_init(&wildcat_bridge.zmmu_lock);
@@ -1257,8 +1257,8 @@ static int __init wildcat_init(void)
 	/* Initiate call to wildcat_probe() for each wildcat PCI function */
 	ret = pci_register_driver(&wildcat_pci_driver);
 	if (ret < 0) {
-		pr_warning("%s:%s:pci_register_driver ret = %d\n",
-			   wildcat_driver_name, __func__, ret);
+		pr_warn("%s:%s:pci_register_driver ret = %d\n",
+			wildcat_driver_name, __func__, ret);
 		goto err_delete_workq;
 	}
 
@@ -1267,15 +1267,15 @@ static int __init wildcat_init(void)
 						GFP_KERNEL, helper_init, NULL,
 						&helper_pid);
 	if (!helper_info) {
-		pr_warning("%s:%s:call_usermodehelper_setup(%s) returned NULL\n",
-			   wildcat_driver_name, __func__, helper_path);
+		pr_warn("%s:%s:call_usermodehelper_setup(%s) returned NULL\n",
+			wildcat_driver_name, __func__, helper_path);
 		ret = -ENOMEM;
 		goto err_pci_unregister_driver;
 	}
 	ret = call_usermodehelper_exec(helper_info, UMH_WAIT_EXEC);
 	if (ret < 0) {
-		pr_warning("%s:%s:call_usermodehelper_exec(%s) returned %d\n",
-			   wildcat_driver_name, __func__, helper_path, ret);
+		pr_warn("%s:%s:call_usermodehelper_exec(%s) returned %d\n",
+			wildcat_driver_name, __func__, helper_path, ret);
 		goto err_wildcat_helper_exit;
 	}
 
