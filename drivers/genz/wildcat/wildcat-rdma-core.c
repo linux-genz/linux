@@ -1356,7 +1356,7 @@ int wildcat_rdma_user_req_MR_REG(struct io_entry *entry)
 	uint64_t                vaddr, len, access;
 	uint64_t                rsp_zaddr = GENZ_BASE_ADDR_ERROR;
 	uint32_t                pg_ps = 0;
-	bool                    local, remote, cpu_visible, individual, dmasync;
+	bool                    local, remote, cpu_visible, individual;
 	struct genz_umem        *umem;
 	struct file_data        *fdata = entry->fdata;
 	struct genz_mem_data    *mdata = &fdata->md;
@@ -1370,7 +1370,6 @@ int wildcat_rdma_user_req_MR_REG(struct io_entry *entry)
 	remote = !!(access & (WILDCAT_MR_GET_REMOTE|WILDCAT_MR_PUT_REMOTE));
 	cpu_visible = !!(access & WILDCAT_MR_REQ_CPU);
 	individual = !!(access & WILDCAT_MR_INDIVIDUAL);
-	dmasync = false;  /* Revisit: fix this */
 
 	pr_debug("vaddr=0x%016llx, len=0x%llx, access=0x%llx, "
 		 "local=%u, remote=%u, cpu_visible=%u, individual=%u\n",
@@ -1388,7 +1387,7 @@ int wildcat_rdma_user_req_MR_REG(struct io_entry *entry)
 
 	/* pin memory range and create IOMMU entries */
 	umem = genz_umem_get(mdata, vaddr, len, access, fdata->pasid,
-			     mdata->ro_rkey, mdata->rw_rkey, dmasync, false);
+			     mdata->ro_rkey, mdata->rw_rkey, false);
 	if (IS_ERR(umem)) {
 		status = PTR_ERR(umem);
 		goto out;
@@ -2181,8 +2180,8 @@ static int __init wildcat_rdma_init(void)
 
 	ret = genz_register_driver(&wildcat_rdma_genz_driver);
 	if (ret < 0) {
-		pr_warning("%s:%s:genz_register_driver returned %d\n",
-		       wildcat_rdma_driver_name, __func__, ret);
+		pr_warn("%s:%s:genz_register_driver returned %d\n",
+			wildcat_rdma_driver_name, __func__, ret);
 		goto err_cleanup_poll_devs;
 	}
 

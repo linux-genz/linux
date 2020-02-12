@@ -722,7 +722,7 @@ struct genz_umem *genz_umem_search(struct genz_mem_data *mdata,
 struct genz_umem *genz_umem_get(struct genz_mem_data *mdata, uint64_t vaddr,
                                 size_t size, uint64_t access,
                                 uint pasid, uint32_t ro_rkey, uint32_t rw_rkey,
-                                bool dmasync, bool kernel);
+                                bool kernel);
 void genz_umem_remove(struct genz_umem *umem);
 int genz_mr_reg(struct genz_mem_data *mdata, uint64_t vaddr,
 		uint64_t len, uint64_t access, uint32_t pasid,

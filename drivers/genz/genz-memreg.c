@@ -284,7 +284,7 @@ static inline long genz_get_user_pages(
 	return get_user_pages(start, nr_pages, gup_flags, pages, vmas);
 }
 
-static int genz_umem_pin(struct genz_umem *umem, bool dmasync)
+static int genz_umem_pin(struct genz_umem *umem)
 {
 	struct page **page_list;
 	struct vm_area_struct **vma_list;
@@ -297,9 +297,6 @@ static int genz_umem_pin(struct genz_umem *umem, bool dmasync)
 	int i;
 	struct scatterlist *sg, *sg_list_start;
 	unsigned long dma_attrs = 0;
-
-	if (dmasync)
-		dma_attrs |= DMA_ATTR_WRITE_BARRIER;
 
 	page_list = (struct page **)__get_free_page(GFP_KERNEL);
 	if (!page_list) {
@@ -402,13 +399,12 @@ static int genz_umem_pin(struct genz_umem *umem, bool dmasync)
  * @size:    length of region to pin
  * @access:  GENZ_MR_xxx flags for memory being pinned
  * @pasid:   userspace PASID to use, or NO_PASID
- * @dmasync: flush in-flight DMA when the memory region is written
  * @kernel:  request is for kernel, not userspace
  */
 struct genz_umem *genz_umem_get(struct genz_mem_data *mdata, uint64_t vaddr,
 				size_t size, uint64_t access,
 				uint pasid, uint32_t ro_rkey, uint32_t rw_rkey,
-				bool dmasync, bool kernel)
+				bool kernel)
 {
 	struct genz_umem *umem, *found;
 	struct genz_pte_info *info;
@@ -461,7 +457,7 @@ struct genz_umem *genz_umem_get(struct genz_mem_data *mdata, uint64_t vaddr,
 	}
 
 	if (!kernel)
-		ret = genz_umem_pin(umem, dmasync);
+		ret = genz_umem_pin(umem);
 	if (ret < 0) {
 		spin_lock_irqsave(&mdata->md_lock, flags);
 		genz_umem_remove(umem);
@@ -880,7 +876,7 @@ int genz_mr_reg(struct genz_mem_data *mdata, uint64_t vaddr,
 		*rw_rkey = mdata->rw_rkey;
 	}
 	umem = genz_umem_get(mdata, vaddr, len, access, pasid,
-			     *ro_rkey, *rw_rkey, false, true);
+			     *ro_rkey, *rw_rkey, true);
 	if (IS_ERR(umem)) {
 		status = PTR_ERR(umem);
 		goto out;

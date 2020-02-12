@@ -181,8 +181,8 @@ uint genz_parse_page_grid_opt(char *str, uint64_t max_page_count,
 		if (!bit && ret == 0)
 			cnt++;
 		else
-			pr_warning("%s:%s:invalid page_grid parameter - %s\n",
-				   "genz", __func__, s);
+			pr_warn("%s:%s:invalid page_grid parameter - %s\n",
+				"genz", __func__, s);
 		if (cnt == PAGE_GRID_ENTRIES)
 			break;
 	}
