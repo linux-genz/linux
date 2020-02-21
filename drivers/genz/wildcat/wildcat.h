@@ -44,6 +44,7 @@
 #include <linux/if_ether.h>
 
 #include "wildcat-uapi.h"
+#include "wildcat-control.h"
 
 #define SLICES                        4
 #define VECTORS_PER_SLICE             32

@@ -251,6 +251,9 @@ struct genz_bridge_driver {
 			    struct genz_rdm_info *rdmi);
 	int (*free_queues)(struct genz_xdm_info *xdmi,
 			   struct genz_rdm_info *rdmi);
+	int (*control_structure_pointers) (int vers, int structure_type,
+			const struct genz_control_structure_ptr **csp,
+			int *num_ptrs);
 };
 #define to_genz_bridge_driver(d) container_of(d, struct genz_bridge_driver, driver)
 
@@ -384,11 +387,12 @@ struct genz_bridge_dev {
 	union genz_zmmu_info    zmmu_info;
 	struct resource         ld_st_res;
 	/* Revisit: add address space */
-	struct kobject		bridge_dir;
+	struct kobject		genzN_dir;
 	struct kobject		*control_dir;
+	struct kset		*genz_control_kset;
 };
 #define to_zbdev(d) container_of(d, struct genz_bridge_dev, bridge_dev)
-#define kobj_to_zbdev(kobj) container_of(kobj, struct genz_bridge_dev, bridge_dir)
+#define kobj_to_zbdev(kobj) container_of(kobj, struct genz_bridge_dev, genzN_dir)
 
 static inline bool zdev_is_local_bridge(struct genz_dev *zdev)
 {
