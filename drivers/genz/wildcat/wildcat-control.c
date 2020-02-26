@@ -83,6 +83,7 @@ struct wildcat_quirk {
 };
 
 static struct wildcat_quirk quirks[] = {
+	{ 0x100000, 0x0000000000031001},
 	{ 0x1C0000, 0x00003001000a0002},
 	{ 0x1C0100, 0x00003001000a0002},
 	{ 0x200000, 0x00010002002d0004},
