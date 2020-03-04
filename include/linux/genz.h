@@ -53,6 +53,7 @@ struct genz_driver;
 struct genz_bridge_dev;
 struct genz_component;
 struct genz_pte_info;
+struct genz_mem_data;
 struct genz_driver_aux;
 struct genz_driver_aux;
 
@@ -251,6 +252,11 @@ struct genz_bridge_driver {
 			    struct genz_rdm_info *rdmi);
 	int (*free_queues)(struct genz_xdm_info *xdmi,
 			   struct genz_rdm_info *rdmi);
+	void (*generate_uuid)(struct genz_bridge_dev *br, uuid_t *uuid);
+	int (*uuid_import)(struct genz_mem_data *mdata, uuid_t *uuid,
+			   uint32_t uu_flags, gfp_t alloc_flags);
+	int (*uuid_free)(struct genz_mem_data *mdata, uuid_t *uuid,
+			 uint32_t *uu_flags, bool *local);
 };
 #define to_genz_bridge_driver(d) container_of(d, struct genz_bridge_driver, driver)
 
@@ -739,5 +745,10 @@ int genz_alloc_queues(struct genz_bridge_dev *br,
 		      struct genz_xdm_info *xdmi, struct genz_rdm_info *rdmi);
 int genz_free_queues(struct genz_xdm_info *xdmi, struct genz_rdm_info *rdmi);
 int genz_sgl_request(struct genz_dev *zdev, struct genz_sgl_info *sgli);
+void genz_generate_uuid(struct genz_bridge_dev *br, uuid_t *uuid);
+int genz_uuid_import(struct genz_mem_data *mdata, uuid_t *uuid,
+		     uint32_t uu_flags, gfp_t alloc_flags);
+int genz_uuid_free(struct genz_mem_data *mdata, uuid_t *uuid,
+		   uint32_t *uu_flags, bool *local);
 
 #endif /* LINUX_GENZ_H */

@@ -675,6 +675,46 @@ out:
 }
 EXPORT_SYMBOL(genz_teardown_remote_uuid);
 
+void genz_generate_uuid(struct genz_bridge_dev *br, uuid_t *uuid)
+{
+	if (br->zbdrv->generate_uuid) {
+		return br->zbdrv->generate_uuid(br, uuid);
+	}
+
+	uuid_gen(uuid);
+}
+EXPORT_SYMBOL(genz_generate_uuid);
+
+int genz_uuid_import(struct genz_mem_data *mdata, uuid_t *uuid,
+		     uint32_t uu_flags, gfp_t alloc_flags)
+{
+	struct genz_bridge_dev *br;
+
+	if (!mdata)
+		return -EINVAL;
+	br = mdata->bridge;
+	if (!br || !br->zbdrv || !br->zbdrv->uuid_import)
+		return -EINVAL;
+	/* Revisit: add default implementation */
+	return br->zbdrv->uuid_import(mdata, uuid, uu_flags, alloc_flags);
+}
+EXPORT_SYMBOL(genz_uuid_import);
+
+int genz_uuid_free(struct genz_mem_data *mdata, uuid_t *uuid,
+		   uint32_t *uu_flags, bool *local)
+{
+	struct genz_bridge_dev *br;
+
+	if (!mdata)
+		return -EINVAL;
+	br = mdata->bridge;
+	if (!br || !br->zbdrv || !br->zbdrv->uuid_free)
+		return -EINVAL;
+	/* Revisit: add default implementation */
+	return br->zbdrv->uuid_free(mdata, uuid, uu_flags, local);
+}
+EXPORT_SYMBOL(genz_uuid_free);
+
 void genz_uuid_exit(void)
 {
 	struct rb_node          *rb;

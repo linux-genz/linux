@@ -48,7 +48,6 @@ void wildcat_generate_uuid(struct genz_bridge_dev *gzbr, uuid_t *uuid)
 	uuid->b[2] = (cid >>  4) & 0xff;
 	uuid->b[3] = ((cid & 0x0f) << 4) | (uuid->b[3] & 0x0f);
 }
-EXPORT_SYMBOL(wildcat_generate_uuid);
 
 uint32_t wildcat_gcid_from_uuid(const uuid_t *uuid)
 {
@@ -248,7 +247,6 @@ int wildcat_kernel_UUID_IMPORT(struct genz_mem_data *mdata, uuid_t *uuid,
 		 status, uuid, uu_flags);
 	return status;
 }
-EXPORT_SYMBOL(wildcat_kernel_UUID_IMPORT);
 
 int wildcat_common_UUID_FREE(struct genz_mem_data *mdata, uuid_t *uuid,
 			     uint32_t *uu_flags, bool *local)
