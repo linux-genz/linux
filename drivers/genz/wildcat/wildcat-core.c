@@ -953,6 +953,9 @@ static struct genz_bridge_driver wildcat_genz_bridge_driver = {
 	.alloc_queues = wildcat_alloc_queues,
 	.free_queues = wildcat_free_queues,
 	.sgl_request = wildcat_sgl_request,
+	.generate_uuid = wildcat_generate_uuid,
+	.uuid_import = wildcat_kernel_UUID_IMPORT,
+	.uuid_free = wildcat_common_UUID_FREE,
 };
 
 #define WILDCAT_ZMMU_XDM_RDM_HSR_BAR 0

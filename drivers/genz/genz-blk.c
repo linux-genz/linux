@@ -6,7 +6,7 @@
  *          Betty Dall <betty.dall@hpe.com>
  *
  * Copyright:
- *     © Copyright 2016-2019 Hewlett Packard Enterprise Development LP
+ *     © Copyright 2016-2020 Hewlett Packard Enterprise Development LP
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License,
@@ -35,8 +35,8 @@
 #include <linux/dma-direction.h>
 #include <linux/dax.h>
 #include <linux/pfn_t.h>
+#include <linux/uio.h>
 #include <linux/genz.h>
-#include "wildcat/wildcat.h"  /* Revisit: remove wildcat dependency */
 
 #define GENZ_BLK_DRV_NAME "genz-blk"
 #define GENZ_BDEV_NAME    "gzb"
@@ -770,7 +770,7 @@ static struct genz_blk_bridge *find_bbr(struct genz_bridge_dev *zbdev)
 		goto free;
 	}
 	genz_init_mem_data(&bbr->mem_data, zbdev);
-	wildcat_generate_uuid(zbdev, &bbr->uuid);  /* Revisit: wildcat-specific */
+	genz_generate_uuid(zbdev, &bbr->uuid);
 	uu = genz_uuid_tracker_alloc_and_insert(&bbr->uuid, UUID_TYPE_LOCAL,
 						0, &bbr->mem_data, GFP_KERNEL,
 						&err);
@@ -913,9 +913,8 @@ static int genz_blk_probe(struct genz_dev *zdev,
 	}
 	bstate->bbr = bbr;
 	dev_dbg(&zdev->dev, "instance_uuid=%pUb\n", &zdev->instance_uuid);
-	/* Revisit: need non-wildcat-specific UUID_IMPORT */
-	ret = wildcat_kernel_UUID_IMPORT(&bbr->mem_data, &zdev->instance_uuid,
-					 0, GFP_KERNEL);
+	ret = genz_uuid_import(&bbr->mem_data, &zdev->instance_uuid,
+			       0, GFP_KERNEL);
 	if (ret < 0)
 		goto out; /* Revisit: undo bstate */
 	genz_for_each_resource(zres, zdev) {
@@ -947,9 +946,8 @@ static int genz_blk_remove(struct genz_dev *zdev)
 		/* Revisit: error handling */
 	}
 
-	/* Revisit: need non-wildcat-specific UUID_FREE */
-	ret = wildcat_common_UUID_FREE(&bbr->mem_data,
-				       &zdev->instance_uuid, &uu_flags, &local);
+	ret = genz_uuid_free(&bbr->mem_data, &zdev->instance_uuid,
+			     &uu_flags, &local);
 	kref_put(&bstate->bbr->kref, free_bbr);
 	kfree(bstate);
 	return ret;
@@ -999,5 +997,4 @@ module_exit(genz_blk_exit);
 
 MODULE_LICENSE("GPL v2");
 MODULE_IMPORT_NS(drivers/genz/genz);
-MODULE_IMPORT_NS(drivers/genz/wildcat/wildcat); /* Revisit: remove dependency */
 MODULE_DESCRIPTION("Block driver for Gen-Z");

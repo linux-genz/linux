@@ -397,7 +397,7 @@ static int wildcat_rdma_user_req_INIT(struct io_entry *entry)
 	rsp->init.local_shared_size =
 		fdata->local_shared_zmap->zpages->hdr.size;
 
-	wildcat_generate_uuid(fdata->md.bridge, &rsp->init.uuid);
+	genz_generate_uuid(fdata->md.bridge, &rsp->init.uuid);
 	uu = genz_uuid_tracker_alloc_and_insert(
 		&rsp->init.uuid, UUID_TYPE_LOCAL,
 		0, &fdata->md, GFP_KERNEL, &status);
