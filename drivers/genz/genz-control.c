@@ -138,19 +138,48 @@ static int traverse_control_pointers(struct genz_dev *zdev,
 	int struct_vers,
 	struct kobject *dir);
 /**
+ * genz_valid_table_type - determines if a control table type is valid
+ * Returns 1 when the control table type is valid
+ * Returns 0 when the control table type is not valid
+ */
+int genz_valid_table_type(int type)
+{
+	if (type < GENZ_TABLE_ENUM_START ||
+			type > (genz_table_type_to_ptrs_nelems+GENZ_TABLE_ENUM_START))
+		return 0;
+	return 1;
+}
+
+/**
  * genz_valid_struct_type - determines if a control structure type is valid
  * Returns 1 when the control structure type is valid
  * Returns 0 when the control structure type is not valid
  */
 int genz_valid_struct_type(int type)
 {
-
 	if (type < 0 || type > genz_struct_type_to_ptrs_nelems)
 		return 0;
 	if (genz_struct_type_to_ptrs[type].ptr != NULL)
 		return 1;
 	else
 		return 0;
+}
+
+/**
+ * genz_table_name - return the name of a given control table ptr_type
+ * int type - the control table type
+ * Returns the name of a table type or NULL if the type is not vaild.
+ */
+static const char *genz_table_name(int type)
+{
+	pr_debug("type %d type-GENZ_TABLE_ENUM_START is %d\n", type, 
+			(type-GENZ_TABLE_ENUM_START));
+	if (!genz_valid_table_type(type)) {
+		pr_debug("type %d is invalid\n", type);
+		return "";
+	}
+
+	return genz_table_type_to_ptrs[(type-GENZ_TABLE_ENUM_START)].name;
 }
 
 /**
@@ -895,27 +924,42 @@ static struct genz_control_info *alloc_control_info(struct genz_dev *zdev,
 	return ci;
 }
 
-#ifdef NOT_YET
 static int traverse_array(struct genz_dev *zdev,
 			struct genz_control_info *parent,
-			struct genz_control_ptr_info *pi,
 			struct kobject *struct_dir,
 			const struct genz_control_structure_ptr *csp)
 {
 	struct genz_control_info *ci;
-	struct genz_control_structure_header hdr;
 	int ret = 0;
+	uint32_t table_ptr;
+
+	/* Read the pointer to this array */
+	ret = zdev->zbdev->zbdrv->control_read(zdev,
+			parent->start+csp->pointer_offset,
+			(int)csp->ptr_size, (void *)&table_ptr, 0);
+	if (ret) {
+		pr_debug("control_read failed with %d\n", ret);
+		return ret;
+	}
+
+	/* This pointer is NULL. Not an error.*/
+	if (table_ptr == 0)
+		return 0;
 
 	/* Allocate a genz_control_info/kobject for this directory */
-	ci = alloc_control_info(zdev, &hdr, csp->pointer_offset, parent);
+	ci = alloc_control_info(zdev, NULL, csp->pointer_offset, parent);
 	if (ci == NULL) {
 		pr_debug("failed to allocate control_info\n");
 		return -ENOMEM;
 	}
+	ci->type = csp->struct_type;
+	ci->size = (*csp->size_fn)(ci->parent);
+
+	pr_debug("table type 0x%x size 0x%lx name %s\n", ci->type, ci->size, genz_table_name(ci->type));
 
 	kobject_init(&ci->kobj, &control_info_ktype);
 	ret = kobject_add(&ci->kobj, struct_dir, "%s",
-				genz_structure_name(hdr.type));
+				genz_table_name(ci->type));
 	if (ret < 0) {
 		kobject_put(&ci->kobj);
 		kfree(ci);
@@ -924,7 +968,7 @@ static int traverse_array(struct genz_dev *zdev,
 
 	/* Now initialize the binary attribute file. */
 	sysfs_bin_attr_init(&ci->battr);
-	ci->battr.attr.name = genz_structure_name(hdr.type);
+	ci->battr.attr.name = genz_table_name(ci->type);
 	ci->battr.attr.mode = 0400;
 	ci->battr.size = ci->size;
 	ci->battr.read =  read_control_structure;
@@ -934,18 +978,15 @@ static int traverse_array(struct genz_dev *zdev,
 	ret = sysfs_create_bin_file(&ci->kobj, &ci->battr);
 	return 0;
 }
-#endif /* NOT_YET */
 
-#ifdef NOT_YET
 static int traverse_table(struct genz_dev *zdev,
 			struct genz_control_info *parent,
-			struct genz_control_ptr_info *pi,
 			struct kobject *dir,
 			const struct genz_control_structure_ptr *csp)
 {
+	pr_debug("Revisit: implement traverse_table\n");
 	return 0;
 }
-#endif
 
 static int traverse_table_with_header(struct genz_dev *zdev,
 			struct genz_control_info *parent,
@@ -1316,7 +1357,7 @@ static int start_core_structure(struct genz_dev *zdev,
 	/* Recursively traverse any pointers in this structure */
 	ret = traverse_control_pointers(zdev, ci,
 		hdr.type, hdr.vers,
-		&ci->kobj);
+		dir);
 	if (ret < 0) {
 		/* Revisit: handle error */
 		pr_debug("traverse_control_poitners for %s failed with %d\n", ci->battr.attr.name, ret);
@@ -1475,17 +1516,12 @@ static int traverse_control_pointers(struct genz_dev *zdev,
 			break;
 		case GENZ_CONTROL_POINTER_ARRAY:
 			pr_debug("ptr_type GENZ_CONTROL_POINTER_ARRAY\n");
-			/*
-			ret = traverse_array(zdev, parent,
-				pi, dir, csp_entry);
-			*/
+			ret = traverse_array(zdev, parent, dir, csp_entry);
 			break;
 		case GENZ_CONTROL_POINTER_TABLE:
 			pr_debug("ptr_type GENZ_CONTROL_POINTER_TABLE\n");
-			/*
 			ret = traverse_table(zdev, parent,
-				pi, dir, csp_entry);
-				*/
+				dir, csp_entry);
 			break;
 		case GENZ_CONTROL_POINTER_TABLE_WITH_HEADER:
 			pr_debug("ptr_type GENZ_CONTROL_POINTER_TABLE_WITH_HEADER\n");
