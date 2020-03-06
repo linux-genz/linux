@@ -191,7 +191,6 @@ enum genz_control_structure_type {
 };
 
 struct genz_control_info; /* tentative declaration */
-
 struct genz_control_structure_ptr {
     const enum genz_control_ptr_flags ptr_type;
     const enum genz_pointer_size ptr_size;
