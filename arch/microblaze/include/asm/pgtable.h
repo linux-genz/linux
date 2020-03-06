@@ -1,11 +1,8 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (C) 2008-2009 Michal Simek <monstr@monstr.eu>
  * Copyright (C) 2008-2009 PetaLogix
  * Copyright (C) 2006 Atmark Techno, Inc.
- *
- * This file is subject to the terms and conditions of the GNU General Public
- * License. See the file "COPYING" in the main directory of this archive
- * for more details.
  */
 
 #ifndef _ASM_MICROBLAZE_PGTABLE_H
@@ -397,19 +394,18 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 static inline unsigned long pte_update(pte_t *p, unsigned long clr,
 				unsigned long set)
 {
-	unsigned long flags, old, tmp;
+	unsigned long old, tmp;
 
-	raw_local_irq_save(flags);
-
-	__asm__ __volatile__(	"lw	%0, %2, r0	\n"
-				"andn	%1, %0, %3	\n"
-				"or	%1, %1, %4	\n"
-				"sw	%1, %2, r0	\n"
+	__asm__ __volatile__(
+			"1:	lwx	%0, %2, r0;\n"
+			"	andn	%1, %0, %3;\n"
+			"	or	%1, %1, %4;\n"
+			"	swx	%1, %2, r0;\n"
+			"	addic	%1, r0, 0;\n"
+			"	bnei	%1, 1b;\n"
 			: "=&r" (old), "=&r" (tmp)
 			: "r" ((unsigned long)(p + 1) - 4), "r" (clr), "r" (set)
 			: "cc");
-
-	raw_local_irq_restore(flags);
 
 	return old;
 }
