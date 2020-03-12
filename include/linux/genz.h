@@ -257,6 +257,9 @@ struct genz_bridge_driver {
 			   uint32_t uu_flags, gfp_t alloc_flags);
 	int (*uuid_free)(struct genz_mem_data *mdata, uuid_t *uuid,
 			 uint32_t *uu_flags, bool *local);
+	int (*control_structure_pointers) (int vers, int structure_type,
+			const struct genz_control_structure_ptr **csp,
+			int *num_ptrs);
 };
 #define to_genz_bridge_driver(d) container_of(d, struct genz_bridge_driver, driver)
 
@@ -383,12 +386,19 @@ struct genz_bridge_dev {
 	struct genz_dev		zdev;
 	struct genz_bridge_driver *zbdrv;
 	struct device		*bridge_dev; /* native device pointer */
+	uint16_t		bridge_num;
 	struct genz_fabric	*fabric;
 	struct genz_bridge_info br_info;
 	spinlock_t              zmmu_lock;  /* global bridge zmmu lock */
 	union genz_zmmu_info    zmmu_info;
 	struct resource         ld_st_res;
+	/* Revisit: add address space */
+	struct kobject		genzN_dir;
+	struct kobject		*control_dir;
+	struct kset		*genz_control_kset;
 };
+#define to_zbdev(d) container_of(d, struct genz_bridge_dev, bridge_dev)
+#define kobj_to_zbdev(kobj) container_of(kobj, struct genz_bridge_dev, genzN_dir)
 
 static inline bool zdev_is_local_bridge(struct genz_dev *zdev)
 {

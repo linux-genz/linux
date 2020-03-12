@@ -190,11 +190,13 @@ enum genz_control_structure_type {
     GENZ_VCAT_TABLE = GENZ_TABLE_ENUM_START + 45
 };
 
+struct genz_control_info; /* tentative declaration */
 struct genz_control_structure_ptr {
     const enum genz_control_ptr_flags ptr_type;
     const enum genz_pointer_size ptr_size;
     const uint32_t pointer_offset;
     const enum genz_control_structure_type struct_type;
+    ssize_t (*size_fn)(struct genz_control_info *ci);
 };
 
 
@@ -6107,6 +6109,12 @@ struct genz_reliable_multicast_table_entry_row {
 
 };
 
+struct genz_vcat_entry {
+	uint32_t vcm                 : 32;
+	uint32_t th                  : 7;
+	uint32_t r0                  : 25;
+}; 
+
 struct genz_requester_vcat_table {
 
 };
@@ -6175,6 +6183,7 @@ extern struct genz_hardware_classes_meta genz_hardware_classes[];
 extern size_t genz_hardware_classes_nelems;
 
 extern size_t genz_struct_type_to_ptrs_nelems;
+extern size_t genz_table_type_to_ptrs_nelems;
 
 union genz_control_structure {
     struct genz_control_ptr_info control_ptr_info_ptr;
@@ -6278,4 +6287,11 @@ union genz_control_structure {
     struct genz_unreliable_multicast_table_entry_row unreliable_multicast_table_entry_row_ptr;
     struct genz_vcat_table vcat_table_ptr;
 };
+
+ssize_t genz_requester_vcat_table_size(struct genz_control_info *ci);
+ssize_t genz_responder_vcat_table_size(struct genz_control_info *ci);
+ssize_t genz_rit_table_size(struct genz_control_info *ci);
+ssize_t genz_route_control_table_size(struct genz_control_info *ci);
+ssize_t genz_ssdt_msdt_table_size(struct genz_control_info *ci);
+ssize_t genz_component_destination_table_size(struct genz_control_info *ci);
 #endif

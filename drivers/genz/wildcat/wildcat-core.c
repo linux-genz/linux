@@ -956,6 +956,7 @@ static struct genz_bridge_driver wildcat_genz_bridge_driver = {
 	.generate_uuid = wildcat_generate_uuid,
 	.uuid_import = wildcat_kernel_UUID_IMPORT,
 	.uuid_free = wildcat_common_UUID_FREE,
+	.control_structure_pointers = wildcat_control_structure_pointers,
 };
 
 #define WILDCAT_ZMMU_XDM_RDM_HSR_BAR 0

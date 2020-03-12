@@ -70,6 +70,39 @@ out:
 	return slink_base;
 }
 
+
+/*
+ * Revisit: the PF FPGA has the wrong size for the structures
+ * and the dvsec.pl command cannot write the value. This is a
+ * workaround to intercept the read of the interface and interface
+ * statistics structure headers and return the correct size/vers/type.
+ */
+struct wildcat_quirk {
+	loff_t offset;
+	uint64_t value;
+};
+
+static struct wildcat_quirk quirks[] = {
+	{ 0x100000, 0x0000000000031001},
+	{ 0x1C0000, 0x00003001000a0002},
+	{ 0x1C0100, 0x00003001000a0002},
+	{ 0x200000, 0x00010002002d0004},
+	{ 0x201000, 0x00010002002d0004},
+};
+
+static int wildcat_is_quirk_offset(loff_t offset, uint64_t *data) {
+	int i;
+	int num_quirks = sizeof(quirks)/sizeof(quirks[0]);
+
+	for (i = 0; i < num_quirks; i++) {
+		if (quirks[i].offset == offset) {
+			*data = quirks[i].value;
+			return 1;
+		}
+	}
+	return 0;
+}
+
 static int csr_access_rd(struct bridge *br, uint32_t csr, uint64_t *data)
 {
 	int                 ret = -EIO;
@@ -78,10 +111,16 @@ static int csr_access_rd(struct bridge *br, uint32_t csr, uint64_t *data)
 	uint32_t            val, val_lo, val_hi;
 	int                 i;
 
+	if (wildcat_is_quirk_offset(csr, data)) {
+		return 0;
+	}
+
 	/* caller must hold br->csr_mutex */
 	pos = pci_find_ext_capability(sl->pdev, PCI_EXT_CAP_ID_DVSEC);
-	if (!pos)
+	if (!pos) {
+		pr_debug("pci_find_ext_capability failed\n");
 		goto out;
+	}
 	pci_read_config_dword(sl->pdev, pos + WILDCAT_DVSEC_MBOX_CTRL_OFF,
 			      &val);
 	if (val & WILDCAT_DVSEC_MBOX_CTRL_TRIG) {
@@ -99,8 +138,10 @@ static int csr_access_rd(struct bridge *br, uint32_t csr, uint64_t *data)
 			sl->pdev, pos + WILDCAT_DVSEC_MBOX_CTRL_OFF, &val);
 		pr_debug("val=0x%x, loops=%d\n", val, i);
 		if (!(val & WILDCAT_DVSEC_MBOX_CTRL_TRIG)) {
-			if (val & WILDCAT_DVSEC_MBOX_CTRL_ERR)
+			if (val & WILDCAT_DVSEC_MBOX_CTRL_ERR) {
+				pr_debug("WILDCAT_DVSEC_MBOX_CTRL_ERR set\n");
 				break;
+			}
 			/* Success */
 			ret = 0;
 			pci_read_config_dword(
@@ -134,9 +175,6 @@ int wildcat_control_read(struct genz_dev *zdev, loff_t offset, size_t size,
 	if (!zdev_is_local_bridge(zdev)) { /* no in-band fabric mgmt */
 		ret = -ENODEV;
 		goto out;
-	} else if (offset >= 0x200) { /* Revisit: only Core Structure for now */
-		ret = -EPERM;
-		goto out;
 	}
 
 	gzbr = zdev->zbdev;
@@ -153,8 +191,8 @@ int wildcat_control_read(struct genz_dev *zdev, loff_t offset, size_t size,
 		mutex_lock(&br->csr_mutex);
 		ret = csr_access_rd(br, csr, &csr_val);
 		mutex_unlock(&br->csr_mutex);
-		dev_dbg(&zdev->dev, "ret=%d, csr=0x%x, csr_val=0x%llx\n",
-			ret, csr, csr_val);
+		dev_dbg(&zdev->dev, "ret=%d, csr=0x%x, csr_val=0x%llx shifted val = 0x%llx size = %lu\n",
+			ret, csr, csr_val, csr_val >> shift, size);
 		if (ret < 0)
 			goto out;
 		if (csr >= 0xD0 && csr <= 0x140)
@@ -170,6 +208,7 @@ int wildcat_control_read(struct genz_dev *zdev, loff_t offset, size_t size,
 	}
 
 out:
+	pr_debug("returning ret = %d val = 0x%llx\n", ret, val);
 	return ret;
 }
 
@@ -178,4 +217,79 @@ int wildcat_control_write(struct genz_dev *zdev, loff_t offset, size_t size,
 {
 	/* Revisit: implement this */
 	return -ENOSYS;
+}
+
+static struct genz_control_structure_ptr wildcat_interface_structure_ptrs[] = {
+    { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x60, GENZ_INTERFACE_STRUCTURE },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x68, GENZ_UNKNOWN_STRUCTURE },
+    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x6c, GENZ_UNKNOWN_STRUCTURE },
+    /*
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x70, GENZ_INTERFACE_PHY_STRUCTURE },
+    */
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x74, GENZ_INTERFACE_STATISTICS_STRUCTURE },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x78, GENZ_COMPONENT_MECHANICAL_STRUCTURE },
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x7c, GENZ_VENDOR_DEFINED_STRUCTURE },
+    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x80, GENZ_VCAT_TABLE },
+    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x84, GENZ_LPRT_MPRT_TABLE },
+    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x88, GENZ_LPRT_MPRT_TABLE },
+};
+
+struct genz_control_structure_ptr wildcat_interface_statistics_structure_ptrs[] = {
+    { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x8, GENZ_VENDOR_DEFINED_STRUCTURE },
+};
+
+static struct genz_control_ptr_info wildcat_struct_type_to_ptrs[] = {
+     {},
+     {},
+     { wildcat_interface_structure_ptrs, sizeof(wildcat_interface_structure_ptrs)/sizeof(wildcat_interface_structure_ptrs[0]), sizeof(struct genz_interface_structure), true, 0x0, "interface" },
+     {},
+     { wildcat_interface_statistics_structure_ptrs, sizeof(wildcat_interface_statistics_structure_ptrs)/sizeof(wildcat_interface_statistics_structure_ptrs[0]), sizeof(struct genz_interface_statistics_structure), false, 0x0, "interface_statistics" },
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+     {},
+};
+
+int wildcat_control_structure_pointers(int vers, int struct_type,
+			const struct genz_control_structure_ptr **csp,
+			int *num_ptrs)
+{
+	/* Is there a wildcat specific genz_control_structure_ptr? */
+	if (!wildcat_struct_type_to_ptrs[struct_type].ptr)
+		return -ENOENT;
+	/* Does its version match the one we are lookig for? */
+	if (wildcat_struct_type_to_ptrs[struct_type].vers != vers)
+		return -ENOENT;
+	*csp = wildcat_struct_type_to_ptrs[struct_type].ptr;
+	*num_ptrs = wildcat_struct_type_to_ptrs[struct_type].num_ptrs;
+	return 0;
 }

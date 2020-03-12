@@ -41,7 +41,7 @@ ssize_t genz_control_structure_size(struct genz_control_info *ci)
 {
 	if (ci == NULL) {
 		pr_debug("genz_control_info is NULL\n");
-		return 0;
+		return -1;
 	}
 	/*
 	 * The genz_control_info already read the structure header to
@@ -49,7 +49,222 @@ ssize_t genz_control_structure_size(struct genz_control_info *ci)
 	 */
 	return(ci->size);
 }
-EXPORT_SYMBOL_GPL(genz_control_structure_size);
+
+ssize_t genz_route_control_table_size(struct genz_control_info *ci)
+{
+	/*
+	 * The size of the Route Control Table is fixed as the size
+	 * of the struct genz_route_control_table.
+	 */
+	return (sizeof(struct genz_route_control_table));
+}
+
+ssize_t genz_requester_vcat_table_size(struct genz_control_info *ci)
+{
+	uint32_t req_vcatsz;
+	uint32_t entry_sz;
+#define VCAT_REQ_ROWS	16
+	struct genz_component_destination_table_structure cdt;
+	int ret;
+	
+	if (ci == NULL) {
+		pr_debug("genz_control_info is NULL\n");
+		return -1;
+	}
+
+	/*
+	 * The requester VCAT table contains 16 rows. Each row is
+	 * K VCAT entries. A VCAT entry is 8 bytes. The number of
+	 * entries (K) is found in the Component Destination Table
+	 * Structure REQ-VCATSZ field
+	 */
+	 
+	entry_sz = sizeof(struct genz_vcat_entry);
+	pr_debug("genz_vcat_entry size is %u\n", entry_sz);
+
+	/* Find the component destination table structure req_vcatsz field */
+	if (ci->type != GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE) {
+		pr_debug("expected ci->type to be GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE but it was 0x%x\n", ci->type);
+		return -1;
+	}
+
+	/* Revisit: make a macro/inline for the read ci_read(struct genz_control_info *ci, ... */
+	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
+			ci->start, sizeof(cdt), &cdt, 0);
+	if (ret) {
+		pr_debug("control read of component destination table structure failed with %d\n",
+			 ret);
+		return -1;
+	}
+	req_vcatsz = cdt.req_vcatsz;
+	pr_debug("cdt.req_vcatsz is %u\n", req_vcatsz);
+	if (req_vcatsz == 0)
+		req_vcatsz = 1 << 5; /* Spec says default is 2^5 */
+
+	return(VCAT_REQ_ROWS * entry_sz * req_vcatsz);
+}
+
+ssize_t genz_responder_vcat_table_size(struct genz_control_info *ci)
+{
+	uint32_t rsp_vcatsz;
+	uint32_t entry_sz;
+	uint32_t max_vcs;
+	struct genz_component_destination_table_structure cdt;
+	int ret;
+	
+	if (ci == NULL) {
+		pr_debug("genz_control_info is NULL\n");
+		return -1;
+	}
+
+	/*
+	 * The responder VCAT table contains N rows where N is the maximum
+	 * number of provisioned VCs. Each row is K VCAT entries. A VCAT
+	 * entry is 8 bytes. The number of  entries (K) is found in the
+	 * Component Destination Table Structure RSP-VCATSZ field
+	 */
+	 
+	entry_sz = sizeof(struct genz_vcat_entry);
+
+	/* Find the component destination table structure req_vcatsz field */
+	if (ci->type != GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE) {
+		pr_debug("expected ci->type to be GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE but it was 0x%x\n", ci->type);
+		return -1;
+	}
+
+	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
+			ci->start, sizeof(cdt), &cdt, 0);
+	if (ret) {
+		pr_debug("control read of component destination table structure failed with %d\n",
+			 ret);
+		return -1;
+	}
+	rsp_vcatsz = cdt.rsp_vcatsz;
+	if (rsp_vcatsz == 0)
+		rsp_vcatsz = 1 << 5; /* Spec says default is 2^5 */
+
+	/*
+	 * Revisit: how to find maximum number of VCs supported on any
+	 * Responder interface? Find the interface structures and use
+	 * the max HVS field (highest VC Supported) field of all the
+	 * interfaces. 
+	 */
+	max_vcs = 1;
+
+	return(max_vcs * entry_sz * rsp_vcatsz);
+}
+
+ssize_t genz_rit_table_size(struct genz_control_info *ci)
+{
+	uint32_t rit_pad_size;
+	uint32_t max_interface;
+	uint32_t eim_size;
+	uint32_t rit_size;
+	int ret;
+	struct genz_component_destination_table_structure cdt;
+	struct genz_core_structure core;
+	
+	if (ci == NULL) {
+		pr_debug("genz_control_info is NULL\n");
+		return -1;
+	}
+
+	/*
+	 * The RIT table contains N EIM (Egress Interface Masks).
+	 * N is the rit_size field in the Component Destination Table
+	 * Structure. Each EIM is I bits long where I is the Core Structure's
+	 * Max Interface field. The Component Destination Table Structure's
+	 * RIT Pad Size field is added to the EIM size to maintain integer
+	 * 4-byte alignment.
+	 */
+	 
+	/* Find the component destination table structure rit_pad_size field */
+	if (ci->type != GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE) {
+		pr_debug("expected ci->type to be GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE but it was 0x%x\n", ci->type);
+		return -1;
+	}
+
+	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
+			ci->start, sizeof(cdt), &cdt, 0);
+	if (ret) {
+		pr_debug("control read of component destination table structure failed with %d\n",
+			 ret);
+		return -1;
+	}
+	rit_pad_size = cdt.rit_pad_size;
+
+	/* Find the core structure max_interface field */
+	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
+			0, sizeof(core), &core, 0);
+	if (ret) {
+		pr_debug("control read of core structure failed with %d\n",
+			 ret);
+		return -1;
+	}
+	max_interface = core.max_interface;
+
+	eim_size = (max_interface + rit_pad_size) / 8; /* bits to bytes */
+	/* Revisit: check that eim_sz is 4-byte aligned */
+
+	rit_size = cdt.rit_size;
+
+	return (eim_size * rit_size);
+}
+
+ssize_t genz_ssdt_msdt_table_size(struct genz_control_info *ci)
+{
+	struct genz_component_destination_table_structure cdt;
+	int ret;
+	int num_rows = 0;
+	int ssdt_msdt_row_size;
+
+	if (ci == NULL) {
+		pr_debug("genz_control_info is NULL\n");
+		return -1;
+	}
+
+	/*
+	 * The SSDT and MSDT tables contains K rows. Each row has
+	 * N 4-byte route entries.
+	 * The number of rows (K) is found in the Component
+	 * Destination Table Structure SSDT Size or MSDT Size field
+	 * (depending on the table type.)
+	 * The size of rows (N) is found in the Component
+	 * Destination Table Structure SSDT MSDT Row Size field.
+	 */
+	 
+	/*
+	 * Find the SSDT Size field and the SSDT MSDT Row Size field of
+	 * the Component Destination Table Structure.
+	 */
+	if (ci->parent->type != GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE) {
+		pr_debug("expected ci->type to be GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE but it was 0x%x\n", ci->parent->type);
+		return -1;
+	}
+
+	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
+			ci->parent->start, sizeof(cdt), &cdt, 0);
+	if (ret) {
+		pr_debug("control read of component destination table structure failed with %d\n",
+			 ret);
+		return -1;
+	}
+#define GENZ_SSDT_TABLE_OFFSET 0x20
+#define GENZ_MSDT_TABLE_OFFSET 0x24
+	if (ci->start == GENZ_SSDT_TABLE_OFFSET)
+		num_rows = cdt.ssdt_size;
+	else if (ci->start == GENZ_MSDT_TABLE_OFFSET)
+		num_rows = cdt.msdt_size;
+	else {
+		pr_debug("unexpected offset does not match SSDT or MSDT 0x%lx\n", ci->start);
+	}
+
+	if (num_rows == 0)
+		num_rows = 1 << 12; /* Spec says default is 2^12 */
+	ssdt_msdt_row_size = cdt.ssdt_msdt_row_size;
+
+	return (num_rows * ssdt_msdt_row_size);
+}
 
 ssize_t genz_c_access_r_key_size(struct genz_control_info *ci)
 {
@@ -89,7 +304,6 @@ ssize_t genz_c_access_r_key_size(struct genz_control_info *ci)
 	sz = num_entries * 8;
 	return(sz);
 }
-EXPORT_SYMBOL_GPL(genz_c_access_r_key_size);
 
 ssize_t genz_oem_data_size(struct genz_control_info *ci)
 {
@@ -125,7 +339,6 @@ ssize_t genz_oem_data_size(struct genz_control_info *ci)
 	}
 	return sz;
 }
-EXPORT_SYMBOL_GPL(genz_oem_data_size);
 
 ssize_t genz_elog_size(struct genz_control_info *ci)
 {
@@ -174,7 +387,6 @@ ssize_t genz_elog_size(struct genz_control_info *ci)
 	sz = (num_entries * 8) + 8;
 	return(sz);
 }
-EXPORT_SYMBOL_GPL(genz_elog_size);
 
 ssize_t genz_lprt_size(struct genz_control_info *ci)
 {
