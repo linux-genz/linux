@@ -396,3 +396,159 @@ ssize_t genz_lprt_size(struct genz_control_info *ci)
 	 */
 	return 0;
 }
+
+ssize_t genz_core_lpd_bdf_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_unreliable_multicast_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_tr_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_pa_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_service_uuid_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_ssod_msod_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_oem_data_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_re_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_media_log_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+
+ssize_t genz_label_data_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_mcprt_msmcprt_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_c_access_r_key_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_image_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_firmware_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_page_grid_restricted_page_grid_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_pte_restricted_pte_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_pm_backup_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_sm_backup_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_vendor_defined_structure_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_c_access_l_p2p_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_resource_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_backup_mgmt_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_mvcat_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_opcode_set_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_opcode_set_uuid_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_ssap_mcap_msap_and_msmcap_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_type_1_interleave_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_reliable_multicast_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_vcat_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_lprt_mprt_table_size(struct genz_control_info *ci)
+{
+	return 0;
+}
+
+ssize_t genz_vendor_defined_with_uuid_structure_size(struct genz_control_info *ci)
+{
+	return 0;
+}

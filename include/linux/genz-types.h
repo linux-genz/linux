@@ -39,14 +39,14 @@
  *
  * XML file meta based of which this file was generated:
  *     Version   : N/A
- *     Date      : 2019-10-09 10:17:48.988273
- *     ctl_file  : gen-z-spec-control-20191009.vsdx
- *     pkt_file  : gen-z-spec-protocol-20191009.vsdx
- *     word_file : gen-z-core-specification-v1.1-20191009.docx
+ *     Date      : 2020-03-09 15:27:23.558578
+ *     ctl_file  : gen-z-spec-control.vsdx
+ *     pkt_file  : gen-z-spec-protocol.vsdx
+ *     word_file : gen-z-core-specification-v1.1.docx
  *
  * Generator Script Meta:
  *     Version      : v0.8
- *     Generated On : 2019-10-29 13:24:53.569028
+ *     Generated On : 2020-03-18 09:38:02.238138
  *
  * **************************************************************
  *
@@ -66,6 +66,11 @@
 #include <inttypes.h>
 #include <uuid/uuid.h>
 
+#define UUID_SIZE 16
+typedef struct {
+    unsigned char b[UUID_SIZE];
+} uuid_t;
+
 #else
 
 #include <linux/uuid.h>
@@ -77,6 +82,14 @@ struct genz_control_structure_header {
     uint32_t vers   : 4;
     uint32_t size   : 16;
 };
+
+struct genz_vcat_entry {
+    uint32_t vcm : 32;
+    uint32_t th : 7;
+    uint32_t r0 : 25;
+};
+
+struct genz_control_info;
 
 #define GENZ_TABLE_ENUM_START 0x1000
 
@@ -94,7 +107,7 @@ enum genz_pointer_size {
     GENZ_6_BYTE_POINTER = 6
 };
 
-struct genz_control_ptr_info {
+struct genz_control_ptr_info{
     const struct genz_control_structure_ptr * const ptr;
     const size_t num_ptrs;
     const ssize_t struct_bytes;
@@ -190,8 +203,7 @@ enum genz_control_structure_type {
     GENZ_VCAT_TABLE = GENZ_TABLE_ENUM_START + 45
 };
 
-struct genz_control_info; /* tentative declaration */
-struct genz_control_structure_ptr {
+struct genz_control_structure_ptr{
     const enum genz_control_ptr_flags ptr_type;
     const enum genz_pointer_size ptr_size;
     const uint32_t pointer_offset;
@@ -231,7 +243,9 @@ union genz_c_control {
         uint64_t caution_thermal_limit_performance_throttle_enable : 1;
         uint64_t transmit_subnet_local_control_no_op               : 1;
         uint64_t transmit_global_subnet_control_no_op              : 1;
-        uint64_t rsvdp                                             : 47;
+        uint64_t transmit_subnet_local_control_aead                : 1;
+        uint64_t transmit_global_subnet_control_aead               : 1;
+        uint64_t rsvdp                                             : 45;
         uint64_t padding                                           : 12;
     };
 };
@@ -2839,10 +2853,9 @@ enum genz_c_control_lpd_responder_zmmu_bypass_control {
 };
 
 enum genz_aec {
-    AEC_DEFAULT = 0x0,
-    AEC_AE_1B = 0x1,
-    AEC_AD_1B = 0x2,
-    AEC_UK_1B = 0x3
+    AEC_AE_1B = 0x0,
+    AEC_AD_1B = 0x1,
+    AEC_UK_1B = 0x2
 };
 
 enum genz_component_cap_1_address_field_interpretation {
@@ -4323,11 +4336,11 @@ enum genz_hardware_types {
     GENZ_NUM_HARDWARE_TYPES
 };
 
-struct genz_component_rkd_structure_array {
+struct genz_component_rkd_structure_array{
     uint64_t rkd_authorization_63_0 : 64;
 };
 
-struct genz_component_lpd_structure_array {
+struct genz_component_lpd_structure_array{
     uint64_t f_ctl_sub_0             : 16;
     uint64_t bdf_table_index_sub_0   : 6;
     uint64_t r3                      : 2;
@@ -4337,26 +4350,26 @@ struct genz_component_lpd_structure_array {
     uint64_t function_rw_r_key_sub_0 : 32;
 };
 
-struct genz_component_event_structure_array {
+struct genz_component_event_structure_array{
     uint64_t event_signal_63_0 : 64;
 };
 
-struct genz_service_uuid_structure_array {
+struct genz_service_uuid_structure_array{
     uint64_t class_sub_0  : 16;
     uint64_t max_si_sub_0 : 16;
     uint64_t class_sub_1  : 16;
     uint64_t max_si_sub_1 : 16;
 };
 
-struct genz_vendor_defined_with_uuid_structure_array {
+struct genz_vendor_defined_with_uuid_structure_array{
     uint64_t vendor_defined_data_sub_2 : 64;
 };
 
-struct genz_vendor_defined_structure_array {
+struct genz_vendor_defined_structure_array{
     uint32_t vendor_defined_data_sub_0 : 32;
 };
 
-struct genz_interface_statistics_structure_array {
+struct genz_interface_statistics_structure_array{
     uint64_t total_transmitted_packets_vc_sub_0 : 64;
     uint64_t total_transmitted_bytes_vc_sub_0   : 64;
     uint64_t total_received_packets_vc_sub_0    : 64;
@@ -4364,15 +4377,15 @@ struct genz_interface_statistics_structure_array {
     uint64_t occupancy_vc_sub_0                 : 64;
 };
 
-struct genz_interface_phy_structure_array {
+struct genz_interface_phy_structure_array{
     uint64_t phy_specific_configuration_space_7_0 : 64;
 };
 
-struct genz_unreliable_multicast_table_array {
+struct genz_unreliable_multicast_table_array{
 //    uint0_t u_pad_em_vc_v; //FIXME: 0 bits.
 };
 
-struct genz_type_1_interleave_table_array_array {
+struct genz_type_1_interleave_table_array_array{
     uint64_t sid_sub_0 : 16;
     uint64_t cid_sub_0 : 12;
     uint64_t r3        : 4;
@@ -4381,7 +4394,7 @@ struct genz_type_1_interleave_table_array_array {
     uint64_t r4        : 4;
 };
 
-struct genz_type_1_interleave_table_array {
+struct genz_type_1_interleave_table_array{
     uint64_t v                                                                            : 1;
     uint64_t m                                                                            : 1;
     uint64_t intlv_gran                                                                   : 2;
@@ -4394,7 +4407,7 @@ struct genz_type_1_interleave_table_array {
     struct genz_type_1_interleave_table_array_array type_1_interleave_table_array_array[];
 };
 
-struct genz_tr_table_array {
+struct genz_tr_table_array{
     uint64_t tr_zmmu_sub_0       : 32;
     uint64_t tr_rtr_sub_0        : 32;
     uint64_t tr_dt_sub_0         : 32;
@@ -4410,7 +4423,7 @@ struct genz_tr_table_array {
     uint64_t tr_rtrft_sub_0      : 16;
 };
 
-struct genz_service_uuid_table_array_array {
+struct genz_service_uuid_table_array_array{
     uint64_t si_ds_base_sub_0   : 52;
     uint64_t r0                 : 12;
     uint64_t si_ds_length_sub_0 : 52;
@@ -4422,13 +4435,13 @@ struct genz_service_uuid_table_array_array {
     uint64_t r3                 : 24;
 };
 
-struct genz_service_uuid_table_array {
+struct genz_service_uuid_table_array{
     uuid_t service_uuid_0_63_0;
     uuid_t service_uuid_0_127_64;
     struct genz_service_uuid_table_array_array service_uuid_table_array_array[];
 };
 
-struct genz_ssdt_msdt_table_array_array {
+struct genz_ssdt_msdt_table_array_array{
     uint32_t mhc       : 6;
     uint32_t r0        : 2;
     uint64_t v_sub_0   : 1;
@@ -4437,7 +4450,7 @@ struct genz_ssdt_msdt_table_array_array {
     uint32_t ei_sub_0  : 12;
 };
 
-struct genz_sm_backup_table_array {
+struct genz_sm_backup_table_array{
     uint64_t sm_backup_status_sub_0  : 64;
     uint64_t sm_backup_control_sub_0 : 32;
     uint64_t sm_r_key_sub_0          : 32;
@@ -4450,27 +4463,25 @@ struct genz_sm_backup_table_array {
     uint64_t r1                      : 32;
 };
 
-struct genz_reliable_multicast_table_array {
+struct genz_reliable_multicast_table_array{
 //    uint0_t rsp_ptr_r_pad_em_mti_role_vc_v; //FIXME: 0 bits.
 };
 
-struct genz_reliable_multicast_responder_table_array {
+struct genz_reliable_multicast_responder_table_array{
     uint64_t scv_sub_0     : 2;
     uint32_t r0            : 2;
     uint32_t rsp_cid_sub_0 : 12;
     uint32_t rsp_sid_sub_0 : 16;
 };
 
-struct genz_rit_table_array {
+struct genz_rit_table_array{};
 
-};
-
-struct genz_re_table_array {
+struct genz_re_table_array{
     uint64_t re_size : 16;
     uint64_t re_0    : 48;
 };
 
-struct genz_page_grid_restricted_page_grid_table_array {
+struct genz_page_grid_restricted_page_grid_table_array{
     uint64_t r0                : 12;
     uint64_t pg_base_address_0 : 52;
     uint64_t page_size_0       : 7;
@@ -4479,7 +4490,7 @@ struct genz_page_grid_restricted_page_grid_table_array {
     uint64_t base_pte_index_0  : 32;
 };
 
-struct genz_pm_backup_table_array {
+struct genz_pm_backup_table_array{
     uint64_t pm_backup_status_sub_0  : 64;
     uint64_t pm_backup_control_sub_0 : 32;
     uint64_t sm_r_key_sub_0          : 32;
@@ -4495,15 +4506,15 @@ struct genz_pm_backup_table_array {
     uint64_t r2                      : 64;
 };
 
-struct genz_pa_table_array {
+struct genz_pa_table_array{
     uint16_t peer_attr_sub_0 : 16;
 };
 
-struct genz_oem_data_table_array {
+struct genz_oem_data_table_array{
     uint64_t oem_data_sub_0 : 64;
 };
 
-struct genz_media_log_table_array {
+struct genz_media_log_table_array{
     uint64_t log_type  : 4;
     uint32_t r0        : 4;
     uint32_t log_event : 8;
@@ -4513,15 +4524,15 @@ struct genz_media_log_table_array {
     uint32_t ls_95_64  : 32;
 };
 
-struct genz_mvcat_table_array {
+struct genz_mvcat_table_array{
     uint32_t mvcm_sub_0 : 32;
 };
 
-struct genz_label_data_table_array {
+struct genz_label_data_table_array{
     uint64_t label_data_sub_1 : 64;
 };
 
-struct genz_lprt_mprt_table_array_array {
+struct genz_lprt_mprt_table_array_array{
     uint32_t mhc       : 6;
     uint32_t r0        : 2;
     uint64_t v_sub_0   : 1;
@@ -4530,7 +4541,7 @@ struct genz_lprt_mprt_table_array_array {
     uint32_t ei_sub_0  : 12;
 };
 
-struct genz_image_table_array {
+struct genz_image_table_array{
     uuid_t image_uuid_sub_0;
     uint64_t image_ctl_sub_0     : 16;
     uint64_t image_status_sub_0  : 16;
@@ -4540,7 +4551,7 @@ struct genz_image_table_array {
     uint64_t r1                  : 64;
 };
 
-struct genz_firmware_table_array {
+struct genz_firmware_table_array{
     uuid_t fw_uuid_sub_0;
     uint64_t fw_ctl_sub_0                  : 16;
     uint64_t fw_status_sub_0               : 16;
@@ -4555,34 +4566,34 @@ struct genz_firmware_table_array {
     uint64_t r2                            : 64;
 };
 
-struct genz_elog_table_array {
+struct genz_elog_table_array{
     uint64_t elog_sub_0 : 64;
 };
 
-struct genz_c_access_r_key_table_array {
+struct genz_c_access_r_key_table_array{
     uint64_t c_access_ro_r_key_sub_0 : 32;
     uint64_t c_access_rw_r_key_sub_0 : 32;
 };
 
-struct genz_c_access_l_p2p_table_array {
+struct genz_c_access_l_p2p_table_array{
     uint64_t l_ac_sub_0   : 3;
     uint64_t p2p_ac_sub_0 : 3;
     uint8_t r0            : 2;
 };
 
-struct genz_hardware_classes_meta {
+struct genz_hardware_classes{
     const char * const raw_name;
     const char * const condensed_name;
     const enum genz_hardware_types value;
 };
 
-struct genz_core_structure {
+struct genz_core_structure{
     uint64_t type                                 : 12;
     uint64_t vers                                 : 4;
     uint64_t size                                 : 16;
     uint64_t r0                                   : 32;
-    uint64_t c_status                                 ;
-    uint64_t c_control                                ;
+    uint64_t c_status                             : 64;
+    uint64_t c_control                            : 64;
     uint64_t base_c_class                         : 16;
     uint64_t max_interface                        : 12;
     uint64_t r_bist                               : 4;
@@ -4591,7 +4602,7 @@ struct genz_core_structure {
     uint64_t max_rsp_supported_requests           : 20;
     uint64_t max_req_supported_requests           : 20;
     uint64_t c_op_clock                           : 24;
-    uint64_t max_data                                 ;
+    uint64_t max_data                             : 64;
     uint64_t max_ctl                              : 52;
     uint64_t max_rnr                              : 3;
     uint64_t r1                                   : 9;
@@ -4620,16 +4631,16 @@ struct genz_core_structure {
     uint64_t interface_0_ptr                      : 32;
     uint64_t component_extension_ptr              : 32;
     uint64_t component_error_and_signal_event_ptr : 32;
-    uint16_t llmuto                                   ;
-    uint16_t crpto                                    ;
-    uint16_t ccto                                     ;
-    uint16_t failto                                   ;
+    uint64_t llmuto                               : 16;
+    uint64_t crpto                                : 16;
+    uint64_t ccto                                 : 16;
+    uint64_t failto                               : 16;
     uint64_t r4                                   : 48;
     uint64_t unrsp                                : 16;
-    uint16_t uert                                     ;
-    uint16_t nirt                                     ;
-    uint16_t atsto                                    ;
-    uint16_t unreq                                    ;
+    uint64_t uert                                 : 16;
+    uint64_t nirt                                 : 16;
+    uint64_t atsto                                : 16;
+    uint64_t unreq                                : 16;
     uint64_t ll_request_deadline                  : 10;
     uint64_t nll_request_deadline                 : 10;
     uint64_t deadline_tick                        : 12;
@@ -4669,16 +4680,16 @@ struct genz_core_structure {
     uint64_t nop_src_sid                          : 16;
     uint64_t aec                                  : 4;
     uint64_t r10                                  : 20;
-    uint64_t r11_1                                    ; //NOTE: split bit
-    uint64_t r11_2                                    ; //NOTE: split bit
-    uint64_t r12_1                                    ; //NOTE: split bit
-    uint64_t r12_2                                    ; //NOTE: split bit
-    uint64_t r13_1                                    ; //NOTE: split bit
-    uint64_t r13_2                                    ; //NOTE: split bit
-    uint64_t r14_1                                    ; //NOTE: split bit
-    uint64_t r14_2                                    ; //NOTE: split bit
-    uint64_t r15_1                                    ; //NOTE: split bit
-    uint64_t r15_2                                    ; //NOTE: split bit
+    uint64_t r11_1                                : 64; //NOTE: split bit
+    uint64_t r11_2                                : 64; //NOTE: split bit
+    uint64_t r12_1                                : 64; //NOTE: split bit
+    uint64_t r12_2                                : 64; //NOTE: split bit
+    uint64_t r13_1                                : 64; //NOTE: split bit
+    uint64_t r13_2                                : 64; //NOTE: split bit
+    uint64_t r14_1                                : 64; //NOTE: split bit
+    uint64_t r14_2                                : 64; //NOTE: split bit
+    uint64_t r15_1                                : 64; //NOTE: split bit
+    uint64_t r15_2                                : 64; //NOTE: split bit
     uint64_t control_structure_ptr_9              : 32;
     uint64_t control_structure_ptr_10             : 32;
     uint64_t control_structure_ptr_11             : 32;
@@ -4687,16 +4698,16 @@ struct genz_core_structure {
     uint64_t control_structure_ptr_14_1           : 16; //NOTE: split bit
     uint64_t control_structure_ptr_14_2           : 32; //NOTE: split bit
     uint64_t control_structure_ptr_15             : 32;
-    uint64_t component_cap_1                          ;
-    uint64_t component_cap_1_control                  ;
-    uint64_t component_cap_2                          ;
-    uint64_t component_cap_2_control                  ;
-    uint64_t component_cap_3                          ;
-    uint64_t component_cap_3_control                  ;
-    uint64_t component_cap_4                          ;
-    uint64_t component_cap_4_control                  ;
-    uint64_t r16_2                                : 64; //NOTE: split bit
-    uint64_t r16_1                                : 20; //NOTE: split bit
+    uint64_t component_cap_1                      : 64;
+    uint64_t component_cap_1_control              : 64;
+    uint64_t component_cap_2                      : 64;
+    uint64_t component_cap_2_control              : 64;
+    uint64_t component_cap_3                      : 64;
+    uint64_t component_cap_3_control              : 64;
+    uint64_t component_cap_4                      : 64;
+    uint64_t component_cap_4_control              : 64;
+    uint64_t r16_1                                : 64; //NOTE: split bit
+    uint64_t r16_2                                : 20; //NOTE: split bit
     uint64_t uwmsgsz                              : 11;
     uint64_t wmsgsz                               : 11;
     uint64_t cwmsgsz                              : 11;
@@ -4719,7 +4730,7 @@ struct genz_core_structure {
     uuid_t fru_uuid;
 };
 
-struct genz_opcode_set_structure {
+struct genz_opcode_set_structure{
     uint64_t type                       : 12;
     uint64_t vers                       : 4;
     uint64_t size                       : 16;
@@ -4748,7 +4759,7 @@ struct genz_opcode_set_structure {
     uint64_t r1                         : 64;
 };
 
-struct genz_interface_structure {
+struct genz_interface_structure{
     uint64_t type                              : 12;
     uint64_t vers                              : 4;
     uint64_t size                              : 16;
@@ -4819,7 +4830,7 @@ struct genz_interface_structure {
     uint64_t interface_egress_access_key_mask  : 64;
 };
 
-struct genz_interface_phy_structure {
+struct genz_interface_phy_structure{
     uint64_t type                                                             : 12;
     uint64_t vers                                                             : 4;
     uint64_t size                                                             : 16;
@@ -4850,7 +4861,7 @@ struct genz_interface_phy_structure {
     struct genz_interface_phy_structure_array interface_phy_structure_array[];
 };
 
-struct genz_interface_statistics_structure {
+struct genz_interface_statistics_structure{
     uint64_t type                                                                           : 12;
     uint64_t vers                                                                           : 4;
     uint64_t size                                                                           : 16;
@@ -4884,7 +4895,7 @@ struct genz_interface_statistics_structure {
     struct genz_interface_statistics_structure_array interface_statistics_structure_array[];
 };
 
-struct genz_component_error_and_signal_event_structure {
+struct genz_component_error_and_signal_event_structure{
     uint64_t type                          : 12;
     uint64_t vers                          : 4;
     uint64_t size                          : 16;
@@ -4970,7 +4981,7 @@ struct genz_component_error_and_signal_event_structure {
     uint64_t r10                           : 64;
 };
 
-struct genz_component_media_structure {
+struct genz_component_media_structure{
     uint64_t type                                : 12;
     uint64_t vers                                : 4;
     uint64_t size                                : 16;
@@ -5042,7 +5053,7 @@ struct genz_component_media_structure {
     uint64_t r3                                  : 64;
 };
 
-struct genz_component_switch_structure {
+struct genz_component_switch_structure{
     uint64_t type                                : 12;
     uint64_t vers                                : 4;
     uint64_t size                                : 16;
@@ -5095,7 +5106,7 @@ struct genz_component_switch_structure {
     uint64_t r8                                  : 64;
 };
 
-struct genz_component_statistics_structure {
+struct genz_component_statistics_structure{
     uint64_t type                     : 12;
     uint64_t vers                     : 4;
     uint64_t size                     : 16;
@@ -5142,7 +5153,7 @@ struct genz_component_statistics_structure {
     uint64_t opcode_vendor_defined_31 : 32;
 };
 
-struct genz_component_extension_structure {
+struct genz_component_extension_structure{
     uint64_t type                         : 12;
     uint64_t vers                         : 4;
     uint64_t size                         : 16;
@@ -5163,14 +5174,14 @@ struct genz_component_extension_structure {
     uint64_t r1                           : 16;
 };
 
-struct genz_vendor_defined_structure {
+struct genz_vendor_defined_structure{
     uint32_t type                                                               : 12;
     uint32_t vers                                                               : 4;
     uint32_t size                                                               : 16;
     struct genz_vendor_defined_structure_array vendor_defined_structure_array[];
 };
 
-struct genz_vendor_defined_with_uuid_structure {
+struct genz_vendor_defined_with_uuid_structure{
     uint64_t type                                                                                   : 12;
     uint64_t vers                                                                                   : 4;
     uint64_t size                                                                                   : 16;
@@ -5181,7 +5192,7 @@ struct genz_vendor_defined_with_uuid_structure {
     struct genz_vendor_defined_with_uuid_structure_array vendor_defined_with_uuid_structure_array[];
 };
 
-struct genz_component_multicast_structure {
+struct genz_component_multicast_structure{
     uint64_t type                : 12;
     uint64_t vers                : 4;
     uint64_t size                : 16;
@@ -5215,7 +5226,7 @@ struct genz_component_multicast_structure {
     uuid_t mce_uuid_127_64;
 };
 
-struct genz_component_tr_structure {
+struct genz_component_tr_structure{
     uint64_t type          : 12;
     uint64_t vers          : 4;
     uint64_t size          : 16;
@@ -5227,7 +5238,7 @@ struct genz_component_tr_structure {
     uint64_t r2            : 64;
 };
 
-struct genz_component_image_structure {
+struct genz_component_image_structure{
     uint64_t type                     : 12;
     uint64_t vers                     : 4;
     uint64_t size                     : 16;
@@ -5246,7 +5257,7 @@ struct genz_component_image_structure {
     uint64_t r2                       : 64;
 };
 
-struct genz_component_precision_time_structure {
+struct genz_component_precision_time_structure{
     uint64_t type                     : 12;
     uint64_t vers                     : 4;
     uint64_t size                     : 16;
@@ -5269,7 +5280,7 @@ struct genz_component_precision_time_structure {
     uint64_t next_pt_ptr              : 32;
 };
 
-struct genz_component_mechanical_structure {
+struct genz_component_mechanical_structure{
     uint64_t type                           : 12;
     uint64_t vers                           : 4;
     uint64_t size                           : 16;
@@ -5287,7 +5298,7 @@ struct genz_component_mechanical_structure {
     uint64_t r1                             : 64;
 };
 
-struct genz_component_destination_table_structure {
+struct genz_component_destination_table_structure{
     uint64_t type                      : 12;
     uint64_t vers                      : 4;
     uint64_t size                      : 16;
@@ -5315,7 +5326,7 @@ struct genz_component_destination_table_structure {
     uint64_t r3                        : 64;
 };
 
-struct genz_service_uuid_structure {
+struct genz_service_uuid_structure{
     uint64_t type                                                           : 12;
     uint64_t vers                                                           : 4;
     uint64_t size                                                           : 16;
@@ -5326,7 +5337,7 @@ struct genz_service_uuid_structure {
     struct genz_service_uuid_structure_array service_uuid_structure_array[];
 };
 
-struct genz_component_c_access_structure {
+struct genz_component_c_access_structure{
     uint64_t type                : 12;
     uint64_t vers                : 4;
     uint64_t size                : 16;
@@ -5342,7 +5353,7 @@ struct genz_component_c_access_structure {
     uint64_t c_access_l_p2p_ptr  : 32;
 };
 
-struct genz_requester_p2p_structure {
+struct genz_requester_p2p_structure{
     uint64_t type                             : 12;
     uint64_t vers                             : 4;
     uint64_t size                             : 16;
@@ -5366,7 +5377,7 @@ struct genz_requester_p2p_structure {
     uint64_t vendor_defined_ptr               : 32;
 };
 
-struct genz_component_pa_structure {
+struct genz_component_pa_structure{
     uint64_t type                : 12;
     uint64_t vers                : 4;
     uint64_t size                : 16;
@@ -5400,7 +5411,7 @@ struct genz_component_pa_structure {
     uuid_t mse_uuid_127_64;
 };
 
-struct genz_component_event_structure {
+struct genz_component_event_structure{
     uint64_t type                                                                 : 12;
     uint64_t vers                                                                 : 4;
     uint64_t size                                                                 : 16;
@@ -5424,7 +5435,7 @@ struct genz_component_event_structure {
     struct genz_component_event_structure_array component_event_structure_array[];
 };
 
-struct genz_component_lpd_structure {
+struct genz_component_lpd_structure{
     uint64_t type                                                             : 12;
     uint64_t vers                                                             : 4;
     uint64_t size                                                             : 16;
@@ -5448,7 +5459,7 @@ struct genz_component_lpd_structure {
     struct genz_component_lpd_structure_array component_lpd_structure_array[];
 };
 
-struct genz_component_sod_structure {
+struct genz_component_sod_structure{
     uint64_t type              : 12;
     uint64_t vers              : 4;
     uint64_t size              : 16;
@@ -5466,7 +5477,7 @@ struct genz_component_sod_structure {
     uint64_t r4                : 64;
 };
 
-struct genz_congestion_management_structure {
+struct genz_congestion_management_structure{
     uint64_t type                       : 12;
     uint64_t vers                       : 4;
     uint64_t size                       : 16;
@@ -5514,7 +5525,7 @@ struct genz_congestion_management_structure {
     uint64_t pidt_sub_31                : 32;
 };
 
-struct genz_component_rkd_structure {
+struct genz_component_rkd_structure{
     uint64_t type                                                             : 12;
     uint64_t vers                                                             : 4;
     uint64_t size                                                             : 16;
@@ -5524,7 +5535,7 @@ struct genz_component_rkd_structure {
     struct genz_component_rkd_structure_array component_rkd_structure_array[];
 };
 
-struct genz_component_pm_structure {
+struct genz_component_pm_structure{
     uint64_t type                : 12;
     uint64_t vers                : 4;
     uint64_t size                : 16;
@@ -5534,7 +5545,7 @@ struct genz_component_pm_structure {
     uint64_t r0                  : 32;
 };
 
-struct genz_component_atp_structure {
+struct genz_component_atp_structure{
     uint64_t type                             : 12;
     uint64_t vers                             : 4;
     uint64_t size                             : 16;
@@ -5551,7 +5562,7 @@ struct genz_component_atp_structure {
     uint64_t r2                               : 64;
 };
 
-struct genz_component_re_table_structure {
+struct genz_component_re_table_structure{
     uint64_t type                        : 12;
     uint64_t vers                        : 4;
     uint64_t size                        : 16;
@@ -5569,7 +5580,7 @@ struct genz_component_re_table_structure {
     uuid_t re_uuid_127_64;
 };
 
-struct genz_component_lph_structure {
+struct genz_component_lph_structure{
     uint64_t type                             : 12;
     uint64_t vers                             : 4;
     uint64_t size                             : 16;
@@ -5601,7 +5612,7 @@ struct genz_component_lph_structure {
     uint64_t r4                               : 64;
 };
 
-struct genz_component_page_grid_structure {
+struct genz_component_page_grid_structure{
     uint64_t type                         : 12;
     uint64_t vers                         : 4;
     uint64_t size                         : 16;
@@ -5626,7 +5637,7 @@ struct genz_component_page_grid_structure {
     uuid_t pg_pte_uuid_127_64;
 };
 
-struct genz_component_page_table_structure {
+struct genz_component_page_table_structure{
     uint64_t type                          : 12;
     uint64_t vers                          : 4;
     uint64_t size                          : 16;
@@ -5647,7 +5658,7 @@ struct genz_component_page_table_structure {
     uuid_t pt_pte_uuid_127_64;
 };
 
-struct genz_component_interleave_structure {
+struct genz_component_interleave_structure{
     uint64_t type                          : 12;
     uint64_t vers                          : 4;
     uint64_t size                          : 16;
@@ -5662,7 +5673,7 @@ struct genz_component_interleave_structure {
     uint64_t ilte_cids                     : 5;
 };
 
-struct genz_component_firmware_structure {
+struct genz_component_firmware_structure{
     uint64_t type               : 12;
     uint64_t vers               : 4;
     uint64_t size               : 16;
@@ -5679,7 +5690,7 @@ struct genz_component_firmware_structure {
     uint64_t r1                 : 48;
 };
 
-struct genz_component_sw_management_structure {
+struct genz_component_sw_management_structure{
     uint64_t type                  : 12;
     uint64_t vers                  : 4;
     uint64_t size                  : 16;
@@ -5707,7 +5718,7 @@ struct genz_component_sw_management_structure {
     uint64_t r2                    : 64;
 };
 
-struct genz_backup_mgmt_table {
+struct genz_backup_mgmt_table{
     uint64_t component_backup_cap_1             : 64;
     uint64_t component_backup_cap_1_control     : 64;
     uint64_t component_backup_status_1          : 32;
@@ -5756,7 +5767,7 @@ struct genz_backup_mgmt_table {
     uint64_t r3                                 : 64;
 };
 
-struct genz_component_error_elog_entry {
+struct genz_component_error_elog_entry{
     uint64_t vers                 : 2;
     uint64_t error_code           : 7;
     uint64_t log_type             : 4;
@@ -5767,7 +5778,7 @@ struct genz_component_error_elog_entry {
     uint64_t error_specific_27_20 : 64;
 };
 
-struct genz_core_lpd_bdf_table {
+struct genz_core_lpd_bdf_table{
     uint64_t bdf_sub_0  : 16;
     uint64_t bdf_sub_1  : 16;
     uint64_t bdf_sub_2  : 16;
@@ -5834,14 +5845,14 @@ struct genz_core_lpd_bdf_table {
     uint64_t bdf_sub_63 : 16;
 };
 
-struct genz_elog_table {
+struct genz_elog_table{
     uint64_t elog_size                             : 16;
     uint64_t r0                                    : 16;
     uint64_t next_elog_ptr                         : 32;
     struct genz_elog_table_array log_table_array[];
 };
 
-struct genz_event_record {
+struct genz_event_record{
     uint64_t a            : 1;
     uint32_t vers         : 2;
     uint32_t cv           : 1;
@@ -5863,7 +5874,7 @@ struct genz_event_record {
     uint32_t r4           : 16;
 };
 
-struct genz_image_format_0xc86ed8c24bed49bda5143dd11950de9d_header_format { //FIXME: name too long.
+struct genz_image_format_0xc86ed8c24bed49bda5143dd11950de9d_header_format{ //FIXME: name too long.
     uuid_t header_format_uuid_63_0;
     uuid_t header_format_uuid_127_64;
     uuid_t c_uuid_63_0;
@@ -5888,7 +5899,7 @@ struct genz_image_format_0xc86ed8c24bed49bda5143dd11950de9d_header_format { //FI
     uint64_t vendor_def               : 64;
 };
 
-struct genz_interface_error_elog_entry {
+struct genz_interface_error_elog_entry{
     uint64_t vers                 : 2;
     uint64_t error_code           : 7;
     uint64_t log_type             : 4;
@@ -5900,21 +5911,17 @@ struct genz_interface_error_elog_entry {
     uint64_t error_specific_27_20 : 64;
 };
 
-struct genz_label_data_table {
+struct genz_label_data_table{
     uint64_t label_data_size                                    : 24;
     uint64_t label_data_sub_0                                   : 40;
     struct genz_label_data_table_array label_data_table_array[];
 };
 
-struct genz_mcprt_msmcprt_table {
+struct genz_mcprt_msmcprt_table{};
 
-};
+struct genz_mcprt_msmcptr_row{};
 
-struct genz_mcprt_msmcptr_row {
-
-};
-
-struct genz_oem_data_table {
+struct genz_oem_data_table{
     uint64_t oem_data_size                                  : 16;
     uint64_t aggregate_uncorrectable_error_count            : 24;
     uint64_t aggregate_correctable_error_count              : 24;
@@ -5926,7 +5933,7 @@ struct genz_oem_data_table {
     struct genz_oem_data_table_array oem_data_table_array[];
 };
 
-struct genz_opcode_set_table {
+struct genz_opcode_set_table{
     uint64_t set_id                                : 3;
     uint64_t r0                                    : 13;
     uint64_t opcode_set_id_control_1               : 16;
@@ -5987,7 +5994,7 @@ struct genz_opcode_set_table {
     uint64_t r2                                    : 64;
 };
 
-struct genz_opcode_set_uuid_table {
+struct genz_opcode_set_uuid_table{
     uint64_t supported_p2p_vendor_defined_set              : 64;
     uint64_t enabled_p2p_vendor_defined_set                : 64;
     uint64_t supported_vdo_opcode_set_1                    : 64;
@@ -6033,18 +6040,16 @@ struct genz_opcode_set_uuid_table {
     uuid_t vdo_uuid_8;
 };
 
-struct genz_pm_backup_table {
+struct genz_pm_backup_table{
     uint64_t pm_backup_table_sz                               : 16;
     uint64_t vers                                             : 4;
     uint64_t r0                                               : 44;
     struct genz_pm_backup_table_array pm_backup_table_array[];
 };
 
-struct genz_pte_restricted_pte_table {
+struct genz_pte_restricted_pte_table{};
 
-};
-
-struct genz_page_table_pointer_pair_table_entry {
+struct genz_page_table_pointer_pair_table_entry{
     uint64_t v             : 1;
     uint64_t et            : 1;
     uint32_t r0            : 1;
@@ -6055,7 +6060,7 @@ struct genz_page_table_pointer_pair_table_entry {
     uint32_t pointer_sub_1 : 24;
 };
 
-struct genz_performance_log_record_0 {
+struct genz_performance_log_record_0{
     uint32_t dcid                    : 12;
     uint32_t scid                    : 12;
     uint32_t ocl                     : 5;
@@ -6078,7 +6083,7 @@ struct genz_performance_log_record_0 {
     uint32_t vendor_defined_0        : 8;
 };
 
-struct genz_performance_log_record_1 {
+struct genz_performance_log_record_1{
     uint32_t dcid                    : 12;
     uint32_t scid                    : 12;
     uint32_t ocl                     : 5;
@@ -6105,29 +6110,15 @@ struct genz_performance_log_record_1 {
     uint32_t ssid                    : 16;
 };
 
-struct genz_reliable_multicast_table_entry_row {
+struct genz_reliable_multicast_table_entry_row{};
 
-};
+struct genz_requester_vcat_table{};
 
-struct genz_vcat_entry {
-	uint32_t vcm                 : 32;
-	uint32_t th                  : 7;
-	uint32_t r0                  : 25;
-}; 
+struct genz_resource_table{};
 
-struct genz_requester_vcat_table {
+struct genz_responder_vcat_table{};
 
-};
-
-struct genz_resource_table {
-
-};
-
-struct genz_responder_vcat_table {
-
-};
-
-struct genz_route_control_table {
+struct genz_route_control_table{
     uint32_t rc_cap_1                     : 16;
     uint32_t r0                           : 10;
     uint32_t dhc                          : 6;
@@ -6147,43 +6138,201 @@ struct genz_route_control_table {
     uint32_t r5                           : 32;
 };
 
-struct genz_sm_backup_table {
+struct genz_sm_backup_table{
     uint64_t sm_backup_table_sz                               : 16;
     uint64_t vers                                             : 4;
     uint64_t r0                                               : 44;
     struct genz_sm_backup_table_array sm_backup_table_array[];
 };
 
-struct genz_ssap_mcap_msap_and_msmcap_table {
+struct genz_ssap_mcap_msap_and_msmcap_table{};
 
-};
+struct genz_ssod_msod_table{};
 
-struct genz_ssod_msod_table {
+struct genz_unreliable_multicast_table_entry_row{};
 
-};
-
-struct genz_unreliable_multicast_table_entry_row {
-
-};
-
-struct genz_vcat_table {
-
-};
+struct genz_vcat_table{};
 
 extern struct genz_control_ptr_info genz_struct_type_to_ptrs[];
 
 extern size_t genz_control_ptr_info_nelems;
 
-extern struct genz_control_ptr_info genz_table_type_to_ptrs[];
-
-extern size_t genz_control_ptr_info_nelems;
-
-extern struct genz_hardware_classes_meta genz_hardware_classes[];
+extern struct genz_hardware_classes genz_hardware_classes[];
 
 extern size_t genz_hardware_classes_nelems;
 
+extern struct genz_control_ptr_info genz_table_type_to_ptrs[];
+
 extern size_t genz_struct_type_to_ptrs_nelems;
+
 extern size_t genz_table_type_to_ptrs_nelems;
+
+ssize_t genz_hardware_classes_size (struct genz_control_info *ci);
+
+ssize_t genz_core_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_opcode_set_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_interface_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_interface_phy_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_interface_statistics_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_error_and_signal_event_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_media_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_switch_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_statistics_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_extension_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_vendor_defined_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_vendor_defined_with_uuid_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_multicast_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_tr_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_image_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_precision_time_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_mechanical_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_destination_table_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_service_uuid_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_c_access_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_requester_p2p_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_pa_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_event_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_lpd_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_sod_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_congestion_management_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_rkd_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_pm_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_atp_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_re_table_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_lph_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_page_grid_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_page_table_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_interleave_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_firmware_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_component_sw_management_structure_size (struct genz_control_info *ci);
+
+ssize_t genz_backup_mgmt_table_size (struct genz_control_info *ci);
+
+ssize_t genz_c_access_l_p2p_table_size (struct genz_control_info *ci);
+
+ssize_t genz_c_access_r_key_table_size (struct genz_control_info *ci);
+
+ssize_t genz_component_error_elog_entry_size (struct genz_control_info *ci);
+
+ssize_t genz_core_lpd_bdf_table_size (struct genz_control_info *ci);
+
+ssize_t genz_elog_table_size (struct genz_control_info *ci);
+
+ssize_t genz_event_record_size (struct genz_control_info *ci);
+
+ssize_t genz_firmware_table_size (struct genz_control_info *ci);
+
+ssize_t genz_image_format_0xc86ed8c24bed49bda5143dd11950de9d_header_format_size (struct genz_control_info *ci);
+
+ssize_t genz_image_table_size (struct genz_control_info *ci);
+
+ssize_t genz_interface_error_elog_entry_size (struct genz_control_info *ci);
+
+ssize_t genz_lprt_mprt_table_size (struct genz_control_info *ci);
+
+ssize_t genz_label_data_table_size (struct genz_control_info *ci);
+
+ssize_t genz_mcprt_msmcprt_table_size (struct genz_control_info *ci);
+
+ssize_t genz_mcprt_msmcptr_row_size (struct genz_control_info *ci);
+
+ssize_t genz_mvcat_table_size (struct genz_control_info *ci);
+
+ssize_t genz_media_log_table_size (struct genz_control_info *ci);
+
+ssize_t genz_oem_data_table_size (struct genz_control_info *ci);
+
+ssize_t genz_opcode_set_table_size (struct genz_control_info *ci);
+
+ssize_t genz_opcode_set_uuid_table_size (struct genz_control_info *ci);
+
+ssize_t genz_pa_table_size (struct genz_control_info *ci);
+
+ssize_t genz_pm_backup_table_size (struct genz_control_info *ci);
+
+ssize_t genz_pte_restricted_pte_table_size (struct genz_control_info *ci);
+
+ssize_t genz_page_grid_restricted_page_grid_table_size (struct genz_control_info *ci);
+
+ssize_t genz_page_table_pointer_pair_table_entry_size (struct genz_control_info *ci);
+
+ssize_t genz_performance_log_record_0_size (struct genz_control_info *ci);
+
+ssize_t genz_performance_log_record_1_size (struct genz_control_info *ci);
+
+ssize_t genz_re_table_size (struct genz_control_info *ci);
+
+ssize_t genz_rit_table_size (struct genz_control_info *ci);
+
+ssize_t genz_reliable_multicast_responder_table_size (struct genz_control_info *ci);
+
+ssize_t genz_reliable_multicast_table_size (struct genz_control_info *ci);
+
+ssize_t genz_reliable_multicast_table_entry_row_size (struct genz_control_info *ci);
+
+ssize_t genz_requester_vcat_table_size (struct genz_control_info *ci);
+
+ssize_t genz_resource_table_size (struct genz_control_info *ci);
+
+ssize_t genz_responder_vcat_table_size (struct genz_control_info *ci);
+
+ssize_t genz_route_control_table_size (struct genz_control_info *ci);
+
+ssize_t genz_sm_backup_table_size (struct genz_control_info *ci);
+
+ssize_t genz_ssap_mcap_msap_and_msmcap_table_size (struct genz_control_info *ci);
+
+ssize_t genz_ssdt_msdt_table_size (struct genz_control_info *ci);
+
+ssize_t genz_ssod_msod_table_size (struct genz_control_info *ci);
+
+ssize_t genz_service_uuid_table_size (struct genz_control_info *ci);
+
+ssize_t genz_tr_table_size (struct genz_control_info *ci);
+
+ssize_t genz_type_1_interleave_table_size (struct genz_control_info *ci);
+
+ssize_t genz_unreliable_multicast_table_size (struct genz_control_info *ci);
+
+ssize_t genz_unreliable_multicast_table_entry_row_size (struct genz_control_info *ci);
+
+ssize_t genz_vcat_table_size (struct genz_control_info *ci);
+
 
 union genz_control_structure {
     struct genz_control_ptr_info control_ptr_info_ptr;
@@ -6221,7 +6370,7 @@ union genz_control_structure {
     struct genz_elog_table_array log_table_array_ptr;
     struct genz_c_access_r_key_table_array c_access_r_key_table_array_ptr;
     struct genz_c_access_l_p2p_table_array c_access_l_p2p_table_array_ptr;
-    struct genz_hardware_classes_meta hardware_classes_meta_ptr;
+    struct genz_hardware_classes hardware_classes_ptr;
     struct genz_core_structure core_structure_ptr;
     struct genz_opcode_set_structure opcode_set_structure_ptr;
     struct genz_interface_structure interface_structure_ptr;
@@ -6287,11 +6436,4 @@ union genz_control_structure {
     struct genz_unreliable_multicast_table_entry_row unreliable_multicast_table_entry_row_ptr;
     struct genz_vcat_table vcat_table_ptr;
 };
-
-ssize_t genz_requester_vcat_table_size(struct genz_control_info *ci);
-ssize_t genz_responder_vcat_table_size(struct genz_control_info *ci);
-ssize_t genz_rit_table_size(struct genz_control_info *ci);
-ssize_t genz_route_control_table_size(struct genz_control_info *ci);
-ssize_t genz_ssdt_msdt_table_size(struct genz_control_info *ci);
-ssize_t genz_component_destination_table_size(struct genz_control_info *ci);
 #endif
