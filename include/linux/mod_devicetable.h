@@ -823,6 +823,21 @@ struct tee_client_device_id {
 struct wmi_device_id {
 	const char guid_string[UUID_STRING_LEN+1];
 	const void *context;
+
+/* Gen-Z */
+
+#define GENZ_MODULE_PREFIX	"genz:"
+
+/**
+ * struct genz_device_id - Gen-Z device identifier
+ * @uuid_str: 36 char string of the form fa50ff2b-f2e8-45de-83fa-65417f2f49ba
+ * @driver_data: Driver specific data
+ */
+struct genz_device_id {
+	const char uuid_str[UUID_STRING_LEN+1];	/* Vendor-assigned component or
+						   service UUID */
+	uuid_t		uuid;
+	kernel_ulong_t	driver_data;
 };
 
 #define MHI_DEVICE_MODALIAS_FMT "mhi:%s"
