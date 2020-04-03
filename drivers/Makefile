@@ -21,6 +21,8 @@ obj-$(CONFIG_PCI_ENDPOINT)	+= pci/endpoint/
 # PCI dwc controller drivers
 obj-y				+= pci/dwc/
 
+obj-$(CONFIG_GENZ)		+= genz/
+
 obj-$(CONFIG_PARISC)		+= parisc/
 obj-$(CONFIG_RAPIDIO)		+= rapidio/
 obj-y				+= video/
