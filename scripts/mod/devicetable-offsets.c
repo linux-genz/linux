@@ -266,5 +266,8 @@ int main(void)
 	DEVID_FIELD(cdx_device_id, vendor);
 	DEVID_FIELD(cdx_device_id, device);
 
+	DEVID(genz_device_id);
+	DEVID_FIELD(genz_device_id, uuid_str);
+
 	return 0;
 }

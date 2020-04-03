@@ -23,6 +23,8 @@ obj-y				+= pwm/
 
 obj-y				+= pci/
 
+obj-$(CONFIG_GENZ)		+= genz/
+
 obj-$(CONFIG_PARISC)		+= parisc/
 obj-$(CONFIG_RAPIDIO)		+= rapidio/
 obj-y				+= video/

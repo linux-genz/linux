@@ -1460,6 +1460,25 @@ static int do_cdx_entry(const char *filename, void *symval,
 	DEF_FIELD(symval, cdx_device_id, device);
 
 	sprintf(alias, "cdx:v%08Xd%08Xd", vendor, device);
+
+/* Looks like: genz:uuid */
+static int do_genz_entry(const char *filename, void *symval, char *alias)
+{
+	int len;
+	DEF_FIELD_ADDR(symval, genz_device_id, uuid_str);
+
+	if (strlen(*uuid_str) != UUID_STRING_LEN) {
+		warn("Invalid Gen-Z device id 'genz:%s' in '%s'\n",
+				*uuid_str, filename);
+		return 0;
+	}
+
+	len = snprintf(alias, ALIAS_SIZE, GENZ_MODULE_PREFIX "%s", *uuid_str);
+	if (len < 0 || len >= ALIAS_SIZE) {
+		warn("Could not generate all MODULE_ALIAS's in '%s'\n",
+				filename);
+		return 0;
+	}
 	return 1;
 }
 
@@ -1543,6 +1562,7 @@ static const struct devtable devtable[] = {
 	{"dfl", SIZE_dfl_device_id, do_dfl_entry},
 	{"ishtp", SIZE_ishtp_device_id, do_ishtp_entry},
 	{"cdx", SIZE_cdx_device_id, do_cdx_entry},
+	{"genz", SIZE_genz_device_id, do_genz_entry},
 };
 
 /* Create MODULE_ALIAS() statements.
