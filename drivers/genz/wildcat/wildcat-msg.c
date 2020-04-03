@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2018-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -509,8 +509,7 @@ static int msg_wait_timeout(struct wildcat_msg_state *state, ktime_t timeout)
 
 	pr_debug("waiting for reply to msgid=%u, timeout %lld\n",
 		 state->req_msg.hdr.msgid, (unsigned long long)timeout);
-	ret = wait_event_interruptible_hrtimeout(state->wq, state->ready,
-						 timeout);
+	ret = wait_event_hrtimeout(state->wq, state->ready, timeout);
 	if (ret < 0) {  /* interrupted or timout expired */
 		pr_debug("wait on msgid=%u returned ret=%d\n",
 			 state->req_msg.hdr.msgid, ret);
@@ -1104,7 +1103,7 @@ static void msg_work_handler(struct work_struct *w)
 		}
 		state->rsp_msg = *msg;  /* Revisit: avoid copy? */
 		state->ready = true;
-		wake_up_interruptible(&state->wq);
+		wake_up(&state->wq);
 	} else {  /* request */
 		switch (opcode) {
 		case WILDCAT_MSG_NOP:

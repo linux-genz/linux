@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2019-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -537,7 +537,7 @@ extern spinlock_t genz_uuid_rbtree_lock;
 
 struct genz_mem_data {
 	struct genz_bridge_dev *bridge;
-	spinlock_t          uuid_lock;  /* protects local_uuid, remote_uuid_tree */
+	spinlock_t          uuid_lock;  /* protects local_uuid, md_remote_uuid_tree */
 	struct uuid_tracker *local_uuid;
 	struct rb_root      md_remote_uuid_tree;  /* UUIDs imported by this mdata */
 	spinlock_t          md_lock;    /* protects md_mr_tree, md_rmr_tree */

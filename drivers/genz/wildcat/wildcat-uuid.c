@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2018-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -67,6 +67,7 @@ void wildcat_notify_remote_uuids(struct genz_mem_data *mdata)
 	ktime_t                  start;
 	uint32_t                 prev_gcid, gcid;
 	struct bridge            *br = wildcat_gzbr_to_br(mdata->bridge);
+	ulong                    flags;
 
 	/* caller must hold no spinlocks (we are going to sleep) */
 	INIT_LIST_HEAD(&free_msg_list);
@@ -75,7 +76,7 @@ void wildcat_notify_remote_uuids(struct genz_mem_data *mdata)
 	start = ktime_get();
 
 	/* special case for loopback UUIDs */
-	/* Revisit: what if rbtree changes while we're looping? */
+	spin_lock_irqsave(&mdata->uuid_lock, flags);
 	for (rb = rb_first(&mdata->md_remote_uuid_tree); rb; rb = rb_next(rb)) {
 		node = container_of(rb, struct uuid_node, node);
 		uu = node->tracker;
@@ -92,13 +93,14 @@ void wildcat_notify_remote_uuids(struct genz_mem_data *mdata)
 			list_add_tail(&state->msg_list, &teardown_msg_list);
 		}
 	}
+	spin_unlock_irqrestore(&mdata->uuid_lock, flags);
 
 	if (genz_uu_remote_uuid_empty(mdata)) {
 		pr_debug("no remote UUIDs to TEARDOWN\n");
 		goto teardown_done;
 	}
 
-	/* Revisit: what if rbtree changes while we're looping? */
+	spin_lock_irqsave(&mdata->uuid_lock, flags);
 	prev_gcid = -1u;
 	for (rb = rb_first(&mdata->local_uuid->local->uu_remote_uuid_tree); rb;
 	     rb = rb_next(rb)) {
@@ -119,12 +121,13 @@ void wildcat_notify_remote_uuids(struct genz_mem_data *mdata)
 		}
 		list_add_tail(&state->msg_list, &teardown_msg_list);
 	}
+	spin_unlock_irqrestore(&mdata->uuid_lock, flags);
 
 teardown_done:
-	/* wait for replies to all TEARDOWN messages */
+	/* wait for replies to all TEARDOWN messages - may sleep */
 	wildcat_msg_list_wait(&teardown_msg_list, start);
 
-	/* Revisit: what if rbtree changes while we're looping? */
+	spin_lock_irqsave(&mdata->uuid_lock, flags);
 	for (rb = rb_first(&mdata->md_remote_uuid_tree); rb; rb = rb_next(rb)) {
 		node = container_of(rb, struct uuid_node, node);
 		uu = node->tracker;
@@ -144,8 +147,9 @@ teardown_done:
 		}
 		list_add_tail(&state->msg_list, &free_msg_list);
 	}
+	spin_unlock_irqrestore(&mdata->uuid_lock, flags);
 
-	/* wait for replies to all the FREE messages */
+	/* wait for replies to all the FREE messages - may sleep */
 	wildcat_msg_list_wait(&free_msg_list, start);
 }
 EXPORT_SYMBOL(wildcat_notify_remote_uuids);
