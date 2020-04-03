@@ -1335,6 +1335,27 @@ static int do_wmi_entry(const char *filename, void *symval, char *alias)
 	return 1;
 }
 
+/* Looks like: genz:uuid */
+static int do_genz_entry(const char *filename, void *symval, char *alias)
+{
+	int len;
+	DEF_FIELD_ADDR(symval, genz_device_id, uuid_str);
+
+	if (strlen(*uuid_str) != UUID_STRING_LEN) {
+		warn("Invalid Gen-Z device id 'genz:%s' in '%s'\n",
+				*uuid_str, filename);
+		return 0;
+	}
+
+	len = snprintf(alias, ALIAS_SIZE, GENZ_MODULE_PREFIX "%s", *uuid_str);
+	if (len < 0 || len >= ALIAS_SIZE) {
+		warn("Could not generate all MODULE_ALIAS's in '%s'\n",
+				filename);
+		return 0;
+	}
+	return 1;
+}
+
 /* Does namelen bytes of name exactly match the symbol? */
 static bool sym_is(const char *name, unsigned namelen, const char *symbol)
 {
@@ -1407,6 +1428,7 @@ static const struct devtable devtable[] = {
 	{"typec", SIZE_typec_device_id, do_typec_entry},
 	{"tee", SIZE_tee_client_device_id, do_tee_entry},
 	{"wmi", SIZE_wmi_device_id, do_wmi_entry},
+	{"genz", SIZE_genz_device_id, do_genz_entry},
 };
 
 /* Create MODULE_ALIAS() statements.
