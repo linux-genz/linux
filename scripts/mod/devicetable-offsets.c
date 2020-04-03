@@ -225,5 +225,8 @@ int main(void)
 	DEVID_FIELD(typec_device_id, svid);
 	DEVID_FIELD(typec_device_id, mode);
 
+	DEVID(genz_device_id);
+	DEVID_FIELD(genz_device_id, uuid_str);
+
 	return 0;
 }
