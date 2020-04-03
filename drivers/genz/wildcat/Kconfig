@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# GENZ configuration
+#
+
+menuconfig GENZ_WILDCAT
+	tristate "Gen-Z Wildcat Bridge support"
+	depends on GENZ && AMD_IOMMU_V2
+	---help---
+	  This option enables the Gen-Z Wildcat bridge driver.
+
+	  Say Y here to enable support for this driver.
+
+	  To compile this code as a module, choose M here: the module
+	  will be called wildcat.

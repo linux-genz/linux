@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# GENZ configuration
+#
+
+menuconfig GENZ
+	tristate "Gen-Z support"
+	depends on SYSFS
+	---help---
+	  This option enables the Gen-Z fabric sub-system.  Gen-Z is an
+	  hardware fabric interconnect that connects a broad range of
+	  devices from CPUs, memory, I/O, and switches to other computers
+	  and all of their devices.
+
+	  Say Y here to enable support for these types of drivers.
+
+	  To compile this code as a module, choose M here: the module
+	  will be called genz.
+
+
+
+menuconfig GENZ_BLK
+	tristate "Gen-Z block driver"
+	depends on GENZ
+	---help---
+	  This option enables the Gen-Z block driver.
+
+	  Say Y here to enable support for these types of devices.
+
+	  To compile this code as a module, choose M here: the module
+	  will be called genz-blk.
+
+source "drivers/genz/wildcat/Kconfig"
