@@ -258,5 +258,8 @@ int main(void)
 	DEVID_FIELD(dfl_device_id, type);
 	DEVID_FIELD(dfl_device_id, feature_id);
 
+	DEVID(genz_device_id);
+	DEVID_FIELD(genz_device_id, uuid_str);
+
 	return 0;
 }
