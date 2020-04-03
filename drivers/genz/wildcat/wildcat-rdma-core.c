@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2017-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -2129,7 +2129,8 @@ static int wildcat_rdma_remove(struct genz_dev *zdev)
 	if (rstate) {
 		wildcat_rdma_poll_devices_destroy(rstate);
 		misc_deregister(&rstate->miscdev);
-		/* Revisit: finish this */
+		list_del(&rstate->rstate_node);
+		genz_set_drvdata(zdev, NULL);
 		kfree(rstate);
 	}
 	return 0;
@@ -2205,14 +2206,7 @@ err_zpage_free:
 
 static void wildcat_rdma_exit(void)
 {
-	struct wildcat_rdma_state *rstate;
-	int ret = 0;
-
-	/* Revisit: locking */
-	list_for_each_entry(rstate, &rstate_list, rstate_node) {
-		ret = wildcat_rdma_remove(rstate->zdev);
-	}
-
+	pr_debug("entered\n");
 	genz_unregister_driver(&wildcat_rdma_genz_driver);
 	wildcat_rdma_cleanup_poll_devs();
 	wildcat_unregister_rdm_trigger(wildcat_rdma_trigger);

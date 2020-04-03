@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2019-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -214,7 +214,7 @@ int __genz_register_driver(struct genz_driver *zdrv, struct module *module,
 EXPORT_SYMBOL(__genz_register_driver);
 
 /**
- * __genz_unregister_driver - register a Gen-Z driver
+ * __genz_unregister_driver - unregister a Gen-Z driver
  * @struct genz_driver *zdrv: the driver structure to unregister
  *
  * Deletes the driver structure from the list of registered Gen-Z drivers.

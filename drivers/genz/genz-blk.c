@@ -482,7 +482,8 @@ static void genz_blk_exit_hctx(struct blk_mq_hw_ctx *hctx, uint index)
 	struct genz_blk_ctx *bctx = (struct genz_blk_ctx *)hctx->driver_data;
 	struct genz_blk_bridge *bbr = bctx->bbr;
 
-	pr_debug("bbr=%px, index=%u, bctx=%px\n", bbr, index, bctx);
+	pr_debug("hctx=%px, bctx=%px, bbr=%px, index=%u\n",
+		 hctx, bctx, bbr, index);
 	mutex_lock(&bctx->lock);
 	kref_put(&bctx->kref, genz_blk_free_queues);
 	mutex_unlock(&bctx->lock);
@@ -563,7 +564,10 @@ static void genz_blk_pagemap_cleanup(struct dev_pagemap *pgmap)
 {
 	struct request_queue *q =
 		container_of(pgmap->ref, struct request_queue, q_usage_counter);
+	struct genz_bdev *const zbd = q->queuedata;
+	struct device *dev = disk_to_dev(zbd->gd);
 
+	dev_dbg(dev, "q=%px\n", q);
 	blk_cleanup_queue(q);
 }
 
@@ -571,7 +575,10 @@ static void genz_blk_pagemap_kill(struct dev_pagemap *pgmap)
 {
 	struct request_queue *q =
 		container_of(pgmap->ref, struct request_queue, q_usage_counter);
+	struct genz_bdev *const zbd = q->queuedata;
+	struct device *dev = disk_to_dev(zbd->gd);
 
+	dev_dbg(dev, "q=%px\n", q);
 	blk_freeze_queue_start(q);
 }
 
@@ -712,7 +719,8 @@ static void genz_blk_destroy_bdev(struct genz_bdev *zbd)
 	}
 	del_gendisk(zbd->gd);
 	put_disk(zbd->gd);
-	blk_cleanup_queue(zbd->queue);
+	if (!blk_queue_dax(zbd->queue))
+		blk_cleanup_queue(zbd->queue);
 }
 
 static int genz_blk_init_tag_set(struct genz_blk_bridge *bbr)
@@ -779,7 +787,6 @@ static struct genz_blk_bridge *find_bbr(struct genz_bridge_dev *zbdev)
 	}
 
 	bbr->mem_data.local_uuid = uu;
-	/* Revisit: we need a kref to keep track of when to free bbr */
 	list_add_tail(&bbr->bbr_node, &genz_blk_bbr_list);
 	mutex_unlock(&genz_blk_lock);
 
