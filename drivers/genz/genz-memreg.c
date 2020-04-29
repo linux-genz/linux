@@ -212,15 +212,14 @@ static inline int genz_dma_map_sg_attrs(struct genz_bridge_dev *br,
 {
 	int ret = 0;
 
-	/* Revisit: add default implementation for "normal" bridges */
-	if (!br->zbdrv->dma_map_sg_attrs) {
-		ret = -EINVAL;
-		goto out;
+	if (br->zbdrv->dma_map_sg_attrs) {
+		ret = br->zbdrv->dma_map_sg_attrs(br, sg, nents,
+						  direction, dma_attrs);
+	} else {  /* default implementation for "normal" bridges */
+		ret = dma_map_sg_attrs(br->bridge_dev, sg, nents,
+				       direction, dma_attrs);
 	}
 
-	ret = br->zbdrv->dma_map_sg_attrs(br, sg, nents, direction, dma_attrs);
-
-out:
 	return ret;
 }
 
@@ -237,12 +236,13 @@ static inline void genz_dma_unmap_sg_attrs(struct genz_bridge_dev *br,
 					   enum dma_data_direction direction,
 					   unsigned long dma_attrs)
 {
-	/* Revisit: add default implementation for "normal" bridges */
-	if (!br->zbdrv->dma_unmap_sg_attrs) {
-		return;
+	if (br->zbdrv->dma_unmap_sg_attrs) {
+		br->zbdrv->dma_unmap_sg_attrs(br, sg, nents,
+					      direction, dma_attrs);
+	} else {  /* default implementation for "normal" bridges */
+		dma_unmap_sg_attrs(br->bridge_dev, sg, nents,
+				   direction, dma_attrs);
 	}
-
-	br->zbdrv->dma_unmap_sg_attrs(br, sg, nents, direction, dma_attrs);
 }
 
 static void _genz_umem_release(struct genz_umem *umem)
