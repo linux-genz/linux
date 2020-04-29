@@ -586,7 +586,7 @@ struct uuid_tracker *genz_fabric_uuid_tracker_alloc_and_insert(
 				pr_debug("genz_create_mgr_uuid_file failed\n");
 			}
 		} else { /* -EEXIST */
-			pr_debug("tracker insert prev != uu already in the tracker mgr_uuid\n");
+			pr_debug("uu already in the tracker mgr_uuid\n");
 		}
 		pr_debug("fabric_num=%d, fabric=%px\n",
 			 uu->fabric->fabric_num, uu->fabric->fabric);
@@ -614,7 +614,6 @@ void genz_fabric_uuid_tracker_free(uuid_t *uuid)
 		pr_debug("removed uuid=%pUb, refcount=%u\n", &uu->uuid,
 			 kref_read(&uu->refcount));
 	genz_uuid_remove(uu);
-	return;
 }
 
 static inline bool uuid_tree_empty(void)
