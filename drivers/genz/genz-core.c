@@ -252,7 +252,7 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	zbdev->bridge_dev = dev;
 	zbdev->bridge_num = get_new_bridge_number();
 	spin_lock_init(&zbdev->zmmu_lock);
-	dev_set_drvdata(&zbdev->zdev.dev, driver_data);
+	genz_set_drvdata(&zbdev->zdev, driver_data);
 
 	genz_control_read_structure(&zbdev->zdev, &mgr_uuid, 0,
 			offsetof(struct genz_core_structure, mgr_uuid),
@@ -300,8 +300,7 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 		pr_debug("genz_init_dev failed %d\n", ret);
 		goto error;
 	}
-	/* Revisit: add the bridge number */
-	dev_set_name(&zbdev->zdev.dev, "bridge0");
+	dev_set_name(&zbdev->zdev.dev, "bridge%u", zbdev->bridge_num);
 	ret = genz_device_add(&zbdev->zdev);
 	if (ret) {
 		pr_debug("genz_device_add failed %d\n", ret);
