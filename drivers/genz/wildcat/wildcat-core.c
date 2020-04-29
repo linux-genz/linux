@@ -547,7 +547,6 @@ void wildcat_unbind_iommu(struct genz_bridge_dev *gzbr,
 		amd_iommu_set_invalid_ppr_cb(pdev, NULL);
 	}
 	spin_unlock(io_lock);
-	return;
 }
 EXPORT_SYMBOL(wildcat_unbind_iommu);
 
