@@ -704,7 +704,6 @@ void wildcat_rdma_poll_devices_destroy(struct wildcat_rdma_state *rstate)
 		device_destroy(poll_class,
 			       MKDEV(wildcat_rdma_poll_dev_major, minor));
 	}
-	return;
 }
 
 void wildcat_rdma_poll_init_waitqueues(struct wildcat_rdma_state *rstate)
@@ -1294,8 +1293,6 @@ static void release_owned_xdm_queues(struct file_data *fdata)
 		bit = find_next_bit(fdata->xdm_queues, bits, bit);
 	}
 	spin_unlock(&fdata->xdm_queue_lock);
-
-	return;
 }
 
 static void release_owned_rdm_queues(struct file_data *fdata)
@@ -1321,8 +1318,6 @@ static void release_owned_rdm_queues(struct file_data *fdata)
 		bit = find_next_bit(fdata->rdm_queues, bits, bit);
 	}
 	spin_unlock(&fdata->rdm_queue_lock);
-
-	return;
 }
 
 static struct zmap *rmr_zmap_alloc(struct file_data *fdata,
