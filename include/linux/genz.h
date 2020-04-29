@@ -214,7 +214,7 @@ struct genz_sgl_info {
 
 struct genz_bridge_driver {
 	struct genz_driver	zdrv; /* Revisit: need this or is it all in native driver? */
-	int (*bridge_info)(struct genz_dev *zdev,
+	int (*bridge_info)(struct genz_bridge_dev *br,
 			   struct genz_bridge_info *info);
 	int (*control_mmap)(struct genz_dev *zdev); /* Revisit: need flags? */
 	int (*control_read)(struct genz_dev *zdev, loff_t offset, size_t size,
