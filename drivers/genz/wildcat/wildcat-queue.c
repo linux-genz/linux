@@ -66,8 +66,6 @@ void wildcat_xqueue_init(struct slice *sl)
 	spin_lock_init(&sl->xdm_slice_lock);
 	bitmap_zero(sl->xdm_alloced_bitmap, XDM_QUEUES_PER_SLICE);
 	sl->xdm_alloc_count = 0;
-
-	return;
 }
 
 /*
@@ -78,8 +76,6 @@ void wildcat_rqueue_init(struct slice *sl)
 	spin_lock_init(&sl->rdm_slice_lock);
 	bitmap_zero(sl->rdm_alloced_bitmap, RDM_QUEUES_PER_SLICE);
 	sl->rdm_alloc_count = 0;
-
-	return;
 }
 
 /*
@@ -1139,11 +1135,13 @@ int wildcat_free_queues(struct genz_xdm_info *gzxi, struct genz_rdm_info *gzri)
 	if (gzxi) {
 		xdmi = (struct xdm_info *)gzxi->br_driver_data;
 		ret = wildcat_kernel_XQFREE(xdmi);
+		kfree(xdmi);
 	}
 
 	if (gzri) {
 		rdmi = (struct rdm_info *)gzri->br_driver_data;
 		ret |= wildcat_kernel_RQFREE(rdmi);
+		kfree(rdmi);
 	}
 
 	return ret;
