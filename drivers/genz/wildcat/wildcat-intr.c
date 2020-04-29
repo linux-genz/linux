@@ -283,5 +283,4 @@ void wildcat_free_interrupts(struct pci_dev *pdev)
 			kfree(tmp);
 		}
 	}
-	return;
 }
