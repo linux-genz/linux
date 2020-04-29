@@ -921,10 +921,12 @@ static struct genz_bridge_info wildcat_br_info = {
 	.max_nonvisible_addr = WILDCAT_MAX_NONVISIBLE_ADDR,
 };
 
-static int wildcat_bridge_info(struct genz_dev *zdev,
+static int wildcat_bridge_info(struct genz_bridge_dev *gzbr,
 			       struct genz_bridge_info *info)
 {
-	if (!zdev_is_local_bridge(zdev))
+	struct bridge *br = genz_get_drvdata(&gzbr->zdev);
+
+	if (br != &wildcat_bridge)  /* not our bridge */
 		return -EINVAL;
 
 	wildcat_br_info.loopback = wildcat_loopback != 0;
