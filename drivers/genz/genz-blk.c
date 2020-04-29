@@ -460,6 +460,7 @@ static void free_bbr(struct kref *ref)
 	mutex_lock(&genz_blk_lock);
 	list_del(&bbr->bbr_node);
 	mutex_unlock(&genz_blk_lock);
+	blk_mq_free_tag_set(bbr->tag_set);
 	kfree(bbr->bctx);
 	kfree(bbr);
 }
@@ -470,7 +471,8 @@ static void genz_blk_free_queues(struct kref *ref)
 		ref, struct genz_blk_ctx, kref);
 	struct genz_rdm_info *rdmi = (bctx->have_rdmi) ? &bctx->rdmi : NULL;
 
-	pr_debug("bctx=%px, rdmi=%px\n", bctx, rdmi);
+	pr_debug("bctx=%px, rdmi=%px, bbr->kref=%u\n", bctx, rdmi,
+		 kref_read(&bctx->bbr->kref));
 	/* free XDM (and maybe RDM) queue */
 	(void)genz_free_queues(&bctx->xdmi, rdmi);
 	kref_put(&bctx->bbr->kref, free_bbr);
@@ -482,8 +484,8 @@ static void genz_blk_exit_hctx(struct blk_mq_hw_ctx *hctx, uint index)
 	struct genz_blk_ctx *bctx = (struct genz_blk_ctx *)hctx->driver_data;
 	struct genz_blk_bridge *bbr = bctx->bbr;
 
-	pr_debug("hctx=%px, bctx=%px, bbr=%px, index=%u\n",
-		 hctx, bctx, bbr, index);
+	pr_debug("hctx=%px, bctx=%px, bbr=%px, index=%u, bctx->kref=%u\n",
+		 hctx, bctx, bbr, index, kref_read(&bctx->kref));
 	mutex_lock(&bctx->lock);
 	kref_put(&bctx->kref, genz_blk_free_queues);
 	mutex_unlock(&bctx->lock);
@@ -661,9 +663,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		zbd->rmr_info.cpu_addr = addr;
 		dev_dbg(&zdev->dev, "cpu_addr=%px\n", addr);
 	}
-	/* Revisit: blk device appears under devices/virtual/block */
-	/* Revisit: use device_add_disk() ? */
-	add_disk(gd);
+	device_add_disk(&zdev->dev, gd, NULL);
 
  out:
 	return ret;
