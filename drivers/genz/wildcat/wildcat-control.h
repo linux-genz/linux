@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2019-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -106,11 +106,14 @@ struct wildcat_interface_structure {
 
 /* Function Prototypes */
 uint64_t wildcat_slink_base(struct bridge *br);
-int wildcat_control_read(struct genz_dev *zdev, loff_t offset, size_t size,
-			 void *data, uint flags);
-int wildcat_control_write(struct genz_dev *zdev, loff_t offset, size_t size,
-			  void *data, uint flags);
-int wildcat_control_structure_pointers(int vers, int struct_type,
+int wildcat_control_read(struct genz_bridge_dev *gzbr, loff_t offset,
+			 size_t size, void *data,
+			 struct genz_rmr_info *rmri, uint flags);
+int wildcat_control_write(struct genz_bridge_dev *gzbr, loff_t offset,
+			  size_t size, void *data,
+			  struct genz_rmr_info *rmri, uint flags);
+int wildcat_control_structure_pointers(struct genz_bridge_dev *gzbr,
+			int vers, int struct_type,
 			const struct genz_control_structure_ptr **csp,
 			int *num_ptrs);
 

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2019-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -62,12 +62,17 @@ int genz_map_control_table(struct genz_dev *zdev,
 int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev);
 int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev);
 void genz_remove_uuid_file(struct genz_dev *zdev);
-int genz_control_read_structure(struct genz_dev *zdev,
+int genz_control_read_structure(struct genz_bridge_dev *zbdev,
+		struct genz_rmr_info *rmri,
 		void *buf, off_t cs_offset,
 		off_t field_offset, size_t field_size);
 void *genz_control_structure_buffer_alloc(
 		enum genz_control_structure_type stype, int flags);
-int genz_control_read_cid0(struct genz_dev *zdev, uint16_t *cid0);
-int genz_control_read_sid(struct genz_dev *zdev, uint16_t *sid);
-int genz_control_read_cclass(struct genz_dev *zdev, uint16_t *cclass);
-int genz_control_read_fru_uuid(struct genz_dev *zdev, uuid_t *fru_uuid);
+int genz_control_read_cid0(struct genz_bridge_dev *zbdev,
+			   struct genz_rmr_info *rmri, uint16_t *cid0);
+int genz_control_read_sid(struct genz_bridge_dev *zbdev,
+			  struct genz_rmr_info *rmri, uint16_t *sid);
+int genz_control_read_cclass(struct genz_bridge_dev *zbdev,
+			     struct genz_rmr_info *rmri, uint16_t *cclass);
+int genz_control_read_fru_uuid(struct genz_bridge_dev *zbdev,
+			       struct genz_rmr_info *rmri, uuid_t *fru_uuid);

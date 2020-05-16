@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2017-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -1102,7 +1102,7 @@ static int wildcat_probe(struct pci_dev *pdev,
 			dev_dbg(&pdev->dev,
 			      "genz_register_bridge failed with error %d\n",
 			      ret);
-			goto err_msg_qfree;
+			goto err_free_interrupts;
 		}
 		/* allocate driver-driver msg queues on slice 0 only */
 		gzbr = genz_find_bridge(&pdev->dev);
@@ -1110,14 +1110,14 @@ static int wildcat_probe(struct pci_dev *pdev,
 		if (ret) {
 			dev_dbg(&pdev->dev,
 			      "wildcat_msg_qalloc failed with error %d\n", ret);
-			goto err_free_interrupts;
+			goto err_unreg_br;
 		}
 	}
 	pci_set_master(pdev);
 	return 0;
 
-err_msg_qfree:
-	wildcat_msg_qfree(gzbr);
+err_unreg_br:
+	genz_unregister_bridge(&pdev->dev);
 
 err_free_interrupts:
 	wildcat_free_interrupts(pdev);

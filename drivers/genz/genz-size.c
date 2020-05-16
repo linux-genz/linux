@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2019-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -88,9 +88,8 @@ ssize_t genz_requester_vcat_table_size(struct genz_control_info *ci)
 		return -1;
 	}
 
-	/* Revisit: make a macro/inline for the read ci_read(struct genz_control_info *ci, ... */
-	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
-			ci->start, sizeof(cdt), &cdt, 0);
+	ret = genz_control_read(ci->zbdev,
+				ci->start, sizeof(cdt), &cdt, ci->rmri, 0);
 	if (ret) {
 		pr_debug("control read of component destination table structure failed with %d\n",
 			 ret);
@@ -99,7 +98,7 @@ ssize_t genz_requester_vcat_table_size(struct genz_control_info *ci)
 	req_vcatsz = cdt.req_vcatsz;
 	pr_debug("cdt.req_vcatsz is %u\n", req_vcatsz);
 	if (req_vcatsz == 0)
-		req_vcatsz = 1 << 5; /* Spec says default is 2^5 */
+		req_vcatsz = BIT(5); /* Spec says 0 means 2^5 */
 
 	return(VCAT_REQ_ROWS * entry_sz * req_vcatsz);
 }
@@ -132,8 +131,8 @@ ssize_t genz_responder_vcat_table_size(struct genz_control_info *ci)
 		return -1;
 	}
 
-	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
-			ci->start, sizeof(cdt), &cdt, 0);
+	ret = genz_control_read(ci->zbdev,
+				ci->start, sizeof(cdt), &cdt, ci->rmri, 0);
 	if (ret) {
 		pr_debug("control read of component destination table structure failed with %d\n",
 			 ret);
@@ -141,7 +140,7 @@ ssize_t genz_responder_vcat_table_size(struct genz_control_info *ci)
 	}
 	rsp_vcatsz = cdt.rsp_vcatsz;
 	if (rsp_vcatsz == 0)
-		rsp_vcatsz = 1 << 5; /* Spec says default is 2^5 */
+		rsp_vcatsz = BIT(5); /* Spec says 0 means 2^5 */
 
 	/*
 	 * Revisit: how to find maximum number of VCs supported on any
@@ -184,8 +183,8 @@ ssize_t genz_rit_table_size(struct genz_control_info *ci)
 		return -1;
 	}
 
-	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
-			ci->start, sizeof(cdt), &cdt, 0);
+	ret = genz_control_read(ci->zbdev,
+				ci->start, sizeof(cdt), &cdt, ci->rmri, 0);
 	if (ret) {
 		pr_debug("control read of component destination table structure failed with %d\n",
 			 ret);
@@ -194,8 +193,8 @@ ssize_t genz_rit_table_size(struct genz_control_info *ci)
 	rit_pad_size = cdt.rit_pad_size;
 
 	/* Find the core structure max_interface field */
-	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
-			0, sizeof(core), &core, 0);
+	ret = genz_control_read(ci->zbdev,
+				0, sizeof(core), &core, ci->rmri, 0);
 	if (ret) {
 		pr_debug("control read of core structure failed with %d\n",
 			 ret);
@@ -242,8 +241,8 @@ ssize_t genz_ssdt_msdt_table_size(struct genz_control_info *ci)
 		return -1;
 	}
 
-	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
-			ci->parent->start, sizeof(cdt), &cdt, 0);
+	ret = genz_control_read(
+		ci->zbdev, ci->parent->start, sizeof(cdt), &cdt, ci->rmri, 0);
 	if (ret) {
 		pr_debug("control read of component destination table structure failed with %d\n",
 			 ret);
@@ -260,13 +259,14 @@ ssize_t genz_ssdt_msdt_table_size(struct genz_control_info *ci)
 	}
 
 	if (num_rows == 0)
-		num_rows = 1 << 12; /* Spec says default is 2^12 */
+		num_rows = BIT(12); /* Spec says 0 means 2^12 */
 	ssdt_msdt_row_size = cdt.ssdt_msdt_row_size;
 
 	return (num_rows * ssdt_msdt_row_size);
 }
 
-ssize_t genz_c_access_r_key_size(struct genz_control_info *ci)
+/* common function for c_access_rkey/c_access_l_p2p */
+static ssize_t genz_c_access_table_size(struct genz_control_info *ci)
 {
 	ssize_t sz = 0;
 	uint64_t num_entries;
@@ -282,27 +282,36 @@ ssize_t genz_c_access_r_key_size(struct genz_control_info *ci)
 			ci->type);
 		return 0;
 	}
-	/* Read the 40 bit C-Access Table Size field at offset 0x18 */
-	/* Revisit: defines for the field size (5 bytes) and offset (0x18)? */
-	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
-			ci->start, sizeof(c_access), &c_access, 0);
+	/* Read the C-Access Structure */
+	ret = genz_control_read(
+		ci->zbdev, ci->start, sizeof(c_access), &c_access, ci->rmri, 0);
 	if (ret) {
 		pr_debug("control read of c_access structure failed with %d\n",
 			 ret);
 		return -1;
 	}
 	num_entries = c_access.c_access_table_size;
-	if (num_entries == 0) {
-		/* If C-Access Table Size is 0 then the size is 2^40 */
-		num_entries = (uint64_t)BIT(40);
-	}
-	/*
-	 * The num_entries is not the number of bytes in the table. In
-	 * this case, each table entry is 8 bytes.
-	 * Revisit: use a define for 8 bytes/entry? Use sizeof(struct <XXX>_entry
-	 */
-	sz = num_entries * 8;
-	return(sz);
+	if (num_entries == 0)
+		num_entries = BIT(40); /* Spec says 0 means 2^40 */
+	sz = num_entries * sizeof(struct genz_c_access_l_p2p_table_array);
+	return sz;
+}
+
+ssize_t genz_c_access_r_key_table_size(struct genz_control_info *ci)
+{
+	ssize_t sz = genz_c_access_table_size(ci);
+
+	if (sz > 0) /* convert entries to bytes */
+		sz *= sizeof(struct genz_c_access_r_key_table_array);
+	return sz;
+}
+
+ssize_t genz_c_access_l_p2p_table_size(struct genz_control_info *ci)
+{
+	ssize_t sz = genz_c_access_table_size(ci);
+
+	sz = genz_c_access_table_size(ci);
+	return sz;  /* entries == bytes because sizeof(struct) is 1 */
 }
 
 ssize_t genz_oem_data_size(struct genz_control_info *ci)
@@ -322,16 +331,15 @@ ssize_t genz_oem_data_size(struct genz_control_info *ci)
 	}
 
 	/* Read the 4 byte pointer to the OEM Data table at offset 0x90 */
-	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
-			ci->start+0x90, 4, &oem_data_ptr, 0);
+	ret = genz_control_read(
+		ci->zbdev, ci->start+0x90, 4, &oem_data_ptr, ci->rmri, 0);
 	if (ret || !oem_data_ptr) {
 		pr_debug("control read of OEM Data PTR failed with %d\n",
 			 ret);
 		return -1;
 	}
 	/* Read the table size in bytes from the first 2 bytes of the table */
-	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
-			oem_data_ptr, 2, &sz, 0);
+	ret = genz_control_read(ci->zbdev, oem_data_ptr, 2, &sz, ci->rmri, 0);
 	if (ret) {
 		pr_debug("control read of OEM Data table size failed with %d\n",
 			 ret);
@@ -340,7 +348,7 @@ ssize_t genz_oem_data_size(struct genz_control_info *ci)
 	return sz;
 }
 
-ssize_t genz_elog_size(struct genz_control_info *ci)
+ssize_t genz_elog_table_size(struct genz_control_info *ci)
 {
 	ssize_t sz;
 	uint32_t num_entries;
@@ -358,17 +366,16 @@ ssize_t genz_elog_size(struct genz_control_info *ci)
 	}
 
 	/* Read the 4 byte pointer to the Elog table at offset 0x14 */
-	/* Revisit: add a macro/inline to call control_read more easily */
-	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
-			ci->start+0x14, 4, &elog_ptr, 0);
+	ret = genz_control_read(ci->zbdev,
+				ci->start+0x14, 4, &elog_ptr, ci->rmri, 0);
 	if (ret || !elog_ptr) {
 		pr_debug("control read of ELog PTR failed with %d\n",
 			 ret);
 		return -1;
 	}
 	/* Read the table size in bytes from the first 2 bytes of the table */
-	ret = ci->zdev->zbdev->zbdrv->control_read(ci->zdev,
-			elog_ptr, 2, &num_entries, 0);
+	ret = genz_control_read(ci->zbdev,
+				elog_ptr, 2, &num_entries, ci->rmri, 0);
 	if (ret) {
 		pr_debug("control read of ELog table size failed with %d\n",
 			 ret);
@@ -388,18 +395,9 @@ ssize_t genz_elog_size(struct genz_control_info *ci)
 	return(sz);
 }
 
-ssize_t genz_lprt_size(struct genz_control_info *ci)
-{
-	/* LPRT pointer is in the interface structure but the LPRT size is
-	 * in the Component Switch structure. Use the driver interfaces
-	 * to read the switch structure LPRT_size field (offset 0x10).
-	 */
-	return 0;
-}
-
 ssize_t genz_core_lpd_bdf_table_size(struct genz_control_info *ci)
 {
-	return 0;
+	return sizeof(struct genz_core_lpd_bdf_table);
 }
 
 ssize_t genz_unreliable_multicast_table_size(struct genz_control_info *ci)
@@ -414,7 +412,24 @@ ssize_t genz_tr_table_size(struct genz_control_info *ci)
 
 ssize_t genz_pa_table_size(struct genz_control_info *ci)
 {
-	return 0;
+	ssize_t sz = 0;
+	uint64_t num_entries;
+	int ret;
+	struct genz_component_pa_structure pa;
+
+	/* Read the Component PA Structure */
+	ret = genz_control_read(
+		ci->zbdev, ci->start, sizeof(pa), &pa, ci->rmri, 0);
+	if (ret) {
+		pr_debug("control read of PA structure failed with %d\n",
+			 ret);
+		return -1;
+	}
+	num_entries = pa.pa_size;
+	if (num_entries == 0)
+		num_entries = BIT(16); /* Spec says 0 means 2^16 */
+	sz = num_entries * sizeof(struct genz_pa_table_array);
+	return sz;
 }
 
 ssize_t genz_service_uuid_table_size(struct genz_control_info *ci)
@@ -442,18 +457,12 @@ ssize_t genz_media_log_table_size(struct genz_control_info *ci)
 	return 0;
 }
 
-
 ssize_t genz_label_data_table_size(struct genz_control_info *ci)
 {
 	return 0;
 }
 
 ssize_t genz_mcprt_msmcprt_table_size(struct genz_control_info *ci)
-{
-	return 0;
-}
-
-ssize_t genz_c_access_r_key_table_size(struct genz_control_info *ci)
 {
 	return 0;
 }
@@ -468,7 +477,8 @@ ssize_t genz_firmware_table_size(struct genz_control_info *ci)
 	return 0;
 }
 
-ssize_t genz_page_grid_restricted_page_grid_table_size(struct genz_control_info *ci)
+ssize_t genz_page_grid_restricted_page_grid_table_size(
+	struct genz_control_info *ci)
 {
 	return 0;
 }
@@ -484,16 +494,6 @@ ssize_t genz_pm_backup_table_size(struct genz_control_info *ci)
 }
 
 ssize_t genz_sm_backup_table_size(struct genz_control_info *ci)
-{
-	return 0;
-}
-
-ssize_t genz_vendor_defined_structure_size(struct genz_control_info *ci)
-{
-	return 0;
-}
-
-ssize_t genz_c_access_l_p2p_table_size(struct genz_control_info *ci)
 {
 	return 0;
 }
@@ -545,10 +545,9 @@ ssize_t genz_vcat_table_size(struct genz_control_info *ci)
 
 ssize_t genz_lprt_mprt_table_size(struct genz_control_info *ci)
 {
-	return 0;
-}
-
-ssize_t genz_vendor_defined_with_uuid_structure_size(struct genz_control_info *ci)
-{
+	/* LPRT pointer is in the interface structure but the LPRT size is
+	 * in the Component Switch structure. Use the driver interfaces
+	 * to read the switch structure LPRT_size field (offset 0x10).
+	 */
 	return 0;
 }
