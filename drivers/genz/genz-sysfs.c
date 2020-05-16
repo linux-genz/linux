@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2019-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -40,24 +40,78 @@
 #include <linux/slab.h>
 #include "genz.h"
 
-static ssize_t genz_read_control(struct file * file,
+static ssize_t read_control(struct file *file,
 		struct kobject *kobj,
-		struct bin_attribute * battr,
+		struct bin_attribute *battr,
 		char *buffer,
 		loff_t pos,
 		size_t size)
 {
-	return 0;
+	struct genz_dev *zdev = kobj_to_genz_dev(kobj);
+	struct genz_zres *zres = res_attr_to_zres(battr);
+	struct genz_rmr_info *rmri = zres->rmri;
+	loff_t offset = zres->zres.res.start + pos;
+	uint flags = 0;  /* Revisit */
+
+	dev_dbg(&zdev->dev, "pos=%llx, size=%zu, offset=%llx\n",
+		pos, size, offset);
+	return genz_control_read(zdev->zbdev, offset, size, buffer,
+				 rmri, flags);
 }
 
-static ssize_t genz_write_control(struct file * file,
+static ssize_t write_control(struct file *file,
 		struct kobject *kobj,
-		struct bin_attribute * battr,
+		struct bin_attribute *battr,
 		char *buffer,
 		loff_t pos,
 		size_t size)
 {
-	return 0;
+	struct genz_dev *zdev = kobj_to_genz_dev(kobj);
+	struct genz_zres *zres = res_attr_to_zres(battr);
+	struct genz_rmr_info *rmri = zres->rmri;
+	loff_t offset = zres->zres.res.start + pos;
+	uint flags = 0;  /* Revisit */
+
+	dev_dbg(&zdev->dev, "pos=%llx, size=%zu, offset=%llx\n",
+		pos, size, offset);
+	return genz_control_write(zdev->zbdev, offset, size, buffer,
+				  rmri, flags);
+}
+
+static ssize_t read_data(struct file *file,
+		struct kobject *kobj,
+		struct bin_attribute *battr,
+		char *buffer,
+		loff_t pos,
+		size_t size)
+{
+	struct genz_dev *zdev = kobj_to_genz_dev(kobj);
+	struct genz_zres *zres = res_attr_to_zres(battr);
+	struct genz_rmr_info *rmri = zres->rmri;
+	loff_t offset = zres->zres.res.start + pos;
+	uint flags = 0;  /* Revisit */
+
+	dev_dbg(&zdev->dev, "pos=%llx, size=%zu, offset=%llx\n",
+		pos, size, offset);
+	return genz_data_read(zdev->zbdev, offset, size, buffer, rmri, flags);
+}
+
+static ssize_t write_data(struct file *file,
+		struct kobject *kobj,
+		struct bin_attribute *battr,
+		char *buffer,
+		loff_t pos,
+		size_t size)
+{
+	struct genz_dev *zdev = kobj_to_genz_dev(kobj);
+	struct genz_zres *zres = res_attr_to_zres(battr);
+	struct genz_rmr_info *rmri = zres->rmri;
+	loff_t offset = zres->zres.res.start + pos;
+	uint flags = 0;  /* Revisit */
+
+	dev_dbg(&zdev->dev, "pos=%llx, size=%zu, offset=%llx\n",
+		pos, size, offset);
+	return genz_data_write(zdev->zbdev, offset, size, buffer, rmri, flags);
 }
 
 int genz_create_attr(struct genz_dev *zdev, struct genz_zres *zres)
@@ -72,10 +126,15 @@ int genz_create_attr(struct genz_dev *zdev, struct genz_zres *zres)
 	res_attr->attr.name = zres->zres.res.name;
 	res_attr->attr.mode = (S_IRUSR | S_IWUSR);
 	res_attr->size = zres->zres.res.end - zres->zres.res.start + 1;
-	res_attr->private = zres;
-	res_attr->read = genz_read_control;
-	res_attr->write = genz_write_control;
-	res_attr->mmap = NULL;
+	res_attr->private = zres;  /* Revisit: unused */
+	if (zres->zres.res.flags & IORESOURCE_GENZ_CONTROL) {
+		res_attr->read = read_control;
+		res_attr->write = write_control;
+	} else {
+		res_attr->read = read_data;
+		res_attr->write = write_data;
+	}
+	res_attr->mmap = NULL;  /* Revisit */
 	pr_debug("zdev->dev.kobj is %px res_attr %s\n", &zdev->dev.kobj, zres->zres.res.name);
 	ret = sysfs_create_bin_file(&zdev->dev.kobj, res_attr);
 	if (ret) {
