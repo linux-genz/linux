@@ -83,6 +83,7 @@ struct genz_dev {
 	uint16_t 		resource_count[2]; /* control 0; data 1 */
 };
 #define to_genz_dev(n) container_of(n, struct genz_dev, dev)
+#define kobj_to_genz_dev(n) to_genz_dev(kobj_to_dev(n))
 
 struct genz_driver {
 	const char			*name;
@@ -212,22 +213,73 @@ struct genz_sgl_info {
 	sgl_cmpl_fn cmpl_fn;
 };
 
+/**
+ * struct genz_bridge_driver - The main interface between the the Gen-Z
+ * subsystem and Gen-Z bridge drivers.
+ *
+ * Each bridge driver defines one of these and passes a pointer to it in the
+ * @zbdrv parameter of genz_register_bridge().
+ */
 struct genz_bridge_driver {
-	struct genz_driver	zdrv; /* Revisit: need this or is it all in native driver? */
+	/** bridge_info: Fill in @info about the bridge @br. Required. */
 	int (*bridge_info)(struct genz_bridge_dev *br,
 			   struct genz_bridge_info *info);
-	int (*control_mmap)(struct genz_dev *zdev); /* Revisit: need flags? */
-	int (*control_read)(struct genz_dev *zdev, loff_t offset, size_t size,
-			    void *data, uint flags);
-	int (*control_write)(struct genz_dev *zdev, loff_t offset, size_t size,
-			     void *data, uint flags);
-	int (*control_write_msg)(struct genz_dev *zdev, uint32_t rspctxid,
+	/** control_mmap: Optional. Currently unused. */
+	int (*control_mmap)(struct genz_bridge_dev *br,
+			    struct genz_rmr_info *rmri); /* Revisit: flags? */
+	/**
+	 * control_read: Read control space via bridge @br from @offset/@size
+	 * into kernel buffer @data using mapping @rmri. One @flags
+	 * currently defined, %GENZ_CONTROL_FENCE. Required.
+	 * If bridge does not support in-band management, then any @rmri
+	 * that is not %NULL and with a gcid not matching the bridge itself
+	 * must return -%ENODEV.
+	 */
+	int (*control_read)(struct genz_bridge_dev *br, loff_t offset,
+			    size_t size, void *data,
+			    struct genz_rmr_info *rmri, uint flags);
+	/**
+	 * control_write: Write control space via bridge @br at @offset/@size
+	 * from kernel buffer @data using mapping @rmri. Two @flags currently
+	 * defined, %GENZ_CONTROL_FLUSH, %GENZ_CONTROL_FENCE. Required.
+	 * If bridge does not support in-band management, then any @rmri
+	 * that is not %NULL and with a gcid not matching the bridge itself
+	 * must return -%ENODEV.
+	 */
+	int (*control_write)(struct genz_bridge_dev *br, loff_t offset,
+			     size_t size, void *data,
+			     struct genz_rmr_info *rmri, uint flags);
+	/**
+	 * control_write_msg: Send a Control Write MSG via bridge @br targeting
+	 * @gcid, @rspctxid, @instid, @dr_iface, with data @size from kernel
+	 * buffer @data.
+	 * The @flags currently defined are %GENZ_CONTROL_MSG_UNRELIABLE,
+	 * %GENZ_CONTROL_MSG_DR, %GENZ_CONTROL_MSG_CH, %GENZ_CONTROL_MSG_IV,
+	 * %GENZ_CONTROL_FLUSH, %GENZ_CONTROL_FENCE.
+	 * Required on bridges supporting in-band management.
+	 */
+	int (*control_write_msg)(struct genz_bridge_dev *br,
+				 uint32_t gcid, uint32_t rspctxid,
+				 uint32_t instid, uint16_t dr_iface,
 				 size_t size, void *data, uint flags);
-	int (*data_mmap)(struct genz_dev *zdev);
-	int (*data_read)(struct genz_dev *zdev, loff_t offset, size_t size,
-			 void *data);
-	int (*data_write)(struct genz_dev *zdev, loff_t offset, size_t size,
-			  void *data);
+	/** data_mmap: Optional. Currently unused. */
+	int (*data_mmap)(struct genz_bridge_dev *br,
+			 struct genz_rmr_info *rmri);
+	/**
+	 * data_read: Read data space via bridge @br from @offset/@size
+	 * into kernel buffer @data using mapping @rmri.
+	 * No @flags currently defined. Required.
+	 */
+	int (*data_read)(struct genz_bridge_dev *br, loff_t offset,
+			 size_t size, void *data,
+			 struct genz_rmr_info *rmri, uint flags);
+	/**
+	 * data_write: Write data space via bridge @br at @offset/@size
+	 * from kernel buffer @data using mapping @rmri. Required.
+	 */
+	int (*data_write)(struct genz_bridge_dev *br, loff_t offset,
+			  size_t size, void *data,
+			  struct genz_rmr_info *rmri, uint flags);
 	int (*sgl_request)(struct genz_dev *zdev, struct genz_sgl_info *sgli);
 	int (*req_page_grid_write)(struct genz_bridge_dev *br, uint pg_index,
 				   struct genz_page_grid genz_pg[]);
@@ -257,19 +309,23 @@ struct genz_bridge_driver {
 			   uint32_t uu_flags, gfp_t alloc_flags);
 	int (*uuid_free)(struct genz_mem_data *mdata, uuid_t *uuid,
 			 uint32_t *uu_flags, bool *local);
-	int (*control_structure_pointers) (int vers, int structure_type,
+	int (*control_structure_pointers)(struct genz_bridge_dev *br,
+			int vers, int structure_type,
 			const struct genz_control_structure_ptr **csp,
 			int *num_ptrs);
+	/* private: subsystem use only */
+	struct genz_driver zdrv; /* Revisit: need this or is it all in native driver? */
 };
 #define to_genz_bridge_driver(d) container_of(d, struct genz_bridge_driver, driver)
 
+/* in Gen-Z Core spec, low 12 bits of addr do not appear and are assumed 0 */
 struct genz_req_pte_data {
 	uint64_t           addr;            /* 64-bit data space address */
 };
 
 struct genz_req_pte_ctl {
-	uint64_t           addr    :52;     /* 52-bit control space address */
-	uint64_t           dr_intf :12;     /* 12-bit DR interface (drc=1) */
+	uint64_t           addr     :52;    /* 52-bit control space address */
+	uint64_t           dr_iface :12;    /* 12-bit DR interface (drc=1) */
 };
 
 struct genz_req_pte {
@@ -394,17 +450,10 @@ struct genz_bridge_dev {
 	struct resource         ld_st_res;
 	/* Revisit: add address space */
 	struct kobject		genzN_dir;
-	struct kobject		*control_dir;
-	struct kset		*genz_control_kset;
+	//struct kset		*genz_control_kset;
 };
 #define to_zbdev(d) container_of(d, struct genz_bridge_dev, bridge_dev)
 #define kobj_to_zbdev(kobj) container_of(kobj, struct genz_bridge_dev, genzN_dir)
-
-static inline bool zdev_is_local_bridge(struct genz_dev *zdev)
-{
-	return ((zdev != NULL && zdev->zbdev != NULL) ?
-		(zdev == &zdev->zbdev->zdev) : false);
-}
 
 #define GENZ_ANY_VERSION  (0xffff)
 
@@ -430,13 +479,23 @@ static inline uint32_t genz_rkey_os(uint32_t rkey)
 extern uint32_t genz_unused_rkey;
 
 #define GENZ_PAGE_GRID_MIN_PAGESIZE  12
-#define GENZ_PAGE_GRID_MAX_PAGESIZE  64
+#define GENZ_PAGE_GRID_MAX_PAGESIZE  63
 #define GENZ_BASE_ADDR_ERROR         (-1ull)
 
 static inline uint64_t genz_pg_addr(struct genz_page_grid *genz_pg)
 {
-	return genz_pg->page_grid.pg_base_address_0 <<
+	return (uint64_t)genz_pg->page_grid.pg_base_address_0 <<
 		GENZ_PAGE_GRID_MIN_PAGESIZE;
+}
+
+static inline uint64_t genz_pg_ps(struct genz_page_grid *genz_pg)
+{
+	return BIT_ULL(genz_pg->page_grid.page_size_0);
+}
+
+static inline uint64_t genz_pg_size(struct genz_page_grid *genz_pg)
+{
+	return (uint64_t)genz_pg->page_grid.page_count_0 * genz_pg_ps(genz_pg);
 }
 
 #define GENZ_INVALID_GCID       (-1u)
@@ -476,6 +535,15 @@ static inline uint64_t genz_pg_addr(struct genz_page_grid *genz_pg)
 enum space_type {
 	GENZ_DATA    = 0,
 	GENZ_CONTROL = 1
+};
+
+enum genz_control_flag {
+	GENZ_CONTROL_FLUSH          = 0x01,
+	GENZ_CONTROL_FENCE          = 0x02,
+	GENZ_CONTROL_MSG_UNRELIABLE = 0x10,
+	GENZ_CONTROL_MSG_DR         = 0x20,
+	GENZ_CONTROL_MSG_CH         = 0x40,
+	GENZ_CONTROL_MSG_IV         = 0x80
 };
 
 enum genz_xdm_cmd {
@@ -577,7 +645,7 @@ struct genz_rmr_info {
 	void            *cpu_addr;
 	uint32_t        pg_ps;
 	uint32_t        gcid;
-	struct resource res;
+	struct resource res;  /* Revisit: change to zres, which has rkeys */
 };
 
 /* Revisit: probably should have equivalent genz_mr_info */
@@ -623,6 +691,15 @@ enum {
 	GENZ_TC_14 = 14,
 	GENZ_TC_15 = 15
 };
+
+uint32_t genz_dev_gcid(struct genz_dev *zdev, uint index);
+
+static inline bool genz_is_local_bridge(struct genz_bridge_dev *br,
+					struct genz_rmr_info *rmri)
+{
+	return ((rmri == NULL) ? true :
+		(genz_dev_gcid(&br->zdev, 0) == rmri->gcid));
+}
 
 static inline int genz_uuid_cmp(const uuid_t *u1, const uuid_t *u2)
 {
@@ -670,6 +747,46 @@ static inline const char *genz_name(const struct genz_dev *zdev)
         return dev_name(&zdev->dev);
 }
 
+static inline int genz_control_read(struct genz_bridge_dev *br, loff_t offset,
+				    size_t size, void *data,
+				    struct genz_rmr_info *rmri, uint flags)
+{
+	/* Revisit: need req ZMMU mapping */
+	if (!br->zbdrv->control_read)  /* control_read is required */
+		return -EINVAL;
+	return br->zbdrv->control_read(br, offset, size, data, rmri, flags);
+}
+
+static inline int genz_control_write(struct genz_bridge_dev *br, loff_t offset,
+				     size_t size, void *data,
+				     struct genz_rmr_info *rmri, uint flags)
+{
+	/* Revisit: need req ZMMU mapping */
+	if (!br->zbdrv->control_write)  /* control_write is required */
+		return -EINVAL;
+	return br->zbdrv->control_write(br, offset, size, data, rmri, flags);
+}
+
+static inline int genz_data_read(struct genz_bridge_dev *br, loff_t offset,
+				 size_t size, void *data,
+				 struct genz_rmr_info *rmri, uint flags)
+{
+	/* Revisit: need req ZMMU mapping */
+	if (!br->zbdrv->data_read)  /* data_read is required */
+		return -EINVAL;
+	return br->zbdrv->data_read(br, offset, size, data, rmri, flags);
+}
+
+static inline int genz_data_write(struct genz_bridge_dev *br, loff_t offset,
+				  size_t size, void *data,
+				  struct genz_rmr_info *rmri, uint flags)
+{
+	/* Revisit: need req ZMMU mapping */
+	if (!br->zbdrv->data_write)  /* data_write is required */
+		return -EINVAL;
+	return br->zbdrv->data_write(br, offset, size, data, rmri, flags);
+}
+
 void genz_rkey_init(void);
 void genz_rkey_exit(void);
 int genz_rkey_alloc(uint32_t *ro_rkey, uint32_t *rw_rkey);
@@ -681,7 +798,6 @@ int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv,
 struct genz_bridge_dev *genz_find_bridge(struct device *dev);
 int genz_unregister_bridge(struct device *dev);
 char *genz_gcid_str(const uint32_t gcid, char *str, const size_t len);
-uint32_t genz_dev_gcid(struct genz_dev *zdev, uint index);
 void genz_init_mem_data(struct genz_mem_data *mdata,
 			struct genz_bridge_dev *br);
 void genz_zmmu_clear_all(struct genz_bridge_dev *br, bool free_radix_tree);

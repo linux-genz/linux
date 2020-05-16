@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2019-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -200,7 +200,7 @@ int genz_device_remove(struct device *dev)
 	return 0;
 }
 
-static struct genz_fabric *genz_alloc_fabric(void)
+static struct genz_fabric *genz_alloc_fabric(uint32_t fabric_num)
 {
 	struct genz_fabric *f;
 
@@ -216,52 +216,56 @@ static struct genz_fabric *genz_alloc_fabric(void)
 	spin_lock_init(&f->components_lock);
 	spin_lock_init(&f->subnets_lock);
 	spin_lock_init(&f->bridges_lock);
+	kref_init(&f->kref);
+	f->status = GENZ_FABRIC_STATUS_UNINIT;
+	f->number = fabric_num;
 
 	return f;
 }
 
-static int genz_init_fabric(struct genz_fabric *f,
-		uint32_t fabric_num)
+static int genz_init_fabric(struct genz_fabric *f)
 {
 	int ret = 0;
-
-	f->number = fabric_num;
+	unsigned long flags;
 
 	/*
 	 * The /sys/devices/genz<N> directory is created by adding a
 	 * struct device. This is not claimed by driver. We use the device's
-	 * kobject as the parent for the sysfs tree. Use device_put on this
-	 * fabric device when the zdev is done being used.
+	 * kobject as the parent for the sysfs tree. Use device_del on this
+	 * fabric device when the fabric is done being used.
 	 */
 	/* setting the bus and id uses simple enumeration to get genz<N> */
 	f->dev.bus = &genz_bus_type;
-	f->dev.id = fabric_num;
+	f->dev.id = f->number;
 	f->dev.release = genz_free_fabric;
 	f->dev.parent = NULL;
-	dev_set_name(&f->dev, "genz%d", fabric_num);
+	dev_set_name(&f->dev, "genz%u", f->number);
 
 	ret = device_register(&f->dev);
 	if (ret) {
-		pr_debug( "device_register failed with %d\n", ret);
+		dev_dbg(&f->dev, "device_register failed with %d\n", ret);
 		put_device(&f->dev);
 		return ret;
 	}
 
+	spin_lock_irqsave(&genz_fabrics_lock, flags);
+	f->status = GENZ_FABRIC_STATUS_INITED;
+	spin_unlock_irqrestore(&genz_fabrics_lock, flags);
 	return ret;
 }
-
 
 void genz_free_fabric(struct device *dev)
 {
 	struct genz_fabric *f;
 	unsigned long flags;
 
-	f = container_of(dev, struct genz_fabric, dev);
+	f = dev_to_genz_fabric(dev);
 
-	pr_debug("genz_free_fabric %s\n", dev_name(dev));
+	pr_debug("%s\n", dev_name(dev));
 	spin_lock_irqsave(&genz_fabrics_lock, flags);
 	list_del(&f->node);
 	spin_unlock_irqrestore(&genz_fabrics_lock, flags);
+	kfree(f);
 }
 
 struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
@@ -270,47 +274,51 @@ struct genz_fabric *genz_find_fabric(uint32_t fabric_num)
 	int ret = 0;
 	unsigned long flags;
 
-	pr_debug( "entering");
+	pr_debug("entered");
 	spin_lock_irqsave(&genz_fabrics_lock, flags);
 	list_for_each_entry(f, &genz_fabrics, node) {
 		if (f->number == fabric_num) {
 			found = f;
-			break;
+			goto unlock;
 		}
 	}
+	pr_debug("fabric_num %d is not in the list\n", fabric_num);
 	spin_unlock_irqrestore(&genz_fabrics_lock, flags);
+
+	/* alloc_fabric does memory alloc - no spinlock */
+	found = genz_alloc_fabric(fabric_num);
 	if (!found) {
-		pr_debug( "fabric_num %d is not in the list\n", fabric_num);
-		/* make sure this has not already been added. */
-		spin_lock_irqsave(&genz_fabrics_lock, flags);
-		list_for_each_entry(f, &genz_fabrics, node) {
-			if (f->number == fabric_num) {
-				/* Already got added */
-				found = f;
-				goto out;
-			}
-		}
-		spin_unlock_irqrestore(&genz_fabrics_lock, flags);
-		pr_debug( "fabric_num %d is still not in the list\n", fabric_num);
-		/* Allocate a new genz_fabric and add to list */
-		/* Revisit: add a flag that is it initialized. Set to UNINIT in the alloc call. take lock and add to list. do init_fabric. Take lock, Set to INITED in init_fabric, release lock.  */
-		found = genz_alloc_fabric();
-		if (!found) {
-			pr_debug( "genz_alloc_fabric returned NULL\n");
-			goto out;
-		}
-		ret = genz_init_fabric(found, fabric_num);
-		if (ret) {
-			/* Revisit: free everything up */
-			pr_debug( "genz_init_fabric returned %d\n", ret);
-			found = NULL;
-			goto out;
-		}
-		spin_lock_irqsave(&genz_fabrics_lock, flags);
-		list_add_tail(&found->node, &genz_fabrics);
-		spin_unlock_irqrestore(&genz_fabrics_lock, flags);
+		pr_debug("genz_alloc_fabric returned NULL\n");
+		goto out;
 	}
+
+	/* check if someone else added this fabric while we were unlocked */
+	spin_lock_irqsave(&genz_fabrics_lock, flags);
+	list_for_each_entry(f, &genz_fabrics, node) {
+		if (f->number == fabric_num) {  /* already there */
+			pr_debug("fabric_num %d already in the list\n",
+				 fabric_num);
+			kfree(found);
+			found = f;
+			goto unlock;
+		}
+	}
+	/* add to list - status is UNINIT*/
+	list_add_tail(&found->node, &genz_fabrics);
+	spin_unlock_irqrestore(&genz_fabrics_lock, flags);
+
+	/* initialize - status set to INITED */
+	ret = genz_init_fabric(found);
+	if (ret) {
+		pr_debug("genz_init_fabric returned %d\n", ret);
+		found = NULL;
+		goto out;
+	}
+
 	return found;
+
+unlock:
+	spin_unlock_irqrestore(&genz_fabrics_lock, flags);
 out:
 	return found;
 
@@ -346,11 +354,16 @@ static struct genz_subnet *genz_alloc_subnet(void)
 void genz_free_subnet(struct device *dev)
 {
 	struct genz_subnet *s;
+	struct genz_fabric *f;
+	unsigned long      flags;
 
 	pr_debug("genz_free_subnet %s\n", dev_name(dev));
-	s = container_of(dev, struct genz_subnet, dev);
+	s = dev_to_genz_subnet(dev);
+	f = s->fabric;
 
+	spin_lock_irqsave(&f->subnets_lock, flags);
 	list_del(&s->node);
+	spin_unlock_irqrestore(&f->subnets_lock, flags);
 	kfree(s);
 }
 
@@ -369,7 +382,7 @@ static int genz_init_subnet(struct genz_subnet *s,
 
 	ret = device_register(&s->dev);
 	if (ret) {
-		pr_debug( "device_register failed with %d\n", ret);
+		pr_debug("device_register failed with %d\n", ret);
 		put_device(&s->dev);
 		return ret;
 	}
@@ -388,6 +401,7 @@ struct genz_subnet *genz_lookup_subnet(uint32_t sid, struct genz_fabric *f)
 		pr_debug("\ts->sid is %d looking for sid %d\n", s->sid, sid);
 		if (s->sid == sid) {
 			found = s;
+			/* Revisit: kref? */
 			break;
 		}
 	}
@@ -402,28 +416,27 @@ struct genz_subnet *genz_add_subnet(uint32_t sid, struct genz_fabric *f)
 	int ret = 0;
 	unsigned long flags;
 
-	pr_debug( "entered\n");
-
+	pr_debug("entered\n");
 	found = genz_lookup_subnet(sid, f);
 
 	if (!found) {
-		pr_debug( "sid %d is not in the subnets list yet\n", sid);
+		pr_debug("sid %d is not in the subnets list yet\n", sid);
 		/* Allocate a new genz_subnet and add to list */
 		found = genz_alloc_subnet();
 		if (!found) {
-			pr_debug( "alloc_subnet failed\n");
+			pr_debug("alloc_subnet failed\n");
 			return found;
 		}
 		ret = genz_init_subnet(found, sid, f);
 		if (ret) {
-		/* make sure this has not already been added. */
-			pr_debug( "init_subnet failed\n");
+			pr_debug("init_subnet failed\n");
 			return NULL;
 		}
+		/* Revisit: make sure this has not already been added. */
 		spin_lock_irqsave(&f->subnets_lock, flags);
 		list_add_tail(&found->node, &f->subnets);
 		spin_unlock_irqrestore(&f->subnets_lock, flags);
-		pr_debug( "added to the subnet list\n");
+		pr_debug("added to the subnet list\n");
 	}
 	return found;
 }
@@ -440,7 +453,7 @@ static ssize_t cclass_show(struct device *dev,
 		pr_debug("comp is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
 	}
-	return(snprintf(buf, PAGE_SIZE, "%d\n", comp->cclass));
+	return snprintf(buf, PAGE_SIZE, "%d\n", comp->cclass);
 }
 static DEVICE_ATTR(cclass, (S_IRUGO), cclass_show, NULL);
 
@@ -449,6 +462,8 @@ static ssize_t gcid_show(struct device *dev,
 		char *buf)
 {
 	struct genz_component *comp;
+	uint32_t              gcid;
+	char                  str[GCID_STRING_LEN+1];
 
 	comp = dev_to_genz_component(dev);
 	pr_debug("comp is %px\n", comp);
@@ -461,7 +476,9 @@ static ssize_t gcid_show(struct device *dev,
 		pr_debug("comp->subnet is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component subnet\n"));
 	}
-	return(snprintf(buf, PAGE_SIZE, "%04x:%03x\n", comp->subnet->sid, comp->cid));
+	gcid = genz_gcid(comp->subnet->sid, comp->cid);
+	return snprintf(buf, PAGE_SIZE, "%s\n",
+			genz_gcid_str(gcid, str, sizeof(str)));
 }
 static DEVICE_ATTR(gcid, (S_IRUGO), gcid_show, NULL);
 
@@ -478,7 +495,7 @@ static ssize_t fru_uuid_show(struct device *dev,
 		pr_debug("comp is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
 	}
-	return(snprintf(buf, PAGE_SIZE, "%pUb\n", &comp->fru_uuid));
+	return snprintf(buf, PAGE_SIZE, "%pUb\n", &comp->fru_uuid);
 }
 static DEVICE_ATTR(fru_uuid, (S_IRUGO), fru_uuid_show, NULL);
 
@@ -486,7 +503,7 @@ static int genz_create_component_files(struct device *dev)
 {
 	int ret = 0;
 
-	pr_debug("create_file for device %px\n", dev);
+	pr_debug("create_files for device %px\n", dev);
 	ret = device_create_file(dev, &dev_attr_gcid);
 	ret = device_create_file(dev, &dev_attr_cclass);
 	ret = device_create_file(dev, &dev_attr_fru_uuid);
@@ -511,15 +528,13 @@ void genz_free_comp(struct device *dev)
 	unsigned long flags;
 
 	pr_debug("genz_free_comp %s\n", dev_name(dev));
-
-	c = container_of(dev, struct genz_component, dev);
+	c = dev_to_genz_component(dev);
 
 	spin_lock_irqsave(&c->subnet->fabric->components_lock, flags);
 	list_del(&c->fab_comp_node);
 	spin_unlock_irqrestore(&c->subnet->fabric->components_lock, flags);
 	kfree(c);
 }
-
 
 int genz_init_component(struct genz_component *zcomp,
 		struct genz_subnet *s,
@@ -537,7 +552,7 @@ int genz_init_component(struct genz_component *zcomp,
 	pr_debug("in genz_init_component name is cid %03x\n", cid);
 	ret = device_register(&zcomp->dev);
 	if (ret) {
-		pr_debug( "device_register failed with %d\n", ret);
+		pr_debug("device_register failed with %d\n", ret);
 		put_device(&zcomp->dev);
 		return ret;
 	}
@@ -571,6 +586,7 @@ struct genz_component *genz_lookup_component(struct genz_subnet *s,
 	list_for_each_entry(c, &s->fabric->components, fab_comp_node) {
 		if (c->cid == cid && s->sid == c->subnet->sid) {
 			found = c;
+			kref_get(&c->kref);
 			break;
 		}
 	}
@@ -588,23 +604,23 @@ struct genz_component *genz_add_component(struct genz_subnet *s,
 	found = genz_lookup_component(s, cid);
 
 	if (!found) {
-		pr_debug( "cid %d is not in the components list yet\n", cid);
+		pr_debug("cid %d is not in the components list yet\n", cid);
 		/* Allocate a new genz_component and add to list */
 		found = genz_alloc_component();
 		if (!found) {
-			pr_debug( "alloc_componenet failed\n");
+			pr_debug("alloc_componenet failed\n");
 			return found;
 		}
 		ret = genz_init_component(found, s, cid);
 		if (ret) {
-			/* make sure this has not already been added. */
-			pr_debug( "init_component failed\n");
+			pr_debug("init_component failed\n");
 			return NULL;
 		}
+		/* Revisit: make sure this has not already been added. */
 		spin_lock_irqsave(&s->fabric->components_lock, flags);
 		list_add_tail(&found->fab_comp_node, &s->fabric->components);
 		spin_unlock_irqrestore(&s->fabric->components_lock, flags);
-		pr_debug( "added component %px to the component list\n", found);
+		pr_debug("added component %px to the component list\n", found);
 	}
 	return found;
 }

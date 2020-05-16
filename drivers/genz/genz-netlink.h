@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2019-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -35,11 +35,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Gen-Z Component Structure */
+/* Gen-Z OS Component Structure */
 enum {
 	GENZ_A_UNSPEC,
-	GENZ_A_FABRIC_NUM,
+	GENZ_A_FABRIC_NUM,  /* Revisit: unused, delete when LLaMaS ready */
 	GENZ_A_GCID,
+	/* Revisit: add GENZ_A_BRIDGE_GCID */
 	GENZ_A_CCLASS,
 	GENZ_A_FRU_UUID,
 	GENZ_A_MGR_UUID,
@@ -67,7 +68,7 @@ enum {
 };
 #define GENZ_A_U_MAX (__GENZ_A_U_MAX - 1)
 
-/* Memory Region List Structure */
+/* Memory Region List (MRL) Structure */
 enum {
 	GENZ_A_MRL_UNSPEC,
 	GENZ_A_MRL,
@@ -87,10 +88,17 @@ enum {
 };
 #define GENZ_A_MR_MAX (__GENZ_A_MR_MAX - 1)
 
-#define GENZ_CONTROL_STR_LEN	12
-#define GENZ_DATA_STR_LEN	9
+/* Gen-Z Fabric Structure */
+enum {
+	GENZ_A_F_UNSPEC,
+	GENZ_A_F_FABRIC_UUID,
+	GENZ_A_F_MGR_UUID_LIST,
+	__GENZ_A_F_MAX,
+};
+#define GENZ_A_F_MAX (__GENZ_A_F_MAX - 1)
 
-/* Netlink Generic Commands */
+#define GENZ_CONTROL_STR_LEN	21  /* 0000:000 controlNNNN */
+#define GENZ_DATA_STR_LEN	18  /* 0000:000 dataNNNN */
 
 /* Netlink Generic Commands */
 enum {
@@ -100,6 +108,8 @@ enum {
 	GENZ_C_FAB_MGR_CTL_WR_MSG,
 	GENZ_C_ADD_FABRIC_COMPONENT,
 	GENZ_C_REMOVE_FABRIC_COMPONENT,
+	GENZ_C_ADD_FABRIC,
+	GENZ_C_REMOVE_FABRIC,
 	__GENZ_C_MAX,
 };
 #define GENZ_C_MAX (__GENZ_C_MAX - 1)
@@ -113,6 +123,6 @@ int genz_nl_init(void);
 void genz_nl_exit(void);
 void genz_free_zres(struct genz_dev *zdev, struct genz_zres *zres);
 int genz_setup_zres(struct genz_zres *zres, struct genz_dev *zdev,
-		int cdtype, int iores_flags, int str_len,
-		char *fmt, struct list_head *cd_zres_list);
+		int cdtype, unsigned long iores_flags, int str_len,
+		const char *fmt);
 struct genz_zres *genz_alloc_and_add_zres(struct genz_dev *zdev);
