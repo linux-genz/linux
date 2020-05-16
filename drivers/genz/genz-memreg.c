@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2018-2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2018-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -964,7 +964,7 @@ int genz_rmr_import(
 		rmri->res.end = rmri->res.start + rmri->len - 1;
 		rmri->res.flags = IORESOURCE_MEM;
 		rmri->res.name = rmr_name;
-		insert_resource(&br->ld_st_res, &rmri->res);
+		insert_resource(&rmr->pte_info->pg->res, &rmri->res);
 	}
 
  out:

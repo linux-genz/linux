@@ -150,6 +150,15 @@ static void genz_bdev_release(struct gendisk *bgen, fmode_t fm)
 static int genz_bdev_ioctl(struct block_device *bdev, fmode_t fm,
 			   unsigned ioctl, unsigned long data)
 {
+	pr_debug("ioctl=%u\n", ioctl);
+	return 0;
+}
+
+static int genz_bdev_revalidate_disk(struct gendisk *bgen)
+{
+	struct genz_bdev *zbd = bgen->private_data;
+
+	dev_dbg(disk_to_dev(bgen), "zbd=%px\n", zbd);
 	return 0;
 }
 
@@ -268,10 +277,11 @@ static int bdev_bio_chunk_done(struct device *dev,
 #endif
 
 static const struct block_device_operations genz_bdev_ops = {
-	.owner   = THIS_MODULE,
-	.open    = genz_bdev_open,
-	.release = genz_bdev_release,
-	.ioctl   = genz_bdev_ioctl,
+	.owner           = THIS_MODULE,
+	.open            = genz_bdev_open,
+	.release         = genz_bdev_release,
+	.ioctl           = genz_bdev_ioctl,
+	.revalidate_disk = genz_bdev_revalidate_disk
 };
 
 static void genz_blk_sgl_cmpl(struct genz_dev *zdev,
