@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2019-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -44,6 +44,7 @@
 #include <linux/genz.h>
 
 #define MAX_GCID (1<<28)
+#define MAX_GENZ_NAME 16
 
 /* Value of Z-UUID in control space that indicates a Gen-Z device */
 #define GENZ_Z_UUID	0x4813ea5f074e4be2a355a354145c9927
@@ -59,8 +60,10 @@ struct genz_zres { /* subsystem private version of genz_resource */
 	struct genz_resource zres;
 	struct list_head zres_node;
 	struct bin_attribute res_attr;
+	struct genz_rmr_info *rmri;  /* Revisit */
 };
 #define to_genz_res(n) container_of(n, struct genz_zres, zres)
+#define res_attr_to_zres(n) container_of(n, struct genz_zres, res_attr)
 
 /** genz_for_each_zres  -       iterate over list of struct zres
  * @pos:        the struct genz_zres
@@ -71,9 +74,16 @@ struct genz_zres { /* subsystem private version of genz_resource */
 		pos != NULL;                                               \
 		pos = to_genz_res(genz_get_next_resource(zdev, &pos->zres)))
 
+enum fabric_status {
+	GENZ_FABRIC_STATUS_UNKNOWN  = 0,
+	GENZ_FABRIC_STATUS_UNINIT   = 1,
+	GENZ_FABRIC_STATUS_INITED   = 2
+};
+
 struct genz_fabric {
 	struct list_head node;	/* node in list of fabrics */
 	uint32_t number;		/* fabric_number */
+	uint32_t status;                /* fabric status */
 	uuid_t mgr_uuid;
 	struct list_head devices;	/* List of devices on this fabric */
 	spinlock_t devices_lock;	/* protects devices list */
@@ -83,7 +93,7 @@ struct genz_fabric {
 	spinlock_t subnets_lock;	/* protects subnets list */
 	struct list_head bridges;	/* List of local bridges on fabric */
 	spinlock_t bridges_lock;	/* protects bridges list */
-	struct kref	kref;
+	struct kref	kref;		/* track bridges on fabric */
 	struct device   dev;		/* /sys/devices/genz<N> */
 };
 #define to_genz_fabric(x) container_of(x, struct genz_fabric, kref)
@@ -102,11 +112,12 @@ struct genz_fabric_attribute {
 struct genz_subnet {
 	uint32_t		sid;
 	struct genz_fabric	*fabric;
-	struct list_head	node; /* per-fabric list of subnets*/
+	struct list_head	node; /* per-fabric list of subnets */
 	struct list_head	frus; /* list of frus in this subnet */
-	struct device		dev; /* /sys/devices/genz<N>/SID */
+	struct device		dev;  /* /sys/devices/genz<N>/SID */
 };
 #define to_genz_subnet(x) container_of(x, struct genz_subnet, kobj)
+#define dev_to_genz_subnet(x) container_of(x, struct genz_subnet, dev)
 
 struct genz_subnet_attribute {
 	struct attribute attr;
@@ -144,17 +155,9 @@ struct genz_component {
 	struct genz_subnet	*subnet;
 	struct list_head	fab_comp_node; /* Node in the per-fabric list */
 	struct kref		kref;
-	int resource_count[GENZ_NUM_HARDWARE_TYPES+1]; /* +1 for "unknown" */
+	atomic_t res_count[GENZ_NUM_HARDWARE_TYPES+1]; /* +1 for "unknown" */
 };
 #define dev_to_genz_component(x) container_of(x, struct genz_component, dev)
-
-#ifdef NOT_YET
-static inline struct genz_component *kobj_to_genz_component(struct kobject *kobj)
-{
-	return container_of(kobj, struct genz_component, kobj);
-}
-
-#endif
 
 struct genz_component_attribute {
 	struct attribute attr;
@@ -177,20 +180,20 @@ struct genz_dev_attribute {
 #define to_genz_dev_attr(x) container_of(x, struct genz_dev_attribute, attr)
 
 /* SID is 16 bits starting at bit 13 of a GCID */
-static inline int genz_get_sid(int gcid)
+static inline int genz_gcid_sid(int gcid)
 {
-	return(0xFFFF & (gcid >> 12));
+	return (0xFFFF & (gcid >> 12));
 }
 
 /* CID is first 12 bits of a GCID */
-static inline int genz_get_cid(int gcid)
+static inline int genz_gcid_cid(int gcid)
 {
-	return(0xFFF & gcid);
+	return (0xFFF & gcid);
 }
 
-static inline int genz_get_gcid(int sid, int cid)
+static inline int genz_gcid(int sid, int cid)
 {
-	return((sid<<12) | cid);
+	return ((sid<<12) | cid);
 }
 
 extern struct device_type genz_bridge_type;
@@ -198,6 +201,18 @@ extern struct device_type genz_bridge_type;
 static inline int is_genz_bridge_device(struct device *dev)
 {
 	return dev->type == &genz_bridge_type;
+}
+
+static inline uint get_uint_len(uint val)
+{
+	uint l = 1;
+
+	while (val > 9) {
+		l++;
+		val /= 10;
+	}
+
+	return l;
 }
 
 /* Control space structure used to represent the /sys hierarchy. */
@@ -208,12 +223,12 @@ struct genz_control_info {
 						* a struct resource *.
 						*/
 	struct genz_control_info *parent, *sibling, *child; /* control structure hierarchy used for creating /sys hierarchy */
-	struct genz_dev		*zdev;
+	struct genz_bridge_dev	*zbdev;
 	off_t                   start;
 	uint32_t		type;		/* type from the control_structure_header */
 	uint8_t			vers;		/* version from the control_structure_header */
 	size_t                  size;		/* size in bytes */
-	struct req_zmmu         *zmmu;		/* placeholder for zmmu entry */
+	struct genz_rmr_info    *rmri;		/* req zmmu info */
 	struct bin_attribute	battr;
 };
 
