@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2019-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -45,6 +45,7 @@
 
 #define WILDCAT_DVSEC_MBOX_CTRL_OFF  (0x30)
 #define WILDCAT_DVSEC_MBOX_CTRL_TRIG (0x1)
+#define WILDCAT_DVSEC_MBOX_CTRL_WR   (0x2)
 #define WILDCAT_DVSEC_MBOX_CTRL_BE   (0xFF00)
 #define WILDCAT_DVSEC_MBOX_CTRL_ERR  (0x4)
 #define WILDCAT_DVSEC_MBOX_ADDR_OFF  (0x34)
@@ -103,12 +104,13 @@ static int wildcat_is_quirk_offset(loff_t offset, uint64_t *data) {
 	return 0;
 }
 
-static int csr_access_rd(struct bridge *br, uint32_t csr, uint64_t *data)
+static int csr_access(struct bridge *br, uint32_t csr, uint64_t *data,
+		      bool write)
 {
 	int                 ret = -EIO;
 	struct slice        *sl = &br->slice[0];
 	int                 pos;
-	uint32_t            val, val_lo, val_hi;
+	uint32_t            val, val_lo, val_hi, cmd;
 	int                 i;
 
 	if (wildcat_is_quirk_offset(csr, data)) {
@@ -121,17 +123,26 @@ static int csr_access_rd(struct bridge *br, uint32_t csr, uint64_t *data)
 		pr_debug("pci_find_ext_capability failed\n");
 		goto out;
 	}
-	pci_read_config_dword(sl->pdev, pos + WILDCAT_DVSEC_MBOX_CTRL_OFF,
-			      &val);
+	pci_read_config_dword(
+		sl->pdev, pos + WILDCAT_DVSEC_MBOX_CTRL_OFF, &val);
 	if (val & WILDCAT_DVSEC_MBOX_CTRL_TRIG) {
 		pr_debug("mailbox busy\n");
 		goto out;
 	}
-	pci_write_config_dword(sl->pdev, pos + WILDCAT_DVSEC_MBOX_ADDR_OFF,
-			       csr);
-	pci_write_config_dword(sl->pdev, pos + WILDCAT_DVSEC_MBOX_CTRL_OFF,
-			       WILDCAT_DVSEC_MBOX_CTRL_BE |
-			       WILDCAT_DVSEC_MBOX_CTRL_TRIG);
+	pci_write_config_dword(
+		sl->pdev, pos + WILDCAT_DVSEC_MBOX_ADDR_OFF, csr);
+	cmd = WILDCAT_DVSEC_MBOX_CTRL_BE | WILDCAT_DVSEC_MBOX_CTRL_TRIG;
+	if (write) {
+		cmd |= WILDCAT_DVSEC_MBOX_CTRL_WR;
+		val_lo = (uint32_t)(*data);
+		val_hi = (uint32_t)(*data >> 32);
+		pci_write_config_dword(
+			sl->pdev, pos + WILDCAT_DVSEC_MBOX_DATAL_OFF, val_lo);
+		pci_write_config_dword(
+			sl->pdev, pos + WILDCAT_DVSEC_MBOX_DATAH_OFF, val_hi);
+	}
+	pci_write_config_dword(
+		sl->pdev, pos + WILDCAT_DVSEC_MBOX_CTRL_OFF, cmd);
 	/* Wait up to 1-2 ms for completion. */
 	for (i = 0; i < 100; i++) {
 		pci_read_config_dword(
@@ -144,6 +155,8 @@ static int csr_access_rd(struct bridge *br, uint32_t csr, uint64_t *data)
 			}
 			/* Success */
 			ret = 0;
+			if (write)
+				break;
 			pci_read_config_dword(
 				sl->pdev, pos + WILDCAT_DVSEC_MBOX_DATAL_OFF,
 					      &val_lo);
@@ -156,14 +169,14 @@ static int csr_access_rd(struct bridge *br, uint32_t csr, uint64_t *data)
 		usleep_range(10, 20);
 	}
 
- out:
+out:
 	return ret;
 }
 
-int wildcat_control_read(struct genz_dev *zdev, loff_t offset, size_t size,
-			 void *data, uint flags)
+int wildcat_control_read(struct genz_bridge_dev *gzbr, loff_t offset,
+			 size_t size, void *data,
+			 struct genz_rmr_info *rmri, uint flags)
 {
-	struct genz_bridge_dev *gzbr;
 	struct bridge          *br;
 	uint64_t               csr_val = 0, val;
 	uint32_t               csr = (uint32_t)offset & ~7u;
@@ -172,26 +185,25 @@ int wildcat_control_read(struct genz_dev *zdev, loff_t offset, size_t size,
 	ssize_t                write;
 	int                    ret = 0;
 
-	if (!zdev_is_local_bridge(zdev)) { /* no in-band fabric mgmt */
+	if (!genz_is_local_bridge(gzbr, rmri)) { /* no in-band fabric mgmt */
 		ret = -ENODEV;
 		goto out;
 	}
 
-	gzbr = zdev->zbdev;
 	br = wildcat_gzbr_to_br(gzbr);
 
 	/* wildcat control space accessible only with 8-byte size & alignment */
 	shift = csr_align * 8;                       /* 0 - 56 */
 	write = min((size_t)(8 - csr_align), size);  /* 1 - 8 */
+	dev_dbg(&gzbr->zdev.dev, "rmri=%px, br=%px, offset=0x%llx, size=%lu, shift=%u, write=%ld, csr=0x%x\n",
+		rmri, br, offset, size, shift, write, csr);
 
-	dev_dbg(&zdev->dev, "zdev=%px, br=%px, offset=0x%llx, size=%lu, shift=%u, write=%ld, csr=0x%x\n",
-		zdev, br, offset, size, shift, write, csr);
 	while (size > 0) {
 		/* Revisit: lock optimization */
 		mutex_lock(&br->csr_mutex);
-		ret = csr_access_rd(br, csr, &csr_val);
+		ret = csr_access(br, csr, &csr_val, false);
 		mutex_unlock(&br->csr_mutex);
-		dev_dbg(&zdev->dev, "ret=%d, csr=0x%x, csr_val=0x%llx shifted val = 0x%llx size = %lu\n",
+		dev_dbg(&gzbr->zdev.dev, "ret=%d, csr=0x%x, csr_val=0x%llx, shifted val=0x%llx, size=%zu\n",
 			ret, csr, csr_val, csr_val >> shift, size);
 		if (ret < 0)
 			goto out;
@@ -208,15 +220,92 @@ int wildcat_control_read(struct genz_dev *zdev, loff_t offset, size_t size,
 	}
 
 out:
-	pr_debug("returning ret = %d val = 0x%llx\n", ret, val);
+	pr_debug("returning ret=%d val=0x%llx\n", ret, val);
 	return ret;
 }
 
-int wildcat_control_write(struct genz_dev *zdev, loff_t offset, size_t size,
-			  void *data, uint flags)
+int wildcat_control_write(struct genz_bridge_dev *gzbr, loff_t offset,
+			  size_t size, void *data,
+			  struct genz_rmr_info *rmri, uint flags)
 {
-	/* Revisit: implement this */
-	return -ENOSYS;
+	struct bridge          *br;
+	uint64_t               csr_val = 0, val;
+	uint64_t               csr_mask = 0;
+	uint32_t               csr = (uint32_t)offset & ~7u;
+	uint                   csr_align = (uint)offset & 7u;
+	uint                   shift;
+	ssize_t                read;
+	int                    ret = 0;
+
+	if (!genz_is_local_bridge(gzbr, rmri)) { /* no in-band fabric mgmt */
+		ret = -ENODEV;
+		goto out;
+	}
+
+	br = wildcat_gzbr_to_br(gzbr);
+	if (size == 0)
+		return 0;
+
+	/* wildcat control space accessible only with 8-byte size & alignment */
+	shift = csr_align * 8;                       /* 0 - 56 */
+	read = min((size_t)(8 - csr_align), size);   /* 1 - 8 */
+
+	if (shift != 0) {  /* need to read first csr and prepare for merge */
+		mutex_lock(&br->csr_mutex);
+		ret = csr_access(br, csr, &csr_val, false);
+		mutex_unlock(&br->csr_mutex);
+		dev_dbg(&gzbr->zdev.dev, "ret=%d, first csr=0x%x, csr_val=0x%llx\n",
+			ret, csr, csr_val);
+		if (ret < 0)
+			goto out;
+		csr_mask = ~0ull >> (64 - shift);
+		csr_val &= csr_mask;
+	}
+
+	dev_dbg(&gzbr->zdev.dev, "rmri=%px, br=%px, offset=0x%llx, size=%zu, shift=%u, read=%ld, csr_mask=0x%llx, csr=0x%x\n",
+		rmri, br, offset, size, shift, read, csr_mask, csr);
+
+	while (size >= 8) {
+		memcpy(&val, data, read);
+		csr_val |= (val << shift);
+		/* Revisit: lock optimization */
+		mutex_lock(&br->csr_mutex);
+		ret = csr_access(br, csr, &csr_val, true);
+		mutex_unlock(&br->csr_mutex);
+		dev_dbg(&gzbr->zdev.dev, "ret=%d, csr=0x%x, csr_val=0x%llx, size=%lu\n",
+			ret, csr, csr_val, size);
+		if (ret < 0)
+			goto out;
+		size -= read;
+		data += read;
+		read = min((size_t)8, size);
+		shift = 0;
+		csr += 8;
+		csr_val = csr_mask = 0;
+	}
+
+	if (size > 0) {  /* need to merge into last csr */
+		memcpy(&val, data, size);
+		if (csr_mask == 0) {  /* need to read last csr */
+			mutex_lock(&br->csr_mutex);
+			ret = csr_access(br, csr, &csr_val, false);
+			mutex_unlock(&br->csr_mutex);
+			if (ret < 0)
+				goto out;
+		}
+		csr_mask |= ~0ull << (shift + (size * 8));
+		csr_val = (csr_val & csr_mask) | (val << shift);
+		dev_dbg(&gzbr->zdev.dev, "ret=%d, last csr=0x%x, csr_val=0x%llx\n",
+			ret, csr, csr_val);
+		/* Revisit: lock optimization */
+		mutex_lock(&br->csr_mutex);
+		ret = csr_access(br, csr, &csr_val, true);
+		mutex_unlock(&br->csr_mutex);
+	}
+
+out:
+	pr_debug("returning ret=%d\n", ret);
+	return ret;
 }
 
 static struct genz_control_structure_ptr wildcat_interface_structure_ptrs[] = {
@@ -279,7 +368,8 @@ static struct genz_control_ptr_info wildcat_struct_type_to_ptrs[] = {
      {},
 };
 
-int wildcat_control_structure_pointers(int vers, int struct_type,
+int wildcat_control_structure_pointers(struct genz_bridge_dev *gzbr,
+			int vers, int struct_type,
 			const struct genz_control_structure_ptr **csp,
 			int *num_ptrs)
 {

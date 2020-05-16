@@ -254,7 +254,7 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	spin_lock_init(&zbdev->zmmu_lock);
 	genz_set_drvdata(&zbdev->zdev, driver_data);
 
-	genz_control_read_structure(&zbdev->zdev, &mgr_uuid, 0,
+	genz_control_read_structure(zbdev, NULL, &mgr_uuid, 0,
 			offsetof(struct genz_core_structure, mgr_uuid),
 			sizeof(mgr_uuid));
 	uu = genz_fabric_uuid_tracker_alloc_and_insert(&mgr_uuid);
@@ -273,7 +273,7 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	spin_lock_irqsave(&f->devices_lock, flags);
 	list_add_tail(&zbdev->zdev.fab_dev_node, &f->devices);
 	spin_unlock_irqrestore(&f->devices_lock, flags);
-	ret = genz_control_read_sid(&zbdev->zdev, &sid);
+	ret = genz_control_read_sid(zbdev, NULL, &sid);
 	if (ret) {
 		pr_debug("genz_control_read_sid returned %d\n", ret);
 		goto error;
@@ -284,7 +284,7 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 		ret = -ENOMEM;
 		goto error;
 	}
-	ret = genz_control_read_cid0(&zbdev->zdev, &cid);
+	ret = genz_control_read_cid0(zbdev, NULL, &cid);
 	if (ret) {
 		pr_debug("genz_control_read_cid returned %d\n", ret);
 		goto error;
@@ -306,12 +306,13 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 		pr_debug("genz_device_add failed %d\n", ret);
 		goto error;
 	}
-	ret = genz_control_read_cclass(&zbdev->zdev, &zbdev->zdev.zcomp->cclass);
+	ret = genz_control_read_cclass(zbdev, NULL, &zbdev->zdev.zcomp->cclass);
 	if (ret) {
 		pr_debug("genz_control_read_cclass returned %d\n", ret);
 		goto error;
 	}
-	ret = genz_control_read_fru_uuid(&zbdev->zdev, &zbdev->zdev.zcomp->fru_uuid);
+	ret = genz_control_read_fru_uuid(zbdev, NULL,
+					 &zbdev->zdev.zcomp->fru_uuid);
 	if (ret) {
 		pr_debug("genz_control_read_fru_uuid returned %d\n", ret);
 		goto error;
@@ -325,6 +326,20 @@ error:
 static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br);
 static int genz_bridge_zmmu_clear(struct genz_bridge_dev *br);
 LIST_HEAD(genz_bridge_list);
+
+static char *genz_bridge_res_name(struct genz_bridge_dev *zbdev)
+{
+	char *name;
+	size_t name_len = 4 + get_uint_len(zbdev->fabric->number) + 7 +
+		get_uint_len(zbdev->bridge_num) + 1;
+
+	name = kmalloc(name_len, GFP_KERNEL);
+	if (name) {
+		sprintf(name, "genz%u bridge%u",
+			zbdev->fabric->number, zbdev->bridge_num);
+	}
+	return name;
+}
 
 /**
  * genz_register_bridge - register a new Gen-Z bridge driver
@@ -379,7 +394,11 @@ int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv,
 			info->cpuvisible_phys_offset;
 		zbdev->ld_st_res.end = info->max_cpuvisible_addr +
 			info->cpuvisible_phys_offset;
-		zbdev->ld_st_res.name = "Gen-Z bridge0";  /* Revisit: bridge number */
+		zbdev->ld_st_res.name = genz_bridge_res_name(zbdev);
+		if (zbdev->ld_st_res.name == NULL) {
+			ret = -ENOMEM;
+			goto out; /* Revisit: properly undo stuff */
+		}
 		zbdev->ld_st_res.flags = IORESOURCE_MEM;
 		ret = insert_resource(&iomem_resource, &zbdev->ld_st_res);
 		if (ret < 0) {
@@ -456,6 +475,8 @@ int genz_unregister_bridge(struct device *dev)
 		genz_bridge_remove_control_files(zbdev);
 		genz_bridge_zmmu_clear(zbdev);
 		remove_resource(&zbdev->ld_st_res);
+		if (zbdev->ld_st_res.name)
+			kfree(zbdev->ld_st_res.name);
 		kfree(zbdev);
 	} else {
 		ret = -ENODEV;
@@ -619,7 +640,7 @@ uint32_t genz_dev_gcid(struct genz_dev *zdev, uint index)
 	if (index != 0 || !zdev->zcomp || !zdev->zcomp->subnet)
 		return GENZ_INVALID_GCID;
 
-	return genz_get_gcid(zdev->zcomp->subnet->sid, zdev->zcomp->cid);
+	return genz_gcid(zdev->zcomp->subnet->sid, zdev->zcomp->cid);
 }
 EXPORT_SYMBOL(genz_dev_gcid);
 
