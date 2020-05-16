@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2017-2019 Hewlett Packard Enterprise Development LP.
+ * Copyright (C) 2017-2020 Hewlett Packard Enterprise Development LP.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -54,7 +54,7 @@ uint64_t genz_zmmu_pte_addr(const struct genz_pte_info *info, uint64_t addr)
 		return GENZ_BASE_ADDR_ERROR;
 
 	base_addr = genz_pg_addr(pg);
-	ps = BIT_ULL(pg->page_grid.page_size);
+	ps = genz_pg_ps(pg);
 	pte_off = info->pte_index - pg->page_grid.base_pte_index;
 	return base_addr + (pte_off * ps) + (addr - info->addr_aligned);
 }
@@ -253,15 +253,15 @@ static int zmmu_base_pte_insert(struct genz_page_grid_info *pgi, uint pg_index)
 	return 0;
 }
 
-static int zmmu_find_pg_addr_range(struct genz_page_grid_info *pgi,
-				   uint pg_index,
-				   struct genz_bridge_info *bri)
+static uint64_t zmmu_find_pg_addr_range(struct genz_page_grid_info *pgi,
+					uint pg_index,
+					struct genz_bridge_info *bri)
 {
 	struct genz_page_grid *pg;
 	struct rb_node *rb;
 	bool cpu_visible    = pgi->pg[pg_index].cpu_visible;
 	uint64_t page_count = pgi->pg[pg_index].page_grid.page_count;
-	uint64_t page_size  = BIT_ULL(pgi->pg[pg_index].page_grid.page_size);
+	uint64_t page_size  = genz_pg_ps(&pgi->pg[pg_index]);
 	uint64_t range      = page_size * page_count;
 	uint64_t min_addr   = (cpu_visible) ?
 		ROUND_UP_PAGE(bri->min_cpuvisible_addr, page_size) :
@@ -285,21 +285,18 @@ static int zmmu_find_pg_addr_range(struct genz_page_grid_info *pgi,
 		if (pg_addr < prev_base)  /* Revisit: debug */
 			pr_debug("base_addr out of order (0x%llx < 0x%llx)\n",
 				 pg_addr, prev_base);
-		prev_base = pg_addr;
+		prev_base = pg_addr;  /* Revisit: debug */
 		base_addr = ROUND_DOWN_PAGE(pg_addr, page_size);
-		next_addr = ROUND_UP_PAGE(pg_addr +
-					  (pg->page_grid.page_count *
-					   BIT_ULL(pg->page_grid.page_size)),
+		next_addr = ROUND_UP_PAGE(pg_addr + genz_pg_size(pg),
 					  page_size);
 		pr_debug("pg[0x%llx*%u@0x%llx]:base_addr=0x%llx, "
-			 "next_addr=0x%llx\n",
-			 BIT_ULL(pg->page_grid.page_size),
+			 "min_addr=0x%llx, next_addr=0x%llx\n",
+			 genz_pg_ps(pg),
 			 pg->page_grid.page_count,
-			 pg_addr, base_addr, next_addr);
+			 pg_addr, base_addr, min_addr, next_addr);
 		if (base_addr < min_addr) {
 			if (min_addr < next_addr)
 				min_addr = next_addr;
-			continue;
 		} else if ((base_addr - min_addr) >= range) { /* range below pg works */
 			max_addr = base_addr - 1;
 			break;
@@ -432,28 +429,38 @@ static void zmmu_free_pg_addr_range(struct genz_page_grid_info *pgi,
 	pgi->pg[pg_index].page_grid.pg_base_address = 0;
 }
 
-static uint get_uint_len(uint val)
-{
-	uint l = 1;
-
-	while (val > 9) {
-		l++;
-		val /= 10;
-	}
-
-	return l;
-}
-
-char *genz_page_grid_name(uint pg_index)
+char *genz_page_grid_name(uint ps, uint pg_index)
 {
 	char *name, *base = "Req Page Grid ";
+	char ps_str[5];
 	size_t len, base_len = strlen(base);
+	struct {
+		uint min;
+		uint max;
+		uint base;
+		char *suffix;
+	} sz_data[] = {
+		{  0,  11,  0, "" },  /* should not happen */
+		{ 12,  19, 10, "K " },
+		{ 20,  29, 20, "M " },
+		{ 30,  39, 30, "G " },
+		{ 40,  49, 40, "T " },
+		{ 50,  59, 50, "P " },
+		{ 60,  63, 60, "E " },
+		{ 64, -1u, 60, "? " } /* should not happen */
+	};
+	uint i;
 
-	len = base_len + get_uint_len(pg_index) + 1;
-	name = kmalloc(len, GFP_KERNEL);
+	for (i = 0; i < sizeof(sz_data)/sizeof(sz_data[0]); i++) {
+		if (ps >= sz_data[i].min && ps <= sz_data[i].max)
+			break;
+	}
+	ps = BIT(ps - sz_data[i].base);
+	sprintf(ps_str, "%u%s", ps, sz_data[i].suffix);
+	len = 5 + base_len + get_uint_len(pg_index) + 1;
+	name = kmalloc(len, GFP_KERNEL);  /* Revisit: never freed */
 	if (name) {
-		strcpy(name, base);
-		sprintf(&name[base_len], "%u", pg_index);
+		sprintf(name, "%s%s%u", ps_str, base, pg_index);
 	}
 	return name;
 }
@@ -468,11 +475,11 @@ void genz_set_page_grid_res(struct genz_page_grid_info *pgi, uint pg_index,
 	if (!pg->cpu_visible)
 		return;
 
-	ps = BIT_ULL(pg->page_grid.page_size);
+	ps = genz_pg_ps(pg);
 	pg->res.start = genz_pg_addr(pg) + bri->cpuvisible_phys_offset;
-	pg->res.end = pg->res.start + (pg->page_grid.page_count * ps) - 1;
+	pg->res.end = pg->res.start + genz_pg_size(pg) - 1;
 	pg->res.flags = IORESOURCE_MEM;
-	pg->res.name = genz_page_grid_name(pg_index);
+	pg->res.name = genz_page_grid_name(pg->page_grid.page_size, pg_index);
 	insert_resource(&br->ld_st_res, &pg->res);
 }
 
@@ -552,9 +559,7 @@ int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
 	pr_debug("pg[%d]:addr=0x%llx-0x%llx, page_size=%u, page_count=%u, "
 		 "base_pte_index=%u, cpu_visible=%d, humongous=%d\n",
 		 pg_index, genz_pg_addr(req_pg),
-		 genz_pg_addr(req_pg) +
-		 (BIT_ULL(req_pg->page_grid.page_size) *
-		  req_pg->page_grid.page_count) - 1,
+		 genz_pg_addr(req_pg) + genz_pg_size(req_pg) - 1,
 		 req_pg->page_grid.page_size, req_pg->page_grid.page_count,
 		 req_pg->page_grid.base_pte_index, req_pg->cpu_visible,
 		 req_pg->humongous);
@@ -652,9 +657,7 @@ int genz_rsp_page_grid_alloc(struct genz_bridge_dev *br,
 	pr_debug("pg[%d]:addr=0x%llx-0x%llx, page_size=%u, page_count=%u, "
 		 "base_pte_index=%u, humongous=%d\n",
 		 pg_index, genz_pg_addr(rsp_pg),
-		 genz_pg_addr(rsp_pg) +
-		 (BIT_ULL(rsp_pg->page_grid.page_size) *
-		  rsp_pg->page_grid.page_count) - 1,
+		 genz_pg_addr(rsp_pg) + genz_pg_size(rsp_pg) - 1,
 		 rsp_pg->page_grid.page_size, rsp_pg->page_grid.page_count,
 		 rsp_pg->page_grid.base_pte_index,
 		 rsp_pg->humongous);

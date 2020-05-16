@@ -312,6 +312,11 @@ int wildcat_rsp_page_grid_write(struct genz_bridge_dev *gzbr, uint pg_index,
 
 	/* convert "generic" Gen-Z page grid to wildcat HW format */
 	wildcat_convert_genz_page_grid(&genz_pg[pg_index], &wc_pg);
+	dev_dbg(gzbr->bridge_dev,
+		"wc_pg[%u]: base_addr=0x%llx, page_count=%d, page_size=%u, "
+		"base_pte_idx=%u, smo=%u\n", pg_index,
+		wc_pg.base_addr, wc_pg.page_count,
+		wc_pg.page_size, wc_pg.base_pte_idx, wc_pg.smo);
 
 	/* write all responder ZMMU slices */
 	if (!wildcat_no_avx)
