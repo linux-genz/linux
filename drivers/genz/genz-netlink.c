@@ -173,7 +173,7 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 	nla_for_each_nested(nested_attr,  mr_list, rem) {
 		/* Revisit: learn about netlink_ext_ack */
 		/* Extract the nested Memory Region structure */
-		ret = nla_parse_nested_deprecated(mr_attrs, GENZ_A_MR_MAX,
+		ret = nla_parse_nested(mr_attrs, GENZ_A_MR_MAX,
 			nested_attr, genz_genl_mem_region_policy, &extack);
 		if (ret < 0) {
 			pr_debug("nla_parse_nested returned %d\n", ret);
@@ -269,7 +269,7 @@ static int parse_resource_list(const struct nlattr *resource_list,
 		zdev->zcomp = zcomp;
 
 		/* Extract the nested UUID structure */
-		ret = nla_parse_nested_deprecated(u_attrs, GENZ_A_U_MAX,
+		ret = nla_parse_nested(u_attrs, GENZ_A_U_MAX,
 			nested_attr, genz_genl_resource_policy, &extack);
 		if (ret < 0) {
 			pr_debug("nla_parse_nested of UUID list returned %d\n",

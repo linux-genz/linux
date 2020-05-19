@@ -60,8 +60,6 @@ module_init(wildcat_rdma_init);
 module_exit(wildcat_rdma_exit);
 
 MODULE_LICENSE("GPL v2");
-MODULE_IMPORT_NS(drivers/genz/genz);
-MODULE_IMPORT_NS(drivers/genz/wildcat/wildcat);
 
 static struct genz_device_id wildcat_rdma_id_table[] = {
 	{ .uuid_str = "0ee8c862-7713-43d5-b973-60eb7fd93334" },
