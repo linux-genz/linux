@@ -117,6 +117,9 @@ struct resource {
 #define IORESOURCE_PCI_FIXED		(1<<4)	/* Do not move resource */
 #define IORESOURCE_PCI_EA_BEI		(1<<5)	/* BAR Equivalent Indicator */
 
+/* Gen-Z specific bits (IORESOURCE_BITS) */
+#define IORESOURCE_GENZ_CONTROL		(1<<0)	/* Control or data space resource */
+
 /*
  * I/O Resource Descriptors
  *

@@ -16,6 +16,7 @@ obj-$(CONFIG_PINCTRL)		+= pinctrl/
 obj-$(CONFIG_GPIOLIB)		+= gpio/
 obj-y				+= pwm/
 
+obj-$(CONFIG_GENZ)		+= genz/
 obj-y				+= pci/
 
 obj-$(CONFIG_PARISC)		+= parisc/
