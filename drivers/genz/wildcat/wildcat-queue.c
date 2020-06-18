@@ -1318,3 +1318,23 @@ int wildcat_sgl_request(struct genz_dev *zdev, struct genz_sgl_info *sgli)
 out:
 	return ret;
 }
+
+int wildcat_data_read(struct genz_bridge_dev *gzbr, loff_t offset,
+		      size_t size, void *data,
+		      struct genz_rmr_info *rmri, uint flags)
+{
+	/* Revisit: choose ld/st vs XDM based on size */
+	memcpy(data, rmri->cpu_addr + offset, size);
+	return 0;
+}
+
+int wildcat_data_write(struct genz_bridge_dev *gzbr, loff_t offset,
+		       size_t size, void *data,
+		       struct genz_rmr_info *rmri, uint flags)
+{
+	/* Revisit: choose ld/st vs XDM based on size */
+	memcpy(rmri->cpu_addr + offset, data, size);
+	if (flags & GENZ_DATA_FLUSH)
+		; /* Revisit: need genz_flush(), like dax_flush()? */
+	return 0;
+}

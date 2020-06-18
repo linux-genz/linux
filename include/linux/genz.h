@@ -537,13 +537,14 @@ enum space_type {
 	GENZ_CONTROL = 1
 };
 
-enum genz_control_flag {
-	GENZ_CONTROL_FLUSH          = 0x01,
-	GENZ_CONTROL_FENCE          = 0x02,
-	GENZ_CONTROL_MSG_UNRELIABLE = 0x10,
-	GENZ_CONTROL_MSG_DR         = 0x20,
-	GENZ_CONTROL_MSG_CH         = 0x40,
-	GENZ_CONTROL_MSG_IV         = 0x80
+enum genz_flag {
+	GENZ_CONTROL_FLUSH          = 0x0001,
+	GENZ_CONTROL_FENCE          = 0x0002,
+	GENZ_CONTROL_MSG_UNRELIABLE = 0x0010,
+	GENZ_CONTROL_MSG_DR         = 0x0020,
+	GENZ_CONTROL_MSG_CH         = 0x0040,
+	GENZ_CONTROL_MSG_IV         = 0x0080,
+	GENZ_DATA_FLUSH             = 0x1000
 };
 
 enum genz_xdm_cmd {
@@ -771,7 +772,7 @@ static inline int genz_data_read(struct genz_bridge_dev *br, loff_t offset,
 				 size_t size, void *data,
 				 struct genz_rmr_info *rmri, uint flags)
 {
-	/* Revisit: need req ZMMU mapping */
+	/* For data space, we assume caller has passed a valid rmri */
 	if (!br->zbdrv->data_read)  /* data_read is required */
 		return -EINVAL;
 	return br->zbdrv->data_read(br, offset, size, data, rmri, flags);
@@ -781,7 +782,7 @@ static inline int genz_data_write(struct genz_bridge_dev *br, loff_t offset,
 				  size_t size, void *data,
 				  struct genz_rmr_info *rmri, uint flags)
 {
-	/* Revisit: need req ZMMU mapping */
+	/* For data space, we assume caller has passed a valid rmri */
 	if (!br->zbdrv->data_write)  /* data_write is required */
 		return -EINVAL;
 	return br->zbdrv->data_write(br, offset, size, data, rmri, flags);

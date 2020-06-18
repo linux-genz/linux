@@ -212,5 +212,11 @@ int wildcat_alloc_queues(struct genz_bridge_dev *gzbr,
 			 struct genz_rdm_info *rdmi);
 int wildcat_free_queues(struct genz_xdm_info *gzxi, struct genz_rdm_info *gzri);
 int wildcat_sgl_request(struct genz_dev *zdev, struct genz_sgl_info *sgli);
+int wildcat_data_read(struct genz_bridge_dev *gzbr, loff_t offset,
+		      size_t size, void *data,
+		      struct genz_rmr_info *rmri, uint flags);
+int wildcat_data_write(struct genz_bridge_dev *gzbr, loff_t offset,
+		       size_t size, void *data,
+		       struct genz_rmr_info *rmri, uint flags);
 
 #endif /* _WILDCAT_QUEUE_H_ */
