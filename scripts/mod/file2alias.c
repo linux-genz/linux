@@ -37,6 +37,10 @@ typedef unsigned char	__u8;
 typedef struct {
 	__u8 b[16];
 } uuid_le;
+typedef struct {
+        __u8 b[16];
+} uuid_t;
+#define UUID_STRING_LEN         36
 
 /* Big exception to the "don't include kernel headers into userspace, which
  * even potentially has different endianness and word sizes, since
@@ -1377,8 +1381,8 @@ static int do_genz_entry(const char *filename, void *symval, char *alias)
 		return 0;
 	}
 
-	len = snprintf(alias, ALIAS_SIZE, GENZ_MODULE_PREFIX "%s", *uuid_str);
-	if (len < 0 || len >= ALIAS_SIZE) {
+	len = sprintf(alias, GENZ_MODULE_PREFIX "%s", *uuid_str);
+	if (len < 0) {
 		warn("Could not generate all MODULE_ALIAS's in '%s'\n",
 				filename);
 		return 0;

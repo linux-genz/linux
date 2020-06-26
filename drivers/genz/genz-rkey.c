@@ -96,7 +96,7 @@ void genz_rkey_exit(void)
 	spin_unlock(&rki.rk_lock);
 }
 
-static inline bool compute_subtree_count(struct rkey_node *rkn, bool exit)
+static inline uint32_t compute_subtree_count(struct rkey_node *rkn)
 {
 	uint32_t count = rkn_count(rkn);
 
@@ -105,14 +105,11 @@ static inline bool compute_subtree_count(struct rkey_node *rkn, bool exit)
 	if (rkn->rb.rb_right)
 		count += rb_entry(rkn->rb.rb_right, struct rkey_node, rb)->count;
 
-	if (exit && rkn->count == count)  /* no change */
-		return true;
-	rkn->count = count;
-	return false;
+	return count;
 }
 
 RB_DECLARE_CALLBACKS(static, augment_callbacks, struct rkey_node, rb,
-		     count, compute_subtree_count);
+                     uint32_t, count, compute_subtree_count);
 
 #ifdef REVISIT
 /* Revisit: delete this, or change rkey_delete to use it */

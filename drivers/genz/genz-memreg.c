@@ -269,7 +269,14 @@ static void _genz_umem_release(struct genz_umem *umem)
 
 	sg_free_table(&umem->sg_head);
 	if (current->mm) {  /* No mm if called from process cleanup */
-		atomic64_sub(umem->npages, &current->mm->pinned_vm);
+		/* drop/reacquire spin lock around mmap_sem; umem_free() not called
+		 * from interrupt level so we don't need flags.
+		 */
+		spin_unlock_irq(&mdata->md_lock);
+		down_write(&current->mm->mmap_sem);
+		current->mm->pinned_vm -= umem->npages;
+		up_write(&current->mm->mmap_sem);
+		spin_lock_irq(&mdata->md_lock);
 	}
 }
 
@@ -316,11 +323,10 @@ static int genz_umem_pin(struct genz_umem *umem)
 	vaddr = umem->vaddr;
 	npages = genz_umem_num_pages(umem);
 	down_write(&current->mm->mmap_sem);
-	locked     = atomic64_add_return(npages, &current->mm->pinned_vm);
+	locked     = npages + current->mm->pinned_vm;
 	lock_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
 
 	if ((locked > lock_limit) && !capable(CAP_IPC_LOCK)) {
-		atomic64_sub(npages, &current->mm->pinned_vm);
 		ret = -ENOMEM;
 		pr_debug("locked (%lu) > lock_limit (%lu)\n",
 			 locked, lock_limit);
@@ -356,7 +362,7 @@ static int genz_umem_pin(struct genz_umem *umem)
 		}
 
 		umem->npages += ret;
-		//current->mm->pinned_vm += ret; /* Revisit */
+		current->mm->pinned_vm += ret;
 		cur_base += ret * PAGE_SIZE;
 		npages   -= ret;
 

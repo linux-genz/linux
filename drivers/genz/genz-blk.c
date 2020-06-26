@@ -289,9 +289,10 @@ static void genz_blk_sgl_cmpl(struct genz_dev *zdev,
 {
 	struct genz_blk_cmd *cmd = to_genz_blk_cmd(sgli);
 	struct request *req = blk_mq_rq_from_pdu(cmd);
+	enum dma_data_direction dma_dir = rq_data_dir(req) ?
+		DMA_TO_DEVICE : DMA_FROM_DEVICE;
 
-	dma_unmap_sg(sgli->xdmi->dma_dev, cmd->sg, cmd->nents,
-		     rq_dma_dir(req));
+	dma_unmap_sg(sgli->xdmi->dma_dev, cmd->sg, cmd->nents, dma_dir);
 	cmd->error = errno_to_blk_status(sgli->status);
 	/* Revisit: debug */
 	dev_dbg_ratelimited(&zdev->dev, "tag=0x%x, req=%px, cpu=%d, status=%d, error=%d\n",
@@ -315,6 +316,8 @@ static blk_status_t genz_blk_queue_rq(struct blk_mq_hw_ctx *hctx,
 	const u32 lba = blk_rq_pos(req);
 	const u32 count = blk_rq_sectors(req);
 	const int data_dir = rq_data_dir(req);
+	enum dma_data_direction dma_dir = rq_data_dir(req) ?
+		DMA_TO_DEVICE : DMA_FROM_DEVICE;
 	blk_status_t ret = BLK_STS_OK;
 	int nr_mapped, err;
 
@@ -341,7 +344,7 @@ static blk_status_t genz_blk_queue_rq(struct blk_mq_hw_ctx *hctx,
 	if (cmd->nents > 0) {
 		nr_mapped = dma_map_sg_attrs(bctx->xdmi.dma_dev,
 					     cmd->sg, cmd->nents,
-					     rq_dma_dir(req), DMA_ATTR_NO_WARN);
+					     dma_dir, DMA_ATTR_NO_WARN);
 		if (!nr_mapped) {
 			dev_dbg(dev, "nr_sg is 0: tag=0x%x, req=%px\n",
 				tag, req);
@@ -370,8 +373,7 @@ static blk_status_t genz_blk_queue_rq(struct blk_mq_hw_ctx *hctx,
 
 	if (ret != BLK_STS_OK) {
 		/* unmap data */
-		dma_unmap_sg(bctx->xdmi.dma_dev, cmd->sg, cmd->nents,
-			     rq_dma_dir(req));
+		dma_unmap_sg(bctx->xdmi.dma_dev, cmd->sg, cmd->nents, dma_dir);
 	}
 out:
 	return ret;
@@ -527,6 +529,8 @@ static long genz_blk_dax_direct_access(struct dax_device *dax_dev,
 	return PHYS_PFN(zbd->size - offset);
 }
 
+#ifdef REVISIT
+/* Revisit: kernel v4.19 has no dax_supported interface */
 static bool genz_blk_dax_supported(struct dax_device *dax_dev,
                 struct block_device *bdev, int blocksize, sector_t start,
                 sector_t sectors)
@@ -545,6 +549,7 @@ static bool genz_blk_dax_supported(struct dax_device *dax_dev,
 	return generic_fsdax_supported(dax_dev, bdev, blocksize,
 				       start, sectors);
 }
+#endif
 
 /*
  * Use the 'no check' versions of copy_from_iter_flushcache() and
@@ -566,11 +571,22 @@ static size_t genz_blk_copy_to_iter(struct dax_device *dax_dev, pgoff_t pgoff,
 
 static const struct dax_operations genz_blk_dax_ops = {
 	.direct_access  = genz_blk_dax_direct_access,
-	.dax_supported  = genz_blk_dax_supported,
 	.copy_from_iter = genz_blk_copy_from_iter,
 	.copy_to_iter   = genz_blk_copy_to_iter,
 };
 
+static void genz_blk_release_pgmap_ops(void *__pgmap)
+{
+	dev_pagemap_put_ops();
+}
+
+static void genz_blk_pagemap_page_free(struct page *page, void *data)
+{
+	wake_up_var(&page->_refcount);
+}
+
+#ifdef REVISIT
+/* Revisit: pagemap_ops not added until after kernel v4.19 */
 /* Revisit: these pagemap funcs were copied from pmem - are they right? */
 static void genz_blk_pagemap_cleanup(struct dev_pagemap *pgmap)
 {
@@ -594,16 +610,22 @@ static void genz_blk_pagemap_kill(struct dev_pagemap *pgmap)
 	blk_freeze_queue_start(q);
 }
 
-static void genz_blk_pagemap_page_free(struct page *page)
-{
-	wake_up_var(&page->_refcount);
-}
-
 static const struct dev_pagemap_ops genz_blk_fsdax_pagemap_ops = {
 	.page_free		= genz_blk_pagemap_page_free,
 	.kill			= genz_blk_pagemap_kill,
 	.cleanup		= genz_blk_pagemap_cleanup,
 };
+#endif
+
+static void genz_blk_release_queue(void *q)
+{
+	blk_cleanup_queue(q);
+}
+
+static void genz_blk_freeze_queue(void *q)
+{
+	blk_freeze_queue_start(q);
+}
 
 static int genz_blk_bdev_start_size(struct genz_resource *zres,
 				    size_t *start, size_t *size)
@@ -632,7 +654,6 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	struct genz_dev         *zdev = bstate->zdev;
 	struct gendisk *gd;
 	struct dax_device *dax_dev;
-	unsigned long dax_flags = 0;
 	void *addr;
 	struct device *dev;
 	int ret = 0;
@@ -653,27 +674,40 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	set_capacity(gd, zbd->size/KERNEL_SECTOR_SIZE);
 	pr_info("%s: set capacity to %zu 512 byte sectors\n",
 		gd->disk_name, zbd->size/KERNEL_SECTOR_SIZE);
+	dev = disk_to_dev(zbd->gd);
+	if (devm_add_action_or_reset(dev, genz_blk_release_queue, zbd->queue)) {
+		ret = -ENOMEM;
+		goto put_disk;
+	}
 	if (blk_queue_dax(zbd->queue)) {
-		dev = disk_to_dev(zbd->gd);
-		dax_dev = alloc_dax(zbd, gd->disk_name,
-				    &genz_blk_dax_ops, dax_flags);
+		dax_dev = alloc_dax(zbd, gd->disk_name, &genz_blk_dax_ops);
 		if (!dax_dev) {
 			ret = -ENOMEM;
 			goto put_disk;
 		}
 		zbd->dax_dev = dax_dev;
 		/* fsdax setup */
+		dev_pagemap_get_ops();
+		if (devm_add_action_or_reset(
+				dev, genz_blk_release_pgmap_ops, &zbd->pgmap)) {
+			ret = -ENOMEM;
+			goto put_disk;
+		}
 		zbd->pgmap.ref = &zbd->queue->q_usage_counter;
 		zbd->pgmap.type = MEMORY_DEVICE_FS_DAX;
 		zbd->pgmap.res = zbd->rmr_info.res;
-		zbd->pgmap.ops = &genz_blk_fsdax_pagemap_ops;
+		zbd->pgmap.page_free = genz_blk_pagemap_page_free;
 		/* Revisit: support struct pages on device with pgmap->altmap */
 		addr = devm_memremap_pages(dev, &zbd->pgmap);
 		/* Revisit: error handling */
 		zbd->rmr_info.cpu_addr = addr;
 		dev_dbg(&zdev->dev, "cpu_addr=%px\n", addr);
+		if (devm_add_action_or_reset(dev, genz_blk_freeze_queue, zbd->queue)) {
+			ret = -ENOMEM;
+			goto put_disk;
+		}
 	}
-	device_add_disk(&zdev->dev, gd, NULL);
+	device_add_disk(&zdev->dev, gd);
 
  out:
 	return ret;
@@ -1013,5 +1047,4 @@ module_init(genz_blk_init);
 module_exit(genz_blk_exit);
 
 MODULE_LICENSE("GPL v2");
-MODULE_IMPORT_NS(drivers/genz/genz);
 MODULE_DESCRIPTION("Block driver for Gen-Z");
