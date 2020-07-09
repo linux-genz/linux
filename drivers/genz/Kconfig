@@ -30,4 +30,5 @@ menuconfig GENZ_BLK
 	  To compile this code as a module, choose M here: the module
 	  will be called genz-blk.
 
+source "drivers/genz/iprop/Kconfig"
 source "drivers/genz/wildcat/Kconfig"

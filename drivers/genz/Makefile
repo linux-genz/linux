@@ -21,3 +21,4 @@ obj-$(CONFIG_GENZ_BLK)       += genz-blk.o
 
 # Object files in subdirectories
 obj-$(CONFIG_GENZ_WILDCAT)   += wildcat/
+obj-$(CONFIG_GENZ_ORTHUS)    += iprop/
