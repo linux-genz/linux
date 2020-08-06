@@ -452,10 +452,11 @@ struct genz_bridge_dev {
 	struct kobject		genzN_dir;
 	//struct kset		*genz_control_kset;
 };
-#define to_zbdev(d) container_of(d, struct genz_bridge_dev, bridge_dev)
+#define to_zbdev(d) container_of(d, struct genz_bridge_dev, zdev)
 #define kobj_to_zbdev(kobj) container_of(kobj, struct genz_bridge_dev, genzN_dir)
 
 #define GENZ_ANY_VERSION  (0xffff)
+#define GENZ_UNKNOWN_SID  (0xffff)
 
 #define GENZ_RKEY_RKD_SHIFT    20
 #define GENZ_RKEY_OS_TOTAL     BIT(GENZ_RKEY_RKD_SHIFT)
@@ -636,6 +637,8 @@ struct genz_umem {
 	int                   npages;
 };
 
+#define GENZ_DR_IFACE_NONE  (0xffff)
+
 /* Revisit: embed this in genz_rmr? */
 struct genz_rmr_info {
 	uint64_t        rsp_zaddr;
@@ -645,6 +648,7 @@ struct genz_rmr_info {
 	void            *cpu_addr;
 	uint32_t        pg_ps;
 	uint32_t        gcid;
+	uint16_t        dr_iface;  /* directed-relay interface */
 	struct resource res;  /* Revisit: change to zres, which has rkeys */
 };
 
@@ -876,5 +880,7 @@ int genz_uuid_import(struct genz_mem_data *mdata, uuid_t *uuid,
 		     uint32_t uu_flags, gfp_t alloc_flags);
 int genz_uuid_free(struct genz_mem_data *mdata, uuid_t *uuid,
 		   uint32_t *uu_flags, bool *local);
+bool genz_validate_structure_type(int type);
+bool genz_validate_structure_size(struct genz_control_structure_header *hdr);
 
 #endif /* LINUX_GENZ_H */
