@@ -559,7 +559,7 @@ struct uuid_node *genz_remote_uuid_alloc_and_insert(
 }
 EXPORT_SYMBOL(genz_remote_uuid_alloc_and_insert);
 
-static atomic_t __fabric_number = ATOMIC_INIT(5); /* Revisit: debug start@5 */
+static atomic_t __fabric_number = ATOMIC_INIT(1); /* 0 reserved for "unknown" */
 static int get_new_fabric_number(void)
 {
 	return atomic_inc_return(&__fabric_number) - 1;
@@ -571,26 +571,30 @@ struct uuid_tracker *genz_fabric_uuid_tracker_alloc_and_insert(
 	int status;
 	struct uuid_tracker *uu;
 	int ret;
+	uuid_t zero_uuid = { 0 };
 
 	uu = genz_uuid_tracker_alloc(uuid, UUID_TYPE_FABRIC, GFP_KERNEL,
 			&status);
-	if (uu) {
-		uu = genz_uuid_tracker_insert(uu, &status);
-		if (status == 0) { /* New uuid_tracker */
-			pr_debug("tracker insert new mgr_uuid\n");
+	if (!uu)
+		return uu;
+	uu = genz_uuid_tracker_insert(uu, &status);
+	if (status == 0) { /* New uuid_tracker */
+		pr_debug("tracker insert new mgr_uuid\n");
+		if (genz_uuid_cmp(uuid, &zero_uuid) == 0)
+			uu->fabric->fabric_num = 0;
+		else
 			uu->fabric->fabric_num = get_new_fabric_number();
-			uu->fabric->fabric = genz_find_fabric(uu->fabric->fabric_num);
-			memcpy(&uu->fabric->fabric->mgr_uuid, uuid, UUID_SIZE);
-			ret = genz_create_mgr_uuid_file(&uu->fabric->fabric->dev);
-			if (ret) {
-				pr_debug("genz_create_mgr_uuid_file failed\n");
-			}
-		} else { /* -EEXIST */
-			pr_debug("uu already in the tracker mgr_uuid\n");
+		uu->fabric->fabric = genz_find_fabric(uu->fabric->fabric_num);
+		memcpy(&uu->fabric->fabric->mgr_uuid, uuid, UUID_SIZE);
+		ret = genz_create_mgr_uuid_file(&uu->fabric->fabric->dev);
+		if (ret) {
+			pr_debug("genz_create_mgr_uuid_file failed\n");
 		}
-		pr_debug("fabric_num=%d, fabric=%px\n",
-			 uu->fabric->fabric_num, uu->fabric->fabric);
+	} else { /* -EEXIST */
+		pr_debug("uu already in the tracker mgr_uuid\n");
 	}
+	pr_debug("fabric_num=%d, fabric=%px\n",
+		 uu->fabric->fabric_num, uu->fabric->fabric);
 	return uu;
 }
 EXPORT_SYMBOL(genz_fabric_uuid_tracker_alloc_and_insert);
