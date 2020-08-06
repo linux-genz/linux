@@ -926,6 +926,7 @@ int genz_rmr_import(
 	rmri->req_addr = GENZ_BASE_ADDR_ERROR;
 	rmri->cpu_addr = NULL;
 	rmri->pg_ps = 0;
+	rmri->dr_iface = GENZ_DR_IFACE_NONE;  /* Revisit */
 	remote = !!(access & (GENZ_MR_GET_REMOTE|GENZ_MR_PUT_REMOTE));
 	writable = !!(access & GENZ_MR_PUT_REMOTE);
 	cpu_visible = !!(access & GENZ_MR_REQ_CPU);
