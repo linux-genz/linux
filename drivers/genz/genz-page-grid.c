@@ -483,6 +483,13 @@ void genz_set_page_grid_res(struct genz_page_grid_info *pgi, uint pg_index,
 	insert_resource(&br->ld_st_res, &pg->res);
 }
 
+void genz_release_page_grid_res(struct genz_page_grid_info *pgi, uint pg_index)
+{
+	struct genz_page_grid   *pg = &pgi->pg[pg_index];
+
+	remove_resource(&pg->res);
+}
+
 int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
 			     struct genz_page_grid *grid)
 {
@@ -548,12 +555,17 @@ int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
 	radix_tree_preload_end();
 
 	/* call bridge driver to write page grid entry */
+	if (!br->zbdrv->req_page_grid_write) {
+		dev_dbg(br->bridge_dev, "req_page_grid_write is NULL\n");
+		err = -EINVAL;
+		goto free_radix;
+	}
 	err = br->zbdrv->req_page_grid_write(br, pg_index,
 					     br->zmmu_info.req_zmmu_pg.pg);
 	if (err < 0) {
 		dev_dbg(br->bridge_dev, "req_page_grid_write failed, err=%d\n",
 			err);
-		/* Revisit: error handling */
+		goto free_radix;
 	}
 
 	pr_debug("pg[%d]:addr=0x%llx-0x%llx, page_size=%u, page_count=%u, "
@@ -566,19 +578,22 @@ int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
 
 	return pg_index;
 
+free_radix:
+	radix_tree_delete(&br->zmmu_info.req_zmmu_pg.pg_pagesize_tree, key);
 free_addr:
+	genz_release_page_grid_res(&br->zmmu_info.req_zmmu_pg, pg_index);
+	clear_bit(grid->page_grid.page_size,
+		  (grid->cpu_visible) ?
+		  br->zmmu_info.req_zmmu_pg.pg_cpu_visible_ps_bitmap :
+		  br->zmmu_info.req_zmmu_pg.pg_non_visible_ps_bitmap);
 	zmmu_free_pg_addr_range(&br->zmmu_info.req_zmmu_pg, pg_index);
-
 free_pte:
 	zmmu_free_pg_pte_range(&br->zmmu_info.req_zmmu_pg, pg_index);
-
 clear:
 	bitmap_clear(br->zmmu_info.req_zmmu_pg.pg_bitmap, pg_index, 1);
-
 unlock:
 	spin_unlock_irqrestore(&br->zmmu_lock, flags);
 	radix_tree_preload_end();
-
 out:
 	return err;
 }
@@ -646,12 +661,17 @@ int genz_rsp_page_grid_alloc(struct genz_bridge_dev *br,
 	radix_tree_preload_end();
 
 	/* call bridge driver to write page grid entry */
+	if (!br->zbdrv->rsp_page_grid_write) {
+		dev_dbg(br->bridge_dev, "rsp_page_grid_write is NULL\n");
+		err = -EINVAL;
+		goto free_radix;
+	}
 	err = br->zbdrv->rsp_page_grid_write(br, pg_index,
 					     br->zmmu_info.rsp_zmmu_pg.pg);
 	if (err < 0) {
 		dev_dbg(br->bridge_dev, "rsp_page_grid_write failed, err=%d\n",
 			err);
-		/* Revisit: error handling */
+		goto free_radix;
 	}
 
 	pr_debug("pg[%d]:addr=0x%llx-0x%llx, page_size=%u, page_count=%u, "
@@ -664,19 +684,20 @@ int genz_rsp_page_grid_alloc(struct genz_bridge_dev *br,
 
 	return pg_index;
 
+free_radix:
+	radix_tree_delete(&br->zmmu_info.rsp_zmmu_pg.pg_pagesize_tree,
+			  grid->page_grid.page_size);
 free_addr:
 	zmmu_free_pg_addr_range(&br->zmmu_info.rsp_zmmu_pg, pg_index);
-
+	clear_bit(grid->page_grid.page_size,
+		  br->zmmu_info.rsp_zmmu_pg.pg_non_visible_ps_bitmap);
 free_pte:
 	zmmu_free_pg_pte_range(&br->zmmu_info.rsp_zmmu_pg, pg_index);
-
 clear:
 	bitmap_clear(br->zmmu_info.rsp_zmmu_pg.pg_bitmap, pg_index, 1);
-
 unlock:
 	spin_unlock_irqrestore(&br->zmmu_lock, flags);
 	radix_tree_preload_end();
-
 out:
 	return err;
 }

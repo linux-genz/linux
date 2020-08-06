@@ -76,7 +76,6 @@ void genz_remove_uuid_file(struct genz_dev *zdev)
 	sysfs_remove_file(&zdev->dev.kobj, &uuid_attribute.attr);
 }
 
-
 static ssize_t mgr_uuid_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
@@ -104,32 +103,41 @@ int genz_create_mgr_uuid_file(struct device *dev)
 
 /*
  * is_head_of_chain - determines if a GENZ_CONTROL_POINTER_STRUCTURE
- * points to a type that has a chain. If this is the case, then
+ * or GENZ_CONTROL_POINTER_TABLE points to a type that has a chain.
+ * If this is the case, then
  * there is a sysfs directory created with that structure name and in
- * that directory, as set of directories for each element of the
+ * that directory, a set of directories for each element of the
  * chain starting at 0.
  */
 static int is_head_of_chain(const struct genz_control_structure_ptr *csp)
 {
 	enum genz_control_structure_type target_type;
+	bool is_table;
 
 	/*
-	 * If we are in the midst of following a chain, this ptr_type
+	 * If we are in the midst of following a chain, the ptr_type
 	 * will be GENZ_CONTROL_POINTER_CHAINED. Only the potental
-	 * head of a chain has GENZ_CONTROL_POINTER_STRUCTURE.
+	 * head of a chain has GENZ_CONTROL_POINTER_STRUCTURE or
+	 * GENZ_CONTROL_POINTER_TABLE.
 	 */
-	if (csp->ptr_type != GENZ_CONTROL_POINTER_STRUCTURE)
+	if (csp->ptr_type == GENZ_CONTROL_POINTER_STRUCTURE)
+		is_table = false;
+	else if (csp->ptr_type == GENZ_CONTROL_POINTER_TABLE)
+		is_table = true;
+	else
 		return 0;
 
 	/* Get the structure type that we need to see if chained. */
-	target_type = csp->struct_type;
+	target_type = (is_table) ? csp->struct_type-GENZ_TABLE_ENUM_START :
+		csp->struct_type;
 
 	/*
 	 * The table indicates if this type is chained in the static
-	 * genz_control_ptr_info structure. If it is chained then
+	 * genz_control_ptr_info structure. If it is marked chained then
 	 * this must be the head of the chain.
 	 */
-	return genz_struct_type_to_ptrs[target_type].chained;
+	return (is_table) ? genz_table_type_to_ptrs[target_type].chained :
+		genz_struct_type_to_ptrs[target_type].chained;
 }
 
 static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
@@ -141,27 +149,15 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 
 /**
  * genz_valid_table_type - determines if a control table type is valid
- * Returns 1 when the control table type is valid
- * Returns 0 when the control table type is not valid
+ * Returns true when the control table type is valid
+ * Returns false when the control table type is not valid
  */
-static bool genz_valid_table_type(int type)
+static bool genz_validate_table_type(int type)
 {
 	if (type < GENZ_TABLE_ENUM_START ||
-	    type > (genz_table_type_to_ptrs_nelems+GENZ_TABLE_ENUM_START))
+	    type >= (genz_table_type_to_ptrs_nelems+GENZ_TABLE_ENUM_START))
 		return false;
 	return true;
-}
-
-/**
- * genz_valid_struct_type - determines if a control structure type is valid
- * Returns true when the control structure type is valid
- * Returns false when the control structure type is not valid
- */
-static bool genz_valid_struct_type(int type)
-{
-	if (type < 0 || type > genz_struct_type_to_ptrs_nelems)
-		return false;
-	return (genz_struct_type_to_ptrs[type].ptr != NULL);
 }
 
 /**
@@ -169,16 +165,12 @@ static bool genz_valid_struct_type(int type)
  * int type - the control table type
  * Returns the name of a table type or "unknown" if the type is not vaild.
  */
-static const char *genz_table_name(int type)
+static inline const char *genz_table_name(int type)
 {
-	pr_debug("type %d type-GENZ_TABLE_ENUM_START is %d\n", type, 
-			(type-GENZ_TABLE_ENUM_START));
-	if (!genz_valid_table_type(type)) {
-		pr_debug("type %d is invalid\n", type);
+	if (!genz_validate_table_type(type))
 		return "unknown";
-	}
 
-	return genz_table_type_to_ptrs[(type-GENZ_TABLE_ENUM_START)].name;
+	return genz_table_type_to_ptrs[type-GENZ_TABLE_ENUM_START].name;
 }
 
 /**
@@ -186,12 +178,31 @@ static const char *genz_table_name(int type)
  * int type - the control structure type
  * Returns the name of a structure type or "unknown" if the type is not vaild.
  */
-static const char *genz_structure_name(int type)
+static inline const char *genz_structure_name(int type)
 {
-	if (!genz_valid_struct_type(type))
+	if (!genz_validate_structure_type(type))
 		return "unknown";
 
 	return genz_struct_type_to_ptrs[type].name;
+}
+
+/* is_struct_type - return true if the type is a struct (vs. table) */
+static inline bool is_struct_type(int type)
+{
+	return (type < GENZ_TABLE_ENUM_START);
+}
+
+/**
+ * genz_control_name - return the name of a given control structure/table
+ * int type - the control structure/table type
+ * Returns the name or "unknown" if the type is not vaild.
+ */
+static inline const char *genz_control_name(int type)
+{
+	if (is_struct_type(type))
+		return genz_structure_name(type);
+	else
+		return genz_table_name(type);
 }
 
 static void control_info_release(struct kobject *kobj)
@@ -299,7 +310,7 @@ static ssize_t read_control_structure(struct file *fd,
 		/* Revisit: what should it return on error? */
 		return err;
 	}
-	pr_debug("reading structure %s at offset 0x%llx size 0x%lx ci->start 0x%lx ci->size 0x%lx\n", kobj->name, offset, size, ci->start, ci->size);
+	pr_debug("reading %s at offset=0x%llx, size=0x%lx, ci->start=0x%lx, ci->size=0x%lx\n", kobj->name, offset, size, ci->start, ci->size);
 
 	ret = genz_control_read(zbdev, ci->start+offset, size, data, rmri, 0);
 	if (ret) {
@@ -346,9 +357,9 @@ static struct kobj_type control_info_ktype = {
 
 static void genz_dir_release(struct kobject *kobj)
 {
-	struct genz_bridge_dev *zbdev;
 	struct device          *bdev;
 
+	/* Revisit: Is this just a debug function? It doesn't do anything */
 	if (kobj == NULL) {
 		pr_debug("NULL kobj\n");
 		return;
@@ -356,11 +367,6 @@ static void genz_dir_release(struct kobject *kobj)
 	bdev = kobj_to_dev(kobj->parent);
 	if (bdev == NULL) {
 		pr_debug("failed to find bdev from kobject parent\n");
-		return;
-	}
-	zbdev = to_zbdev(&bdev); 
-	if (zbdev == NULL) {
-		pr_debug("conversion from kobj to zbdev failed\n");
 		return;
 	}
 	dev_dbg(bdev, "kobj %s\n", kobj->name);
@@ -393,6 +399,29 @@ static ssize_t gcid_show(struct kobject *kobj,
 
 static struct kobj_attribute gcid_attribute =
 	__ATTR(gcid, (0444), gcid_show, NULL);
+
+static ssize_t cuuid_show(struct kobject *kobj,
+		struct kobj_attribute *attr,
+		char *buf)
+{
+	struct genz_bridge_dev *zbdev;
+	struct genz_component *comp;
+
+	zbdev = kobj_to_zbdev(kobj);
+	if (zbdev == NULL) {
+		pr_debug("zbdev is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad zbdev\n"));
+	}
+	comp = zbdev->zdev.zcomp;
+	if (comp->subnet == NULL) {
+		pr_debug("comp->subnet is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad component subnet\n"));
+	}
+	return(snprintf(buf, PAGE_SIZE, "%pUb\n", &comp->c_uuid));
+}
+
+static struct kobj_attribute cuuid_attribute =
+	__ATTR(cuuid, (0444), cuuid_show, NULL);
 
 #ifdef NOT_YET
 
@@ -653,7 +682,7 @@ int genz_find_control_structure(
 			return -ENOENT;
 		}
 	}
-	if (!genz_validate_control_space_structure_type(ptr_type)) {
+	if (!genz_validate_structure_type(ptr_type)) {
 		/* Not a standard control structure. Search the extensions */
 		find_vendor_defined_structure(zdev, ptr_type, version);
 	}
@@ -785,6 +814,38 @@ int genz_discover_gcid(uint32_t gcid, uuid_t cuuid, uuid_t mgruuid)
 	return 0;
 }
 
+static int read_pointer_at_offset(struct genz_bridge_dev *zbdev,
+			struct genz_rmr_info *rmri,
+			off_t start,
+			enum genz_pointer_size psize,
+			off_t offset,
+			off_t *ptr_offset)
+{
+	int ret;
+
+	pr_debug("start+offset 0x%lx\n", start+offset);
+	*ptr_offset = 0;
+	/* Read the given offset to get the pointer to the control structure */
+	ret = genz_control_read(zbdev, start+offset,
+				(int)psize, ptr_offset, rmri, 0);
+	if (ret) {
+		pr_debug("genz_control_read of pointer failed with %d\n", ret);
+		return ret;
+	}
+
+	pr_debug("found the pointer is 0x%lx\n", *ptr_offset);
+	
+	/* It is ok for many pointers to be NULL. Everything is optional. */
+	if (*ptr_offset == 0) {
+		pr_debug("pointer field at 0x%lx is NULL\n", start+offset);
+		return ENOENT;
+	}
+
+	/* Shift the offset to get the byte address */
+	*ptr_offset <<= 4;
+	return ret;
+}
+
 static int read_header_at_offset(struct genz_bridge_dev *zbdev,
 			struct genz_rmr_info *rmri,
 			off_t start,
@@ -795,38 +856,22 @@ static int read_header_at_offset(struct genz_bridge_dev *zbdev,
 {
 	int ret;
 
-	pr_debug("start+offset 0x%lx\n", start+offset);
-	*hdr_offset = 0;
-	/* Read the given offset to get the pointer to the control structure */
-	ret = genz_control_read(zbdev, start+offset,
-				(int)psize, hdr_offset, rmri, 0);
-	if (ret) {
-		pr_debug("genz_control_read of pointer failed with %d\n", ret);
+	ret = read_pointer_at_offset(zbdev, rmri, start, psize,
+				     offset, hdr_offset);
+	if (ret)
 		return ret;
-	}
-
-	pr_debug("found the pointer is 0x%lx\n", *hdr_offset);
-	
-	/* It is ok for many fields to be NULL. Everything is optional. */
-	if (*hdr_offset == 0) {
-		pr_debug("pointer field at 0x%lx is NULL\n", start+offset);
-		return ENOENT;
-	}
-
-	/* Shift the offset to get the address */
-	*hdr_offset = (*hdr_offset) << 4;
 
 	/* Read a control structure header at that pointer location */
 	pr_debug("reading the header from the pointer offset 0x%lx, size = 0x%lx\n", *hdr_offset, sizeof(struct genz_control_structure_header));
 	ret = genz_control_read(zbdev, *hdr_offset,
 		sizeof(struct genz_control_structure_header), hdr, rmri, 0);
 	if (ret) {
-		pr_debug("genz_control_read of header structure offset failed with %d\n",
+		pr_debug("genz_control_read of structure header failed with %d\n",
 			ret);
 		return ret;
 	}
-	pr_debug("hdr->type %d, hdr->vers %d, hdr->size 0x%x\n", 
-				hdr->type, hdr->vers, hdr->size);
+	pr_debug("hdr->type=%d, hdr->vers=%d, hdr->size=0x%x\n",
+		 hdr->type, hdr->vers, hdr->size);
 	return ret;
 }
 
@@ -842,9 +887,8 @@ static int read_and_validate_header(struct genz_bridge_dev *zbdev,
 
 	ret = read_header_at_offset(zbdev, rmri, start, csp->ptr_size,
 				csp->pointer_offset, hdr, hdr_offset);
-
-	/* This pointer is NULL. Not an error.*/
-	if (ret == ENOENT) {
+	/* Revisit: if the pointer is required, issue a warning */
+	if (ret == ENOENT) {  /* This pointer is NULL. Not an error. */
 		pr_debug("read_header_at_offset returned ENOENT\n");
 		return ENOENT;
 	} else if (ret) {
@@ -853,19 +897,21 @@ static int read_and_validate_header(struct genz_bridge_dev *zbdev,
 	}
 
 	/* Validate the header is as expected */
-	if (hdr->type != csp->struct_type) {
+	if ((csp->struct_type != GENZ_GENERIC_STRUCTURE) &&
+	    (hdr->type != csp->struct_type)) {
 		pr_debug("expected type %d but found %d\n",
 			csp->struct_type, hdr->type);
 		return -EINVAL;
 	}
+	/* Check if this is a known type */
+	if (!genz_validate_structure_type(hdr->type)) {
+		pr_debug("unknown structure type %u\n", hdr->type);
+		goto out;
+	}
 	/*  Validate the structure size.
-	 *  Revisit: Could get the structure from the type and then
-	 *  compare to the sizeof(struct...). Would need to be version
-	 *  aware. Could have ptr_type that say it is fixed size or
-	 *  variable size minimum.
 	 */
-	if (hdr->size == 0) {
-		pr_debug("structure size is 0.\n");
+	if (!genz_validate_structure_size(hdr)) {
+		pr_debug("structure size is wrong\n");
 		return -EINVAL;
 	}
 	/* Validate the version. */
@@ -876,6 +922,7 @@ static int read_and_validate_header(struct genz_bridge_dev *zbdev,
 	} else {
 		pr_debug("versions match: hdr->vers is %d\n", hdr->vers);
 	}
+out:
 	return 0;
 }
 
@@ -914,27 +961,26 @@ static struct genz_control_info *alloc_control_info(
 	return ci;
 }
 
-static int traverse_array(struct genz_bridge_dev *zbdev,
-			struct genz_rmr_info *rmri,
-			struct genz_control_info *parent,
-			struct kobject *struct_dir,
-			const struct genz_control_structure_ptr *csp)
+static int traverse_table(struct genz_bridge_dev *zbdev,
+			  struct genz_rmr_info *rmri,
+			  struct genz_control_info *parent,
+			  struct kobject *struct_dir,
+			  const struct genz_control_structure_ptr *csp)
 {
 	struct genz_control_info *ci;
 	int ret = 0;
-	uint32_t table_ptr;
+	off_t table_ptr;
+	const char *table_name;
 
-	/* Read the pointer to this array */
-	ret = genz_control_read(zbdev, parent->start+csp->pointer_offset,
-				(int)csp->ptr_size, &table_ptr, rmri, 0);
-	if (ret) {
-		pr_debug("genz_control_read failed with %d\n", ret);
+	/* Read the pointer to this table */
+	ret = read_pointer_at_offset(zbdev, rmri, parent->start,
+			(int)csp->ptr_size, csp->pointer_offset, &table_ptr);
+	if (ret == ENOENT) {  /* This pointer is NULL. Not an error.*/
+		return 0;
+	} else if (ret < 0) {
+		pr_debug("read_pointer_at_offset failed with %d\n", ret);
 		return ret;
 	}
-
-	/* This pointer is NULL. Not an error.*/
-	if (table_ptr == 0)
-		return 0;
 
 	/* Allocate a genz_control_info/kobject for this directory */
 	ci = alloc_control_info(zbdev, NULL, csp->pointer_offset, parent);
@@ -944,12 +990,12 @@ static int traverse_array(struct genz_bridge_dev *zbdev,
 	}
 	ci->type = csp->struct_type;
 	ci->size = (*csp->size_fn)(ci->parent);
+	table_name = genz_table_name(ci->type);
 
-	pr_debug("table type 0x%x size 0x%lx name %s\n", ci->type, ci->size, genz_table_name(ci->type));
+	pr_debug("table type 0x%x size 0x%lx name %s\n", ci->type, ci->size, table_name);
 
 	kobject_init(&ci->kobj, &control_info_ktype);
-	ret = kobject_add(&ci->kobj, struct_dir, "%s",
-				genz_table_name(ci->type));
+	ret = kobject_add(&ci->kobj, struct_dir, "%s", table_name);
 	if (ret < 0) {
 		kobject_put(&ci->kobj);
 		return ret;
@@ -957,7 +1003,7 @@ static int traverse_array(struct genz_bridge_dev *zbdev,
 
 	/* Now initialize the binary attribute file. */
 	sysfs_bin_attr_init(&ci->battr);
-	ci->battr.attr.name = genz_table_name(ci->type);
+	ci->battr.attr.name = table_name;
 	ci->battr.attr.mode = 0400;
 	ci->battr.size = ci->size;
 	ci->battr.read =  read_control_structure;
@@ -965,82 +1011,15 @@ static int traverse_array(struct genz_bridge_dev *zbdev,
 	ci->battr.private = ci; /* Used to indicate valid battr */
 
 	ret = sysfs_create_bin_file(&ci->kobj, &ci->battr);
-	return 0;
-}
-
-static int traverse_table(struct genz_bridge_dev *zbdev,
-			struct genz_rmr_info *rmri,
-			struct genz_control_info *parent,
-			struct kobject *dir,
-			const struct genz_control_structure_ptr *csp)
-{
-	pr_debug("Revisit: implement traverse_table\n");
-	return 0;
-}
-
-static int traverse_table_with_header(struct genz_bridge_dev *zbdev,
-			struct genz_rmr_info *rmri,
-			struct genz_control_info *parent,
-			struct kobject *dir,
-			const struct genz_control_structure_ptr *csp)
-{
-	int ret;
-	struct genz_control_structure_header hdr;
-	off_t hdr_offset;
-	struct genz_control_info *ci;
-
-	pr_debug("in traverse_table_with_header\n");
-	ret = read_and_validate_header(zbdev, rmri, parent->start, csp,
-				       &hdr, &hdr_offset);
-
-	/* This pointer is NULL. Not an error.*/
-	if (ret == ENOENT) {
-		pr_debug("pointer is NULL. Not an error.\n");
-		return 0;
-	} else if (ret) {
-		pr_debug("read_and_validate_header failed with %d\n", ret);
-		return ret;
-	}
-
-	/* Allocate a genz_control_info with a kobject for this directory */
-	ci = alloc_control_info(zbdev, &hdr, hdr_offset, parent);
-	if (ci == NULL) {
-		pr_debug("failed to allocate control_info\n");
-		return -ENOMEM;
-	}
-
-	/* Revisit: the directory is supposed to be the field name not the structure name. */
-	kobject_init(&ci->kobj, &control_info_ktype);
-	ret = kobject_add(&ci->kobj, dir, "%s",
-			genz_structure_name(hdr.type));
-	if (ret < 0) {
-		pr_debug("kobject_add failed with %d\n", ret);
-		kobject_put(&ci->kobj);
-		return ret;
-	}
-
-	/* Now initialize the binary attribute file. */
-	sysfs_bin_attr_init(&ci->battr);
-	ci->battr.attr.name = genz_structure_name(hdr.type);
-	ci->battr.attr.mode = 0400;
-	ci->battr.size = ci->size;
-	ci->battr.read =  read_control_structure;
-	ci->battr.write = write_control_structure;
-	ci->battr.private = ci; /* Revisit: is this used/needed? */
-
-	pr_debug("calling sysfs_create_bin_file %s\n", ci->battr.attr.name);
-	ret = sysfs_create_bin_file(&ci->kobj, &ci->battr);
 	if (ret) {
 		/* Revisit: handle error */
 		pr_debug("sysfs_create_bin_file failed with %d for file %s\n",
 				ret, ci->battr.attr.name);
 		return ret;
 	}
-	/* Recursively traverse any pointers in this structure */
-	pr_debug("calling traverse_control_pointers for any pointers in struct %s\n", ci->battr.attr.name);
-	ret = traverse_control_pointers(zbdev, rmri, ci,
-		hdr.type, hdr.vers,
-		&ci->kobj);
+	/* Recursively traverse any pointers in this table */
+	pr_debug("calling traverse_control_pointers for any pointers in table %s\n", ci->battr.attr.name);
+	ret = traverse_control_pointers(zbdev, rmri, ci, ci->type, 0, &ci->kobj);
 	if (ret < 0) {
 		/* Revisit: handle error */
 		pr_debug("traverse_control_pointers for %s failed with %d\n", ci->battr.attr.name, ret);
@@ -1049,53 +1028,67 @@ static int traverse_table_with_header(struct genz_bridge_dev *zbdev,
 	return 0;
 }
 
-#ifdef NOT_YET
-static int type_is_chained(int type)
+static inline int get_control_structure_ptr(
+		struct genz_bridge_dev *zbdev, int struct_type, int struct_vers,
+		const struct genz_control_structure_ptr **csp, int *num_ptrs)
 {
-	const struct genz_control_structure_ptr *csp;
-	size_t num_ptrs;
-	int i;
-
-	csp = genz_control_structure_type_to_ptrs[type].ptr;
-	num_ptrs = genz_control_structure_type_to_ptrs[type].num_ptrs;
-	for (i = 0; i < num_ptrs; i++) {
-		if (csp[i].type == GENZ_CONTROL_POINTER_CHAINED)
-			return 1;
+	pr_debug("struct type=%d, vers=%d\n", struct_type, struct_vers);
+	if (!genz_validate_structure_type(struct_type)) {
+		pr_debug("unknown structure type %u\n", struct_type);
+		*csp = NULL;
+		*num_ptrs = 0;
+		return ENOENT;
 	}
-	return 0;
-}
-#endif
-
-static int get_control_structure_ptr(
-		struct genz_bridge_dev *zbdev,
-		int struct_type,
-		int struct_vers,
-		const struct genz_control_structure_ptr **csp,
-		int *num_ptrs)
-{
 	if (genz_struct_type_to_ptrs[struct_type].vers == struct_vers) {
 		*csp = genz_struct_type_to_ptrs[struct_type].ptr;
 		*num_ptrs = genz_struct_type_to_ptrs[struct_type].num_ptrs;
-		pr_debug("found in subsystem genz_struct_type_to_ptrs\n");
 		return 0;
 	}
 	if (!zbdev->zbdrv)
 		return -EINVAL;
 	if (!zbdev->zbdrv->control_structure_pointers)
 		return -EINVAL;
+	pr_debug("not found in genz_struct_type_to_ptrs - calling bridge driver\n");
 	/* Revisit: this only works for the local bridge itself */
 	return zbdev->zbdrv->control_structure_pointers(zbdev, struct_vers,
 			struct_type, csp, num_ptrs);
 }
 
+static inline int get_control_table_ptr(
+		struct genz_bridge_dev *zbdev, int table_type,
+		const struct genz_control_structure_ptr **csp, int *num_ptrs)
+{
+	pr_debug("table type=%d\n", table_type);
+	if (!genz_validate_table_type(table_type)) {
+		pr_debug("unknown table type %u\n", table_type);
+		*csp = NULL;
+		*num_ptrs = 0;
+		return ENOENT;
+	}
+	*csp = genz_table_type_to_ptrs[table_type-GENZ_TABLE_ENUM_START].ptr;
+	*num_ptrs = genz_table_type_to_ptrs[table_type-GENZ_TABLE_ENUM_START].num_ptrs;
+	return 0;
+	/* Revisit: should zbdrv have a control_table_pointers interface? */
+}
+
+static int get_control_ptr(
+		struct genz_bridge_dev *zbdev, int type, int vers,
+		const struct genz_control_structure_ptr **csp, int *num_ptrs)
+{
+	if (is_struct_type(type))
+		return get_control_structure_ptr(zbdev, type, vers, csp, num_ptrs);
+	else  /* table */
+		return get_control_table_ptr(zbdev, type, csp, num_ptrs);
+}
+
 /*
- * Search the list of pointers for this structure to find the
+ * Search the list of pointers for this structure/table to find the
  * one marked "CHAINED". That is the offset for the next pointer
  * in the list. Complain if it is not found or more than one is
  * found.
  */
 static off_t find_chain_offset(struct genz_bridge_dev *zbdev,
-	struct genz_control_structure_header *hdr,
+	int struct_type, int struct_vers,
 	const struct genz_control_structure_ptr **chain_csp)
 {
 	int chain_offset = -ENOENT;
@@ -1104,11 +1097,10 @@ static off_t find_chain_offset(struct genz_bridge_dev *zbdev,
 	int ret = 0;
 	const struct genz_control_structure_ptr *csp;
 
-	ret = get_control_structure_ptr(zbdev, hdr->type, hdr->vers,
-			&csp, &num_ptrs);
+	ret = get_control_ptr(zbdev, struct_type, struct_vers, &csp, &num_ptrs);
 	if (ret) {
 		pr_debug("failed to get control_structure_ptr for type %d\n",
-				hdr->type);
+			 struct_type);
 		return -ENOENT;
 	}
 	for (i = 0; i < num_ptrs; i++) {
@@ -1148,43 +1140,62 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 			int num_ptrs)
 {
 	int chain_num = 0;
-	struct genz_control_structure_header hdr;
+	struct genz_control_structure_header hdr, *hdrp;
 	off_t hdr_offset;
 	int chain_offset = -1;
 	int done = 0;
 	struct genz_control_info *struct_dir;
-	int ret;
+	int ret, type, vers;
+	const char *name;
 	struct genz_control_info *ci;
 	const struct genz_control_structure_ptr *chain_csp;
+	bool is_struct = (csp->ptr_type == GENZ_CONTROL_POINTER_STRUCTURE);
 
 	/*
 	 * Read the first pointer in the chain to make sure there is
 	 * one before creating the directory to contain the chained structures.
 	 */
-	ret = read_and_validate_header(zbdev, rmri, parent->start, csp,
-				       &hdr, &hdr_offset);
+	if (is_struct) {
+		ret = read_and_validate_header(zbdev, rmri, parent->start, csp,
+					       &hdr, &hdr_offset);
+		type = hdr.type;
+		vers = hdr.vers;
+		hdrp = &hdr;
+	} else {  /* table */
+		ret = read_pointer_at_offset(zbdev, rmri, parent->start,
+			(int)csp->ptr_size, csp->pointer_offset, &hdr_offset);
+		type = csp->struct_type;
+		vers = 0;
+		hdrp = NULL;
+	}
 
 	/* This pointer is NULL. Not an error - just nothing to follow. */
 	if (ret == ENOENT)
 		return 0;
+	else if (ret < 0)
+		return ret;
 
 	/* Find the offset for the chained field in this structure type. */
-	chain_offset = find_chain_offset(zbdev, &hdr, &chain_csp);
+	chain_offset = find_chain_offset(zbdev, type, vers, &chain_csp);
 	if (chain_offset < 0) {
 		pr_debug("could not find the chain pointer\n");
 		return chain_offset;
 	}
 
 	/* Create the container directory for all the chained structures */
-	struct_dir = alloc_control_info(zbdev, &hdr, hdr_offset, parent);
+	struct_dir = alloc_control_info(zbdev, hdrp, hdr_offset, parent);
 	if (struct_dir == NULL) {
 		pr_debug("failed to allocate control_info\n");
 		return -ENOMEM;
 	}
+	if (!hdrp) {  /* table - set type/size */
+		struct_dir->type = csp->struct_type;
+		struct_dir->size = (*csp->size_fn)(struct_dir->parent);
+	}
 
+	name = genz_control_name(type);
 	kobject_init(&struct_dir->kobj, &control_info_ktype);
-	ret = kobject_add(&struct_dir->kobj, dir, "%s",
-			  genz_structure_name(hdr.type));
+	ret = kobject_add(&struct_dir->kobj, dir, "%s", name);
 	if (ret < 0) {
 		kobject_put(&struct_dir->kobj);
 		return ret;
@@ -1192,15 +1203,21 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 
 	while (!done) {
 		/* Allocate a genz_control_info/kobject for this directory */
-		ci = alloc_control_info(zbdev, &hdr, hdr_offset, struct_dir);
+		ci = alloc_control_info(zbdev, hdrp, hdr_offset, struct_dir);
 		if (ci == NULL) {
 			pr_debug("failed to allocate control_info\n");
 			return -ENOMEM;
 		}
+		if (!hdrp) {  /* table - set type/size */
+			ci->type = csp->struct_type;
+			ci->size = (*csp->size_fn)(ci->parent);
+		}
 
+		pr_debug("%s type 0x%x size 0x%lx name %s\n",
+			 is_struct ? "struct" : "table", ci->type, ci->size, name);
 		kobject_init(&ci->kobj, &control_info_ktype);
 		ret = kobject_add(&ci->kobj, &struct_dir->kobj, "%s%d",
-				genz_structure_name(hdr.type), chain_num++);
+				  name, chain_num++);
 		if (ret < 0) {
 			kobject_put(&ci->kobj);
 			return ret;
@@ -1208,7 +1225,7 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 
 		/* Now initialize the binary attribute file. */
 		sysfs_bin_attr_init(&ci->battr);
-		ci->battr.attr.name = genz_structure_name(hdr.type);
+		ci->battr.attr.name = name;
 		ci->battr.attr.mode = 0400;
 		ci->battr.size = ci->size;
 		ci->battr.read =  read_control_structure;
@@ -1221,21 +1238,31 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 		 * chain pointer will be skipped there and handled here in
 		 * this while loop.
 		 */
-		ret = traverse_control_pointers(zbdev, rmri, ci,
-			hdr.type, hdr.vers,
-			&ci->kobj);
+		ret = traverse_control_pointers(zbdev, rmri, ci, type, vers,
+						&ci->kobj);
 		if (ret < 0) {
 			/* Handle error! */
 			return ret;
 		}
 
-		/* Follow chain pointer to read the next control struct */
-		ret = read_and_validate_header(zbdev, rmri, hdr_offset,
-			chain_csp, &hdr, &hdr_offset);
+		/* Follow chain pointer to read the next struct/table */
+		if (is_struct) {
+			ret = read_and_validate_header(zbdev, rmri, hdr_offset,
+				chain_csp, hdrp, &hdr_offset);
+			type = hdr.type;
+			vers = hdr.vers;
+		} else {  /* table */
+			ret = read_pointer_at_offset(zbdev, rmri, hdr_offset,
+				(int)chain_csp->ptr_size,
+				chain_csp->pointer_offset, &hdr_offset);
+			type = chain_csp->struct_type;
+			vers = 0;
+		}
 
 		/* The pointer is NULL - this is the end of the list */
 		if (ret == ENOENT)
 			done = 1;
+		/* Revisit: ret < 0 */
 	}
 	return ret;
 }
@@ -1288,7 +1315,6 @@ static int start_core_structure(struct genz_bridge_dev *zbdev,
 		return -ENOMEM;
 	}
 
-	/* Revisit: the directory is supposed to be the field name not the structure name. */
 	kobject_init(&ci->kobj, &control_info_ktype);
 	ret = kobject_add(&ci->kobj, con_dir, "%s",
 			genz_structure_name(hdr.type));
@@ -1437,26 +1463,24 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 	int struct_vers,
 	struct kobject *dir)
 {
-	int i;
-	int ret = 0;
 	const struct genz_control_structure_ptr *csp, *csp_entry;
-	int num_ptrs;
+	int i, ret, num_ptrs;
 
-	pr_debug("struct type %d\n", struct_type);
-	ret = get_control_structure_ptr(zbdev, struct_type, struct_vers,
-				&csp, &num_ptrs);
-	if (ret) {
-		pr_debug("get_control_structure_ptr failed with %d\n", ret);
+	ret = get_control_ptr(zbdev, struct_type, struct_vers, &csp, &num_ptrs);
+	if (ret < 0) {
+		pr_debug("get_control_ptr failed with %d\n", ret);
 		return ret;
 	}
 	for (i = 0; i < num_ptrs; i++) {
 		csp_entry = &csp[i];
 		switch (csp_entry->ptr_type) {
 		case GENZ_CONTROL_POINTER_NONE:
-			pr_debug("ptr_type GENZ_CONTROL_POINTER_NONE\n");
+			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_NONE\n",
+				 csp_entry->ptr_name);
 			break;
 		case GENZ_CONTROL_POINTER_STRUCTURE:
-			pr_debug("ptr_type GENZ_CONTROL_POINTER_STRUCTURE\n");
+			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_STRUCTURE\n",
+				 csp_entry->ptr_name);
 			if (is_head_of_chain(csp_entry)) {
 				pr_debug("is_head_of_chain is true\n");
 				ret = traverse_chained_control_pointers(
@@ -1468,22 +1492,33 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 			}
 			break;
 		case GENZ_CONTROL_POINTER_CHAINED:
-			pr_debug("skipping ptr_type GENZ_CONTROL_POINTER_CHAINED\n");
+			pr_debug("%s, skipping ptr_type GENZ_CONTROL_POINTER_CHAINED\n",
+				 csp_entry->ptr_name);
 			break;
 		case GENZ_CONTROL_POINTER_ARRAY:
-			pr_debug("ptr_type GENZ_CONTROL_POINTER_ARRAY\n");
-			ret = traverse_array(zbdev, rmri, parent,
-					     dir, csp_entry);
-			break;
-		case GENZ_CONTROL_POINTER_TABLE:
-			pr_debug("ptr_type GENZ_CONTROL_POINTER_TABLE\n");
+			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_ARRAY\n",
+				 csp_entry->ptr_name);
 			ret = traverse_table(zbdev, rmri, parent,
 					     dir, csp_entry);
 			break;
+		case GENZ_CONTROL_POINTER_TABLE:
+			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_TABLE\n",
+				 csp_entry->ptr_name);
+			if (is_head_of_chain(csp_entry)) {
+				pr_debug("is_head_of_chain is true\n");
+				ret = traverse_chained_control_pointers(
+					zbdev, rmri, parent, dir,
+					csp_entry, num_ptrs);
+			} else {
+				ret = traverse_table(zbdev, rmri, parent,
+						     dir, csp_entry);
+			}
+			break;
 		case GENZ_CONTROL_POINTER_TABLE_WITH_HEADER:
-			pr_debug("ptr_type GENZ_CONTROL_POINTER_TABLE_WITH_HEADER\n");
-			ret = traverse_table_with_header(zbdev, rmri, parent,
-				dir, csp_entry);
+			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_TABLE_WITH_HEADER\n",
+				 csp_entry->ptr_name);
+			ret = traverse_table(zbdev, rmri, parent,
+					     dir, csp_entry);
 			break;
 		}
 		if (ret < 0) {
@@ -1501,7 +1536,8 @@ void *genz_control_structure_buffer_alloc(
 	void *buf;
 	int sbytes;
 
-	/* Revisit: validate stype */
+	if (!genz_validate_structure_type(stype))
+		return NULL;
 	sbytes = genz_struct_type_to_ptrs[stype].struct_bytes;
 	if (!sbytes)
 		return NULL;
@@ -1527,12 +1563,10 @@ int genz_control_read_structure(struct genz_bridge_dev *zbdev,
 	}
 	ret = genz_control_read(
 		zbdev, cs_offset+field_offset, field_size, buf, rmri, 0);
-	if (ret) {
+	if (ret)
 		pr_debug("genz_control_read failed with %d\n", ret);
-		return ret;
-	}
 
-	return 0;
+	return ret;
 }
 
 int genz_control_read_cid0(struct genz_bridge_dev *zbdev,
@@ -1582,27 +1616,47 @@ int genz_control_read_cclass(struct genz_bridge_dev *zbdev,
 int genz_control_read_fru_uuid(struct genz_bridge_dev *zbdev,
 			       struct genz_rmr_info *rmri, uuid_t *fru_uuid)
 {
+	uuid_t zero_uuid = { 0 };
 	int ret;
 
 	ret = genz_control_read_structure(zbdev, rmri, fru_uuid, 0,
-			0x1F0, /* Revisit: how to get offsets better */
+			offsetof(struct genz_core_structure, fru_uuid),
 			sizeof(*fru_uuid));
-	pr_debug("%pUb\n", fru_uuid);
+	if (ret == 0)
+		ret = abs(genz_uuid_cmp(fru_uuid, &zero_uuid));
+	pr_debug("%pUb, ret=%d\n", fru_uuid, ret);
 	return ret;
 }
 
 int genz_control_read_c_uuid(struct genz_bridge_dev *zbdev,
 			     struct genz_rmr_info *rmri, uuid_t *c_uuid)
 {
+	uuid_t zero_uuid = { 0 };
 	int ret;
 
 	ret = genz_control_read_structure(zbdev, rmri, c_uuid, 0,
-			0x1E0, /* Revisit: how to get offsets better */
+			offsetof(struct genz_core_structure, c_uuid),
 			sizeof(*c_uuid));
-	pr_debug("%pUb\n", c_uuid);
+	if (ret == 0)
+		ret = abs(genz_uuid_cmp(c_uuid, &zero_uuid));
+	pr_debug("%pUb, ret=%d\n", c_uuid, ret);
 	return ret;
 }
 
+int genz_control_read_mgr_uuid(struct genz_bridge_dev *zbdev,
+			       struct genz_rmr_info *rmri, uuid_t *mgr_uuid)
+{
+	uuid_t zero_uuid = { 0 };
+	int ret;
+
+	ret = genz_control_read_structure(zbdev, rmri, mgr_uuid, 0,
+			offsetof(struct genz_core_structure, mgr_uuid),
+			sizeof(*mgr_uuid));
+	if (ret == 0)
+		ret = abs(genz_uuid_cmp(mgr_uuid, &zero_uuid));
+	pr_debug("%pUb, ret=%d\n", mgr_uuid, ret);
+	return ret;
+}
 
 /**
  * genz_bridge_create_control_files() - read control space for a local bridge
@@ -1613,15 +1667,17 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	struct genz_dev     *zdev = &zbdev->zdev;
 	struct device       *bdev = zbdev->bridge_dev;
 	char                bridgeN[MAX_GENZ_NAME];
+	uint                fabric_num;
 	struct kobject      *genz_dir;
 
 	/* Make the genzN directory under the native device */
 	genz_dir = &zbdev->genzN_dir;
+	/* Use actual fabric number if known, else 0 */
+	fabric_num = (zbdev->fabric) ? zbdev->fabric->number : 0;
 	ret = kobject_init_and_add(genz_dir, &genz_dir_ktype, &bdev->kobj,
-				   "genz%u", zbdev->fabric->number);
+				   "genz%u", fabric_num);
 	if (ret < 0) {
-		pr_debug("unable to create genz%u directory\n",
-			 zbdev->fabric->number);
+		pr_debug("unable to create genz%u directory\n", fabric_num);
 		goto err_genz_dir;
 	}
 	/* Create a symlink from genzN to /sys/devices/genzN/bridgeN */
@@ -1653,6 +1709,13 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 		goto err_control;
 	}
 
+	/* Make cuuid file under native device/genzN directory */
+	ret = sysfs_create_file(genz_dir, &cuuid_attribute.attr);
+	if (ret < 0) {
+		pr_debug("unable to create bridge cuuid file\n");
+		goto err_control;
+	}
+
 	/* Populate native device/genzN/control directory */
 
 #ifdef NOT_YET
@@ -1677,26 +1740,6 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	if (zcomp == NULL) {
 		pr_debug("genz_add_component failed\n");
 		return -ENOMEM;
-	}
-
-	/* Read C-Class from control space */
-	ret =  genz_control_read_cclass(zbdev, NULL, &cclass);
-	if (ret) {
-		pr_debug("couldn't read cclass for bridge\n");
-		return -EINVAL;
-	}
-	zcomp->cclass = cclass;
-	/* Read the FRU_UUID from control space */
-	ret =  genz_control_read_fru_uuid(zbdev, NULL, &zcomp->fru_uuid);
-	if (ret) {
-		pr_debug("couldn't read fru_uuid for bridge\n");
-		return -EINVAL;
-	}
-	/* Read the C_UUID from control space */
-	ret =  genz_control_read_c_uuid(zbdev, NULL, &zdev->class_uuid);
-	if (ret) {
-		pr_debug("couldn't read class_uuid for bridge\n");
-		return -EINVAL;
 	}
 #endif
 

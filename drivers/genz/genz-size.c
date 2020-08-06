@@ -119,7 +119,7 @@ ssize_t genz_responder_vcat_table_size(struct genz_control_info *ci)
 	/*
 	 * The responder VCAT table contains N rows where N is the maximum
 	 * number of provisioned VCs. Each row is K VCAT entries. A VCAT
-	 * entry is 8 bytes. The number of  entries (K) is found in the
+	 * entry is 8 bytes. The number of entries (K) is found in the
 	 * Component Destination Table Structure RSP-VCATSZ field
 	 */
 	 
@@ -515,12 +515,12 @@ ssize_t genz_mvcat_table_size(struct genz_control_info *ci)
 
 ssize_t genz_opcode_set_table_size(struct genz_control_info *ci)
 {
-	return 0;
+	return sizeof(struct genz_opcode_set_table);
 }
 
 ssize_t genz_opcode_set_uuid_table_size(struct genz_control_info *ci)
 {
-	return 0;
+	return sizeof(struct genz_opcode_set_uuid_table);
 }
 
 ssize_t genz_ssap_mcap_msap_and_msmcap_table_size(struct genz_control_info *ci)
