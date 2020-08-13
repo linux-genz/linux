@@ -178,15 +178,31 @@ static int orthus_control_offset_to_base(struct orthus_bridge *obr,
 	return ret;
 }
 
-/* Revisit: temporary - fill in some PTRs missing in HW */
+/* Revisit: temporary - fill in some PTRs & Vdef Hdrs missing in HW */
 static int orthus_local_control_read_fixup(struct orthus_bridge *obr, loff_t offset,
 					   size_t size, void *data, uint flags)
 {
-	if (offset == 0x7c && size == 4) {  /* Interface0 PTR */
-		*((uint32_t *)data) = 0x2000; /* Revisit: endianness */
+	/* Revisit: endianness */
+	if (offset == 0x60 && size == 4) {            /* Struct PTR6 */
+		*((uint32_t *)data) = 0x6000;
+		return 1;
+	} else if (offset == 0x7c && size == 4) {     /* Interface0 PTR */
+		*((uint32_t *)data) = 0x2000;
+		return 1;
+	} else if (offset == 0x8000 && size == 4) {   /* Vdef Hdr */
+		*((uint32_t *)data) = 0x0010100a;
 		return 1;
 	} else if (offset == 0x20080 && size == 4) {  /* Interface0 IPHY PTR */
-		*((uint32_t *)data) = 0x3000; /* Revisit: endianness */
+		*((uint32_t *)data) = 0x3000;
+		return 1;
+	} else if (offset == 0x2008c && size == 4) {  /* Interface0 VD PTR */
+		*((uint32_t *)data) = 0x2010;
+		return 1;
+	} else if (offset == 0x20100 && size == 4) {   /* Interface0 Vdef Hdr */
+		*((uint32_t *)data) = 0x0010100a;
+		return 1;
+	} else if (offset == 0x60000 && size == 4) {   /* RawCB Vdef Hdr */
+		*((uint32_t *)data) = 0x0100100a;
 		return 1;
 	}
 
@@ -260,12 +276,114 @@ static int orthus_control_read(struct genz_bridge_dev *gzbr, loff_t offset,
 	return ret;
 }
 
+static int orthus_local_control_write(struct genz_bridge_dev *gzbr, loff_t offset,
+			       size_t size, void *data, uint flags)
+{
+	struct orthus_bridge   *obr = orthus_gzbr_to_obr(gzbr);
+	uint64_t               val;
+	uint32_t               val4;
+	uint16_t               val2;
+	uint8_t                val1;
+	uint                   csr_align;
+	loff_t                 blk_offset;
+	void __iomem           *base;
+	int                    ret;
+
+	if (!obr)
+		return -EINVAL;
+	if (size == 0)
+		return 0;
+	ret = orthus_control_offset_to_base(obr, offset, &blk_offset, &base);
+	if (ret < 0)
+		return ret;
+
+	csr_align = (uint)blk_offset & 7u;
+	dev_dbg(&gzbr->zdev.dev, "offset=0x%llx, size=%lu\n", offset, size);
+
+	/* Revisit: locking */
+	/* do small writes until csr is 8-byte aligned */
+	if (csr_align & 0x1) {  /* do 1-byte write */
+		val1 = *((uint8_t *)data);
+		dev_dbg(&gzbr->zdev.dev, "val1=0x%x, blk_offset=0x%llx\n",
+			val1, blk_offset);
+		iowrite8(val1, base + blk_offset);
+		data++;
+		blk_offset++;
+		size--;
+	}
+	if ((size > 0) && (csr_align & 0x2)) {  /* do 2-byte write */
+		val2 = *((uint16_t *)data);  /* Revisit: endianness */
+		dev_dbg(&gzbr->zdev.dev, "val2=0x%x, blk_offset=0x%llx\n",
+			val2, blk_offset);
+		iowrite16(val2, base + blk_offset);
+		data += 2;
+		blk_offset += 2;
+		size -= 2;
+	}
+	if ((size > 0) && (csr_align & 0x4)) {  /* do 4-byte write */
+		val4 = *((uint32_t *)data);  /* Revisit: endianness */
+		dev_dbg(&gzbr->zdev.dev, "val4=0x%x, blk_offset=0x%llx\n",
+			val4, blk_offset);
+		iowrite32(val4, base + blk_offset);
+		data += 4;
+		blk_offset += 4;
+		size -= 4;
+	}
+
+	while (size >= 8) {  /* do aligned 8-byte writes */
+		memcpy(&val, data, 8);
+		dev_dbg(&gzbr->zdev.dev, "val=0x%llx, blk_offset=0x%llx\n",
+			val, blk_offset);
+		iowrite64(val, base + blk_offset);
+		data += 8;
+		blk_offset += 8;
+		size -= 8;
+	}
+
+	if (size & 0x4) {  /* do 4-byte write */
+		val4 = *((uint32_t *)data);  /* Revisit: endianness */
+		dev_dbg(&gzbr->zdev.dev, "val4=0x%x, blk_offset=0x%llx\n",
+			val4, blk_offset);
+		iowrite32(val4, base + blk_offset);
+		data += 4;
+		blk_offset += 4;
+		size -= 4;
+	}
+	if (size & 0x2) {  /* do 2-byte write */
+		val2 = *((uint16_t *)data);  /* Revisit: endianness */
+		dev_dbg(&gzbr->zdev.dev, "val2=0x%x, blk_offset=0x%llx\n",
+			val2, blk_offset);
+		iowrite16(val2, base + blk_offset);
+		data += 2;
+		blk_offset += 2;
+		size -= 2;
+	}
+	if (size & 0x1) {  /* do 1-byte write */
+		val1 = *((uint8_t *)data);
+		dev_dbg(&gzbr->zdev.dev, "val1=0x%x, blk_offset=0x%llx\n",
+			val1, blk_offset);
+		iowrite8(val1, base + blk_offset);
+		data++;
+		blk_offset++;
+		size--;
+	}
+
+	pr_debug("returning ret=%d\n", ret);
+	return ret;
+}
+
 static int orthus_control_write(struct genz_bridge_dev *gzbr, loff_t offset,
 				size_t size, void *data,
 				struct genz_rmr_info *rmri, uint flags)
 {
+	struct orthus_bridge *obr;
 	int ret = -EOPNOTSUPP; /* Revisit: temporary */
 
+	if (genz_is_local_bridge(gzbr, rmri)) {
+		return orthus_local_control_write(gzbr, offset, size, data, flags);
+	}
+
+	obr = orthus_gzbr_to_obr(gzbr);
 	/* Revisit: implement this */
 	return ret;
 }

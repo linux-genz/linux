@@ -905,7 +905,7 @@ static int read_and_validate_header(struct genz_bridge_dev *zbdev,
 	}
 	/* Check if this is a known type */
 	if (!genz_validate_structure_type(hdr->type)) {
-		pr_debug("unknown structure type %u\n", hdr->type);
+		pr_debug("unknown structure type 0x%x\n", hdr->type);
 		goto out;
 	}
 	/*  Validate the structure size.
@@ -983,7 +983,7 @@ static int traverse_table(struct genz_bridge_dev *zbdev,
 	}
 
 	/* Allocate a genz_control_info/kobject for this directory */
-	ci = alloc_control_info(zbdev, NULL, csp->pointer_offset, parent);
+	ci = alloc_control_info(zbdev, NULL, table_ptr, parent);
 	if (ci == NULL) {
 		pr_debug("failed to allocate control_info\n");
 		return -ENOMEM;
@@ -995,7 +995,7 @@ static int traverse_table(struct genz_bridge_dev *zbdev,
 	pr_debug("table type 0x%x size 0x%lx name %s\n", ci->type, ci->size, table_name);
 
 	kobject_init(&ci->kobj, &control_info_ktype);
-	ret = kobject_add(&ci->kobj, struct_dir, "%s", table_name);
+	ret = kobject_add(&ci->kobj, struct_dir, "%s@0x%lx", table_name, ci->start);
 	if (ret < 0) {
 		kobject_put(&ci->kobj);
 		return ret;
@@ -1004,7 +1004,7 @@ static int traverse_table(struct genz_bridge_dev *zbdev,
 	/* Now initialize the binary attribute file. */
 	sysfs_bin_attr_init(&ci->battr);
 	ci->battr.attr.name = table_name;
-	ci->battr.attr.mode = 0400;
+	ci->battr.attr.mode = 0600;
 	ci->battr.size = ci->size;
 	ci->battr.read =  read_control_structure;
 	ci->battr.write = write_control_structure;
@@ -1032,9 +1032,9 @@ static inline int get_control_structure_ptr(
 		struct genz_bridge_dev *zbdev, int struct_type, int struct_vers,
 		const struct genz_control_structure_ptr **csp, int *num_ptrs)
 {
-	pr_debug("struct type=%d, vers=%d\n", struct_type, struct_vers);
+	pr_debug("struct type=0x%x, vers=%d\n", struct_type, struct_vers);
 	if (!genz_validate_structure_type(struct_type)) {
-		pr_debug("unknown structure type %u\n", struct_type);
+		pr_debug("unknown structure type 0x%x\n", struct_type);
 		*csp = NULL;
 		*num_ptrs = 0;
 		return ENOENT;
@@ -1216,8 +1216,8 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 		pr_debug("%s type 0x%x size 0x%lx name %s\n",
 			 is_struct ? "struct" : "table", ci->type, ci->size, name);
 		kobject_init(&ci->kobj, &control_info_ktype);
-		ret = kobject_add(&ci->kobj, &struct_dir->kobj, "%s%d",
-				  name, chain_num++);
+		ret = kobject_add(&ci->kobj, &struct_dir->kobj, "%s%d@0x%lx",
+				  name, chain_num++, ci->start);
 		if (ret < 0) {
 			kobject_put(&ci->kobj);
 			return ret;
@@ -1226,7 +1226,7 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 		/* Now initialize the binary attribute file. */
 		sysfs_bin_attr_init(&ci->battr);
 		ci->battr.attr.name = name;
-		ci->battr.attr.mode = 0400;
+		ci->battr.attr.mode = 0600;
 		ci->battr.size = ci->size;
 		ci->battr.read =  read_control_structure;
 		ci->battr.write = write_control_structure;
@@ -1316,8 +1316,8 @@ static int start_core_structure(struct genz_bridge_dev *zbdev,
 	}
 
 	kobject_init(&ci->kobj, &control_info_ktype);
-	ret = kobject_add(&ci->kobj, con_dir, "%s",
-			genz_structure_name(hdr.type));
+	ret = kobject_add(&ci->kobj, con_dir, "%s@0x%lx",
+			  genz_structure_name(hdr.type), ci->start);
 	if (ret < 0) {
 		pr_debug("kobject_add failed with %d\n", ret);
 		kobject_put(&ci->kobj);
@@ -1327,7 +1327,7 @@ static int start_core_structure(struct genz_bridge_dev *zbdev,
 	/* Now initialize the binary attribute file. */
 	sysfs_bin_attr_init(&ci->battr);
 	ci->battr.attr.name = genz_structure_name(hdr.type);
-	ci->battr.attr.mode = 0400;
+	ci->battr.attr.mode = 0600;
 	ci->battr.size = ci->size;
 	ci->battr.read =  read_control_structure;
 	ci->battr.write = write_control_structure;
@@ -1387,8 +1387,8 @@ static int traverse_structure(struct genz_bridge_dev *zbdev,
 	/* Revisit: the directory is supposed to be the field name not the structure name. */
 	pr_debug("calling kobject_init and kobject_add for %s\n", genz_structure_name(hdr.type));
 	kobject_init(&ci->kobj, &control_info_ktype);
-	ret = kobject_add(&ci->kobj, dir, "%s",
-			genz_structure_name(hdr.type));
+	ret = kobject_add(&ci->kobj, dir, "%s@0x%lx",
+			  genz_structure_name(hdr.type), ci->start);
 	if (ret < 0) {
 		pr_debug("kobject_add failed with %d\n", ret);
 		kobject_put(&ci->kobj);
@@ -1398,7 +1398,7 @@ static int traverse_structure(struct genz_bridge_dev *zbdev,
 	/* Now initialize the binary attribute file. */
 	sysfs_bin_attr_init(&ci->battr);
 	ci->battr.attr.name = genz_structure_name(hdr.type);
-	ci->battr.attr.mode = 0400;
+	ci->battr.attr.mode = 0600;
 	ci->battr.size = ci->size;
 	ci->battr.read =  read_control_structure;
 	ci->battr.write = write_control_structure;
