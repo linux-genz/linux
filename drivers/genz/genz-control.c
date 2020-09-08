@@ -145,7 +145,8 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 	struct genz_control_info *parent,
 	int struct_type,
 	int struct_vers,
-	struct kobject *dir);
+	struct kobject *dir,
+	uint order[]);
 
 /**
  * genz_valid_table_type - determines if a control table type is valid
@@ -209,7 +210,7 @@ static void control_info_release(struct kobject *kobj)
 {
 	struct genz_control_info *ci = to_genz_control_info(kobj);
 
-	pr_debug("kobj %s\n", kobj->name);
+	pr_debug("kobj %s, ci=%px\n", kobject_name(kobj), ci);
 	if (ci->battr.private) {
 		pr_debug("sysfs_remove_bin_file for %s\n", ci->battr.attr.name);
 		sysfs_remove_bin_file(&ci->kobj, &ci->battr);
@@ -310,7 +311,7 @@ static ssize_t read_control_structure(struct file *fd,
 		/* Revisit: what should it return on error? */
 		return err;
 	}
-	pr_debug("reading %s at offset=0x%llx, size=0x%lx, ci->start=0x%lx, ci->size=0x%lx\n", kobj->name, offset, size, ci->start, ci->size);
+	pr_debug("reading %s at offset=0x%llx, size=0x%lx, ci->start=0x%lx, ci->size=0x%lx\n", kobject_name(kobj), offset, size, ci->start, ci->size);
 
 	ret = genz_control_read(zbdev, ci->start+offset, size, data, rmri, 0);
 	if (ret) {
@@ -369,12 +370,49 @@ static void genz_dir_release(struct kobject *kobj)
 		pr_debug("failed to find bdev from kobject parent\n");
 		return;
 	}
-	dev_dbg(bdev, "kobj %s\n", kobj->name);
+	dev_dbg(bdev, "kobj %s\n", kobject_name(kobj));
 }
 
 static struct kobj_type genz_dir_ktype = {
 	.sysfs_ops = &kobj_sysfs_ops,
 	.release = genz_dir_release
+};
+
+static void control_dir_release(struct kobject *kobj)
+{
+	struct genz_dev *zdev;
+
+	/* Revisit: Is this just a debug function? It doesn't do anything */
+	if (kobj == NULL) {
+		pr_debug("NULL kobj\n");
+		return;
+	}
+	zdev = root_kobj_to_genz_dev(kobj);
+	if (zdev == NULL) {
+		pr_debug("failed to find zdev from kobject parent\n");
+		return;
+	}
+	dev_dbg(&zdev->dev, "kobj %s\n", kobject_name(kobj));
+}
+
+static struct kobj_type control_dir_ktype = {
+	.sysfs_ops = &kobj_sysfs_ops,
+	.release = control_dir_release
+};
+
+static void chain_dir_release(struct kobject *kobj)
+{
+	if (kobj == NULL) {
+		pr_debug("NULL kobj\n");
+		return;
+	}
+	pr_debug("freeing %s\n", kobject_name(kobj));
+	kfree(kobj);
+}
+
+static struct kobj_type chain_dir_ktype = {
+	.sysfs_ops = &kobj_sysfs_ops,
+	.release = chain_dir_release
 };
 
 static ssize_t gcid_show(struct kobject *kobj,
@@ -833,13 +871,11 @@ static int read_pointer_at_offset(struct genz_bridge_dev *zbdev,
 		return ret;
 	}
 
-	pr_debug("found the pointer is 0x%lx\n", *ptr_offset);
+	pr_debug("found the pointer@0x%lx is 0x%lx\n", start+offset, *ptr_offset);
 	
 	/* It is ok for many pointers to be NULL. Everything is optional. */
-	if (*ptr_offset == 0) {
-		pr_debug("pointer field at 0x%lx is NULL\n", start+offset);
+	if (*ptr_offset == 0)
 		return ENOENT;
-	}
 
 	/* Shift the offset to get the byte address */
 	*ptr_offset <<= 4;
@@ -901,20 +937,19 @@ static int read_and_validate_header(struct genz_bridge_dev *zbdev,
 	    (hdr->type != csp->struct_type)) {
 		pr_debug("expected type %d but found %d\n",
 			csp->struct_type, hdr->type);
-		return -EINVAL;
+		return EINVAL;
 	}
 	/* Check if this is a known type */
 	if (!genz_validate_structure_type(hdr->type)) {
 		pr_debug("unknown structure type 0x%x\n", hdr->type);
-		goto out;
+		return EINVAL;
 	}
-	/*  Validate the structure size.
-	 */
+	/* Validate the structure size */
 	if (!genz_validate_structure_size(hdr)) {
 		pr_debug("structure size is wrong\n");
-		return -EINVAL;
+		return EINVAL;
 	}
-	/* Validate the version. */
+	/* Validate the version */
 	expected_vers = genz_struct_type_to_ptrs[hdr->type].vers;
 	if (hdr->vers != expected_vers) {
 		pr_debug("structure version mismatch expected %d but found %d.\n", expected_vers, hdr->vers);
@@ -922,7 +957,7 @@ static int read_and_validate_header(struct genz_bridge_dev *zbdev,
 	} else {
 		pr_debug("versions match: hdr->vers is %d\n", hdr->vers);
 	}
-out:
+
 	return 0;
 }
 
@@ -930,7 +965,8 @@ static struct genz_control_info *alloc_control_info(
 	struct genz_bridge_dev *zbdev,
 	struct genz_control_structure_header *hdr,
 	off_t offset,
-	struct genz_control_info *parent)
+	struct genz_control_info *parent, struct genz_control_info **sibling,
+	const struct genz_control_structure_ptr *csp)
 {
 	struct genz_control_info *ci;
 
@@ -943,12 +979,23 @@ static struct genz_control_info *alloc_control_info(
 
 	ci->zbdev = zbdev;
 	ci->start = offset;
+	ci->csp = csp;
 	if (hdr) { /* root control dir and chained dirs have no header. */
 		ci->type = hdr->type;
 		ci->vers = hdr->vers;
 		ci->size = hdr->size * GENZ_CONTROL_SIZE_UNIT;
 	}
 	ci->parent = parent;
+	if (parent && parent->child == NULL) { /* first child */
+		pr_debug("ci=%px, child of %px\n", ci, parent);
+		parent->child = ci;
+	} else if (*sibling) { /* link to sibling */
+		(*sibling)->sibling = ci;
+		pr_debug("ci=%px, sibling of %px\n", ci, *sibling);
+	} else {
+		pr_debug("ci=%px, no parent or sibling\n", ci);
+	}
+	*sibling = ci;
 
 	/* The kobject is associated with the control kset for cleanup */
 	//ci->kobj.kset = zdev->zbdev->genz_control_kset; /* Revisit */
@@ -964,6 +1011,7 @@ static struct genz_control_info *alloc_control_info(
 static int traverse_table(struct genz_bridge_dev *zbdev,
 			  struct genz_rmr_info *rmri,
 			  struct genz_control_info *parent,
+			  struct genz_control_info **sibling,
 			  struct kobject *struct_dir,
 			  const struct genz_control_structure_ptr *csp)
 {
@@ -983,19 +1031,19 @@ static int traverse_table(struct genz_bridge_dev *zbdev,
 	}
 
 	/* Allocate a genz_control_info/kobject for this directory */
-	ci = alloc_control_info(zbdev, NULL, table_ptr, parent);
+	ci = alloc_control_info(zbdev, NULL, table_ptr, parent, sibling, csp);
 	if (ci == NULL) {
 		pr_debug("failed to allocate control_info\n");
 		return -ENOMEM;
 	}
 	ci->type = csp->struct_type;
-	ci->size = (*csp->size_fn)(ci->parent);
+	ci->size = (*csp->size_fn)(ci);
 	table_name = genz_table_name(ci->type);
 
 	pr_debug("table type 0x%x size 0x%lx name %s\n", ci->type, ci->size, table_name);
 
-	kobject_init(&ci->kobj, &control_info_ktype);
-	ret = kobject_add(&ci->kobj, struct_dir, "%s@0x%lx", table_name, ci->start);
+	ret = kobject_init_and_add(&ci->kobj, &control_info_ktype, struct_dir,
+				   "%s@0x%lx", table_name, ci->start);
 	if (ret < 0) {
 		kobject_put(&ci->kobj);
 		return ret;
@@ -1019,7 +1067,7 @@ static int traverse_table(struct genz_bridge_dev *zbdev,
 	}
 	/* Recursively traverse any pointers in this table */
 	pr_debug("calling traverse_control_pointers for any pointers in table %s\n", ci->battr.attr.name);
-	ret = traverse_control_pointers(zbdev, rmri, ci, ci->type, 0, &ci->kobj);
+	ret = traverse_control_pointers(zbdev, rmri, ci, ci->type, 0, &ci->kobj, NULL);
 	if (ret < 0) {
 		/* Revisit: handle error */
 		pr_debug("traverse_control_pointers for %s failed with %d\n", ci->battr.attr.name, ret);
@@ -1122,6 +1170,27 @@ static off_t find_chain_offset(struct genz_bridge_dev *zbdev,
 	return chain_offset;
 }
 
+static int chain_container_dir(struct genz_control_info *ci, const char *name,
+			       struct kobject *parent_dir)
+{
+	int ret;
+
+	/* Create the container directory for all the chained structures */
+	ci->cont_dir = kzalloc(sizeof(*ci->cont_dir), GFP_KERNEL);
+	if (ci->cont_dir == NULL) {
+		pr_debug("failed to allocate cont_dir\n");
+		return -ENOMEM;
+	}
+
+	ret = kobject_init_and_add(ci->cont_dir, &chain_dir_ktype,
+				   parent_dir, "%s", name);
+	if (ret < 0) {
+		kobject_put(ci->cont_dir);
+	}
+
+	return ret;
+}
+
 /*
  * The parent genz_control_info is the directory that contains
  * the chained control structures directories named <structure><N>.
@@ -1135,6 +1204,7 @@ static off_t find_chain_offset(struct genz_bridge_dev *zbdev,
 static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 			struct genz_rmr_info *rmri,
 			struct genz_control_info *parent,
+			struct genz_control_info **sibling,
 			struct kobject *dir,
 			const struct genz_control_structure_ptr *csp,
 			int num_ptrs)
@@ -1144,12 +1214,12 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 	off_t hdr_offset;
 	int chain_offset = -1;
 	int done = 0;
-	struct genz_control_info *struct_dir;
 	int ret, type, vers;
 	const char *name;
 	struct genz_control_info *ci;
 	const struct genz_control_structure_ptr *chain_csp;
 	bool is_struct = (csp->ptr_type == GENZ_CONTROL_POINTER_STRUCTURE);
+	struct kobject *cont_dir = NULL;
 
 	/*
 	 * Read the first pointer in the chain to make sure there is
@@ -1169,10 +1239,11 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 		hdrp = NULL;
 	}
 
-	/* This pointer is NULL. Not an error - just nothing to follow. */
-	if (ret == ENOENT)
+	if (ret == ENOENT) /* This pointer is NULL. Not an error - just nothing to follow. */
 		return 0;
-	else if (ret < 0)
+	else if (ret > 0)  /* Unexpected struct header - a warning condition */
+		return ret;
+	else if (ret < 0)  /* Error reading control space */
 		return ret;
 
 	/* Find the offset for the chained field in this structure type. */
@@ -1182,42 +1253,33 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 		return chain_offset;
 	}
 
-	/* Create the container directory for all the chained structures */
-	struct_dir = alloc_control_info(zbdev, hdrp, hdr_offset, parent);
-	if (struct_dir == NULL) {
-		pr_debug("failed to allocate control_info\n");
-		return -ENOMEM;
-	}
-	if (!hdrp) {  /* table - set type/size */
-		struct_dir->type = csp->struct_type;
-		struct_dir->size = (*csp->size_fn)(struct_dir->parent);
-	}
-
 	name = genz_control_name(type);
-	kobject_init(&struct_dir->kobj, &control_info_ktype);
-	ret = kobject_add(&struct_dir->kobj, dir, "%s", name);
-	if (ret < 0) {
-		kobject_put(&struct_dir->kobj);
-		return ret;
-	}
 
 	while (!done) {
 		/* Allocate a genz_control_info/kobject for this directory */
-		ci = alloc_control_info(zbdev, hdrp, hdr_offset, struct_dir);
+		ci = alloc_control_info(zbdev, hdrp, hdr_offset, parent, sibling, csp);
 		if (ci == NULL) {
 			pr_debug("failed to allocate control_info\n");
 			return -ENOMEM;
 		}
 		if (!hdrp) {  /* table - set type/size */
 			ci->type = csp->struct_type;
-			ci->size = (*csp->size_fn)(ci->parent);
+			ci->size = (*csp->size_fn)(ci);
 		}
 
 		pr_debug("%s type 0x%x size 0x%lx name %s\n",
 			 is_struct ? "struct" : "table", ci->type, ci->size, name);
-		kobject_init(&ci->kobj, &control_info_ktype);
-		ret = kobject_add(&ci->kobj, &struct_dir->kobj, "%s%d@0x%lx",
-				  name, chain_num++, ci->start);
+		if (cont_dir == NULL) {  /* create chain container directory */
+			ret = chain_container_dir(ci, name, dir);
+			if (ret < 0) {
+				/* Revisit: undo stuff */
+				return ret;
+			}
+			cont_dir = ci->cont_dir;
+		}
+		ret = kobject_init_and_add(&ci->kobj, &control_info_ktype,
+					   cont_dir, "%s%d@0x%lx",
+					   name, chain_num++, ci->start);
 		if (ret < 0) {
 			kobject_put(&ci->kobj);
 			return ret;
@@ -1239,7 +1301,7 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 		 * this while loop.
 		 */
 		ret = traverse_control_pointers(zbdev, rmri, ci, type, vers,
-						&ci->kobj);
+						&ci->kobj, NULL);
 		if (ret < 0) {
 			/* Handle error! */
 			return ret;
@@ -1267,15 +1329,23 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 	return ret;
 }
 
+/* Revisit: this is ugly */
+/* Process generic PTRs before special, and be sure to do all Interfaces before
+ * Component Destination, so that max_iface_hvs() works.
+ */
+static uint core_ptr_order[] = {0, 1, 2, 3, 4, 5, 6, 7, 8,  /* StructPTR 0-8 */
+				16, 17, 18, 19, 20, 21, 22, /* StructPTR 9-15 */
+				14, 11, 13, 10, 12, 9, 15};
+
 static int start_core_structure(struct genz_bridge_dev *zbdev,
-			struct genz_control_info *parent,
+			struct genz_rmr_info *rmri,
+			struct genz_control_info **root,
 			struct genz_control_ptr_info *pi,
 			struct kobject *con_dir)
 {
 	int ret;
 	struct genz_control_structure_header hdr;
-	struct genz_control_info *ci;
-	struct genz_rmr_info *rmri = parent->rmri;
+	struct genz_control_info *ci, *sibling = NULL;
 
 	if (zbdev == NULL) {
 		pr_debug("zbdev is NULL\n");
@@ -1309,20 +1379,20 @@ static int start_core_structure(struct genz_bridge_dev *zbdev,
 	}
 
 	/* Allocate a genz_control_info with a kobject for this directory */
-	ci = alloc_control_info(zbdev, &hdr, 0x0, parent);
+	ci = alloc_control_info(zbdev, &hdr, 0x0, NULL, &sibling, NULL);
 	if (ci == NULL) {
 		pr_debug("failed to allocate control_info\n");
 		return -ENOMEM;
 	}
 
-	kobject_init(&ci->kobj, &control_info_ktype);
-	ret = kobject_add(&ci->kobj, con_dir, "%s@0x%lx",
-			  genz_structure_name(hdr.type), ci->start);
+	ret = kobject_init_and_add(&ci->kobj, &control_info_ktype, con_dir,
+			"%s@0x%lx", genz_structure_name(hdr.type), ci->start);
 	if (ret < 0) {
 		pr_debug("kobject_add failed with %d\n", ret);
 		kobject_put(&ci->kobj);
 		return ret;
 	}
+	*root = ci;
 
 	/* Now initialize the binary attribute file. */
 	sysfs_bin_attr_init(&ci->battr);
@@ -1341,8 +1411,8 @@ static int start_core_structure(struct genz_bridge_dev *zbdev,
 		return ret;
 	}
 	/* Recursively traverse any pointers in this structure */
-	ret = traverse_control_pointers(zbdev, rmri, ci,
-					hdr.type, hdr.vers, con_dir);
+	ret = traverse_control_pointers(zbdev, rmri, ci, hdr.type, hdr.vers,
+					con_dir, core_ptr_order);
 	if (ret < 0) {
 		/* Revisit: handle error */
 		pr_debug("traverse_control_pointers for %s failed with %d\n",
@@ -1355,7 +1425,8 @@ static int start_core_structure(struct genz_bridge_dev *zbdev,
 static int traverse_structure(struct genz_bridge_dev *zbdev,
 			struct genz_rmr_info *rmri,
 			struct genz_control_info *parent,
-			struct kobject *dir,
+			struct genz_control_info **sibling,
+			struct kobject *struct_dir,
 			const struct genz_control_structure_ptr *csp)
 {
 	int ret;
@@ -1377,7 +1448,7 @@ static int traverse_structure(struct genz_bridge_dev *zbdev,
 	}
 
 	/* Allocate a genz_control_info with a kobject for this directory */
-	ci = alloc_control_info(zbdev, &hdr, hdr_offset, parent);
+	ci = alloc_control_info(zbdev, &hdr, hdr_offset, parent, sibling, csp);
 	if (ci == NULL) {
 		pr_debug("failed to allocate control_info\n");
 		return -ENOMEM;
@@ -1385,10 +1456,9 @@ static int traverse_structure(struct genz_bridge_dev *zbdev,
 	pr_debug("after alloc_control_info hdr_offset is 0x%lx ci->start is 0x%lx\n", hdr_offset, ci->start);
 
 	/* Revisit: the directory is supposed to be the field name not the structure name. */
-	pr_debug("calling kobject_init and kobject_add for %s\n", genz_structure_name(hdr.type));
-	kobject_init(&ci->kobj, &control_info_ktype);
-	ret = kobject_add(&ci->kobj, dir, "%s@0x%lx",
-			  genz_structure_name(hdr.type), ci->start);
+	pr_debug("calling kobject_init_and_add for %s\n", genz_structure_name(hdr.type));
+	ret = kobject_init_and_add(&ci->kobj, &control_info_ktype, struct_dir,
+			"%s@0x%lx", genz_structure_name(hdr.type), ci->start);
 	if (ret < 0) {
 		pr_debug("kobject_add failed with %d\n", ret);
 		kobject_put(&ci->kobj);
@@ -1414,9 +1484,8 @@ static int traverse_structure(struct genz_bridge_dev *zbdev,
 	}
 	/* Recursively traverse any pointers in this structure */
 	pr_debug("calling traverse_control_pointers for any pointers in struct %s\n", ci->battr.attr.name);
-	ret = traverse_control_pointers(zbdev, rmri, ci,
-		hdr.type, hdr.vers,
-		&ci->kobj);
+	ret = traverse_control_pointers(zbdev, rmri, ci, hdr.type, hdr.vers,
+					&ci->kobj, NULL);
 	if (ret < 0) {
 		/* Revisit: handle error */
 		pr_debug("traverse_control_pointers for %s failed with %d\n", ci->battr.attr.name, ret);
@@ -1424,46 +1493,17 @@ static int traverse_structure(struct genz_bridge_dev *zbdev,
 	}
 	return 0;
 }
-#ifdef NOT_YET
-static struct genz_control_info * create_chain_directory(
-	const struct genz_control_structure_ptr *csp,
-	struct genz_dev *zdev,
-	struct genz_control_info *parent,
-	struct genz_control_ptr_info *pi,
-	struct kobject *dir)
-{
-	struct genz_control_info *ci;
-	int ret;
-
-	/* Allocate a genz_control_info with a kobject for this directory */
-	ci = alloc_control_info(zdev, NULL, 0x0, zdev->root_control_info);
-	if (ci == NULL) {
-		pr_debug("failed to allocate control_info\n");
-		return NULL;
-	}
-
-	/* The chained directory is named for the structure name. */
-	kobject_init(&ci->kobj, &control_info_ktype);
-	ret = kobject_add(&ci->kobj, dir, "%s",
-			genz_structure_name(csp->struct_type));
-	if (ret < 0) {
-		pr_debug("kobject_add failed with %d\n", ret);
-		kobject_put(&ci->kobj);
-		return NULL;
-	}
-
-	return ci;
-}
-#endif 
 
 static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 	struct genz_rmr_info *rmri,
 	struct genz_control_info *parent,
 	int struct_type,
 	int struct_vers,
-	struct kobject *dir)
+	struct kobject *dir,
+	uint order[])
 {
 	const struct genz_control_structure_ptr *csp, *csp_entry;
+	struct genz_control_info *sibling = NULL;
 	int i, ret, num_ptrs;
 
 	ret = get_control_ptr(zbdev, struct_type, struct_vers, &csp, &num_ptrs);
@@ -1472,7 +1512,10 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 		return ret;
 	}
 	for (i = 0; i < num_ptrs; i++) {
-		csp_entry = &csp[i];
+		if (order)  /* caller specified a traversal order */
+			csp_entry = &csp[order[i]];
+		else  /* increasing order */
+			csp_entry = &csp[i];
 		switch (csp_entry->ptr_type) {
 		case GENZ_CONTROL_POINTER_NONE:
 			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_NONE\n",
@@ -1484,11 +1527,11 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 			if (is_head_of_chain(csp_entry)) {
 				pr_debug("is_head_of_chain is true\n");
 				ret = traverse_chained_control_pointers(
-					zbdev, rmri, parent, dir,
+					zbdev, rmri, parent, &sibling, dir,
 					csp_entry, num_ptrs);
 			} else {
 				ret = traverse_structure(zbdev, rmri, parent,
-							 dir, csp_entry);
+							 &sibling, dir, csp_entry);
 			}
 			break;
 		case GENZ_CONTROL_POINTER_CHAINED:
@@ -1498,7 +1541,7 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 		case GENZ_CONTROL_POINTER_ARRAY:
 			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_ARRAY\n",
 				 csp_entry->ptr_name);
-			ret = traverse_table(zbdev, rmri, parent,
+			ret = traverse_table(zbdev, rmri, parent, &sibling,
 					     dir, csp_entry);
 			break;
 		case GENZ_CONTROL_POINTER_TABLE:
@@ -1507,17 +1550,17 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 			if (is_head_of_chain(csp_entry)) {
 				pr_debug("is_head_of_chain is true\n");
 				ret = traverse_chained_control_pointers(
-					zbdev, rmri, parent, dir,
+					zbdev, rmri, parent, &sibling, dir,
 					csp_entry, num_ptrs);
 			} else {
 				ret = traverse_table(zbdev, rmri, parent,
-						     dir, csp_entry);
+						     &sibling, dir, csp_entry);
 			}
 			break;
 		case GENZ_CONTROL_POINTER_TABLE_WITH_HEADER:
 			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_TABLE_WITH_HEADER\n",
 				 csp_entry->ptr_name);
-			ret = traverse_table(zbdev, rmri, parent,
+			ret = traverse_table(zbdev, rmri, parent, &sibling,
 					     dir, csp_entry);
 			break;
 		}
@@ -1663,12 +1706,12 @@ int genz_control_read_mgr_uuid(struct genz_bridge_dev *zbdev,
  */
 int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 {
-	int                 ret;
-	struct genz_dev     *zdev = &zbdev->zdev;
-	struct device       *bdev = zbdev->bridge_dev;
-	char                bridgeN[MAX_GENZ_NAME];
-	uint                fabric_num;
-	struct kobject      *genz_dir;
+	int                      ret;
+	struct genz_dev          *zdev = &zbdev->zdev;
+	struct device            *bdev = zbdev->bridge_dev;
+	char                     bridgeN[MAX_GENZ_NAME];
+	uint                     fabric_num;
+	struct kobject           *genz_dir;
 
 	/* Make the genzN directory under the native device */
 	genz_dir = &zbdev->genzN_dir;
@@ -1690,13 +1733,11 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 		goto err_kobj;
 	}
 
-	/* Make control directory under native device/genzN */
-	zdev->root_control_info = alloc_control_info(zbdev, NULL, 0, NULL);
+	/* Make control directory under genzN */
 	/* Revisit: error handling */
 	//zdev->root_control_info->kobj.kset = zbdev->genz_kset; /* Revisit */
-	ret = kobject_init_and_add(
-		&zdev->root_control_info->kobj,
-		&control_info_ktype, genz_dir, "control");
+	ret = kobject_init_and_add(&zdev->root_kobj,
+				   &control_dir_ktype, genz_dir, "control");
 	if (ret < 0) {
 		pr_debug("unable to create bridge control directory\n");
 		goto err_control;
@@ -1745,11 +1786,11 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 
 	/* Revisit: error handling */
 
-	pr_debug("calling start_core_structure for the core structure\n");
-	ret = start_core_structure(zbdev,
-			zdev->root_control_info,
+	pr_debug("calling start_core_structure\n");
+	ret = start_core_structure(zbdev, NULL,
+			&zdev->root_control_info,
 			&genz_struct_type_to_ptrs[GENZ_CORE_STRUCTURE],
-			&zdev->root_control_info->kobj); /* control dir */
+			&zdev->root_kobj); /* control dir */
 	return 0;
 
 err_control:
@@ -1758,6 +1799,40 @@ err_kobj:
 err_genz_dir:
 	kobject_put(genz_dir);
 	return ret;
+}
+
+struct genz_control_info *genz_first_struct_of_type(
+	struct genz_control_info *parent, uint type)
+{
+	struct genz_control_info *ci;
+
+	if (parent == NULL)
+		return NULL;
+
+	for (ci = parent->child; ci != NULL; ci = ci->sibling) {
+		if (ci->type == type)
+			break;
+	}
+
+	pr_debug("parent=%px, type=%d, ci=%px\n", parent, type, ci);
+	return ci;
+}
+
+struct genz_control_info *genz_next_struct_of_type(
+	struct genz_control_info *prev, uint type)
+{
+	struct genz_control_info *ci;
+
+	if (prev == NULL)
+		return NULL;
+
+	for (ci = prev->sibling; ci != NULL; ci = ci->sibling) {
+		if (ci->type == type)
+			break;
+	}
+
+	pr_debug("prev=%px, type=%d, ci=%px\n", prev, type, ci);
+	return ci;
 }
 
 #ifdef BROKEN
@@ -1810,7 +1885,7 @@ int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev)
 	dir = &zbdev->zdev.zcomp->subnet->fabric->dev.kobj;
 	snprintf(bridgeN, MAX_GENZ_NAME, "bridge%d", zbdev->bridge_num);
 	dev_dbg(zbdev->bridge_dev, "removing %s symlink for kobj %s\n",
-		bridgeN, dir->name);
+		bridgeN, kobject_name(dir));
 	sysfs_remove_link(dir, bridgeN);
 	/* remove the genzN directory */
 	kobject_del(&zbdev->genzN_dir);

@@ -219,17 +219,19 @@ static inline uint get_uint_len(uint val)
 /* Control space structure used to represent the /sys hierarchy. */
 struct genz_control_info {
 	struct kobject          kobj;
+	struct kobject          *cont_dir;     /* container directory */
 	struct resource         *c_access_res; /* points into the c-access
 						* tree- may not end up being
 						* a struct resource *.
 						*/
-	struct genz_control_info *parent, *sibling, *child; /* control structure hierarchy used for creating /sys hierarchy */
+	struct genz_control_info *parent, *sibling, *child; /* control structure hierarchy */
 	struct genz_bridge_dev	*zbdev;
 	off_t                   start;
 	uint32_t		type;		/* type from the control_structure_header */
 	uint8_t			vers;		/* version from the control_structure_header */
 	size_t                  size;		/* size in bytes */
 	struct genz_rmr_info    *rmri;		/* req zmmu info */
+	const struct genz_control_structure_ptr *csp;
 	struct bin_attribute	battr;
 };
 
