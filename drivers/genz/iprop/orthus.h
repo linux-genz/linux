@@ -23,6 +23,8 @@ enum iprop_genz_block_type {
 	IPROP_GENZ_REQ_ZMMU,
 	IPROP_GENZ_REQ_LAYER,
 	IPROP_GENZ_THIN_SW_LAYER,
+	IPROP_GENZ_PTE_TABLE,
+	IPROP_GENZ_RAW_CB_TABLE,
 	IPROP_BLOCK_CNT  /* must be last */
 };
 
@@ -82,6 +84,22 @@ struct iprop_genz_thin_sw_layer {
 	struct resource         res;
 };
 
+struct iprop_genz_pte_table {
+	struct device           *dev;
+	struct clk_bulk_data    *clks;
+	int                     num_clks;
+	void __iomem            *base;
+	struct resource         res;
+};
+
+struct iprop_genz_raw_cb_table {
+	struct device           *dev;
+	struct clk_bulk_data    *clks;
+	int                     num_clks;
+	void __iomem            *base;
+	struct resource         res;
+};
+
 struct orthus_bridge {
 	atomic_t                        block_cnt;
 	struct iprop_genz_phy           phy;
@@ -90,6 +108,8 @@ struct orthus_bridge {
 	struct iprop_genz_req_zmmu      req_zmmu;
 	struct iprop_genz_req_layer     req_layer;
 	struct iprop_genz_thin_sw_layer thin_sw_layer;
+	struct iprop_genz_pte_table     pte_table;
+	struct iprop_genz_raw_cb_table  raw_cb_table;
 	spinlock_t                      obr_lock;  /* global bridge lock */
 	struct device                   *obr_dev;
 	/* Revisit: finish this */

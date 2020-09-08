@@ -169,8 +169,14 @@ static int orthus_control_offset_to_base(struct orthus_bridge *obr,
 	} else if (within_res(res_addr, &obr->phy.res)) {
 		*base = obr->phy.base;
 		res = &obr->phy.res;
+	} else if (within_res(res_addr, &obr->pte_table.res)) {
+		*base = obr->pte_table.base;
+		res = &obr->pte_table.res;
+	} else if (within_res(res_addr, &obr->raw_cb_table.res)) {
+		*base = obr->raw_cb_table.base;
+		res = &obr->raw_cb_table.res;
 	} else {
-		ret = -EINVAL;
+		ret = EINVAL;  /* warn for bad offset, not error */
 	}
 	if (ret == 0)
 		*blk_offset = res_addr - res->start;
@@ -178,11 +184,12 @@ static int orthus_control_offset_to_base(struct orthus_bridge *obr,
 	return ret;
 }
 
+#define ORTHUS_FIXUPS_V0P5
 /* Revisit: temporary - fill in some PTRs & Vdef Hdrs missing in HW */
 static int orthus_local_control_read_fixup(struct orthus_bridge *obr, loff_t offset,
 					   size_t size, void *data, uint flags)
 {
-	/* Revisit: endianness */
+#if defined(ORTHUS_FIXUPS_V0P4P2)
 	if (offset == 0x60 && size == 4) {            /* Struct PTR6 */
 		*((uint32_t *)data) = 0x6000;
 		return 1;
@@ -205,7 +212,44 @@ static int orthus_local_control_read_fixup(struct orthus_bridge *obr, loff_t off
 		*((uint32_t *)data) = 0x0100100a;
 		return 1;
 	}
-
+#elif defined(ORTHUS_FIXUPS_V0P5)
+	if (offset == 0x48 && size == 4) {            /* Core StructPTR0 */
+		*((uint32_t *)data) = 0x0000;
+		return 1;
+	} else if (offset == 0x4c && size == 4) {     /* Core StructPTR1 */
+		*((uint32_t *)data) = 0x4000;
+		return 1;
+	} else if (offset == 0x50 && size == 4) {     /* Core StructPTR2 */
+		*((uint32_t *)data) = 0x5000;
+		return 1;
+	} else if (offset == 0x54 && size == 4) {     /* Core StructPTR3 */
+		*((uint32_t *)data) = 0x6000;
+		return 1;
+	} else if (offset == 0x58 && size == 4) {     /* Core StructPTR4 */
+		*((uint32_t *)data) = 0x6100;
+		return 1;
+	} else if (offset == 0x20080 && size == 4) {  /* Interface0 IPHY PTR */
+		*((uint32_t *)data) = 0x3000;
+		return 1;
+	} else if (offset == 0x2008c && size == 4) {  /* Interface0 VD PTR */
+		*((uint32_t *)data) = 0x2010;
+		return 1;
+	} else if (offset == 0x50000 && size == 4) {   /* Comp PG Hdr */
+		*((uint32_t *)data) = 0x00061021;
+		return 1;
+	} else if (offset == 0x50018 && size == 4) {   /* PGBasePTR */
+		/* Revisit: workaround to prevent HW hang */
+		//*((uint32_t *)data) = 0x00005300;
+		*((uint32_t *)data) = 0x00000000;
+		return 1;
+	} else if (offset == 0x5001c && size == 4) {   /* PTEBasePTR */
+		*((uint32_t *)data) = 0x00008000;
+		return 1;
+	} else if (offset == 0x60000 && size == 4) {   /* RawCB Vdef Hdr */
+		*((uint32_t *)data) = 0x0100100a;
+		return 1;
+	}
+#endif
 	return 0;
 }
 
@@ -228,7 +272,7 @@ static int orthus_local_control_read(struct genz_bridge_dev *gzbr, loff_t offset
 	if (ret == 1)
 		return 0;
 	ret = orthus_control_offset_to_base(obr, offset, &blk_offset, &base);
-	if (ret < 0)
+	if (ret != 0)
 		return ret;
 
 	csr = blk_offset & ~7ull;
@@ -700,6 +744,94 @@ static int orthus_genz_thin_sw_layer_remove(struct platform_device *pdev,
 	return 0;
 }
 
+static int orthus_genz_pte_table_probe(struct platform_device *pdev,
+				       struct orthus_bridge *obr)
+{
+	struct iprop_genz_pte_table *pte_table = &obr->pte_table;
+	struct device *dev = &pdev->dev;
+	struct device_node *const np = dev->of_node;
+	int ret;
+
+	pte_table->dev = dev;
+	ret = devm_clk_bulk_get_all(dev, &pte_table->clks);
+	if (ret < 0) {
+		dev_err(dev, "failed to get genz_pte_table clocks, ret=%d\n", ret);
+		return ret;
+	}
+	pte_table->num_clks = ret;
+	pte_table->base = of_io_request_and_map(np, 0, of_node_full_name(np));
+	if (IS_ERR(pte_table->base)) {
+		ret = PTR_ERR(pte_table->base);
+		dev_err(dev, "mapping genz_pte_table failed, ret=%d\n", ret);
+		return ret;
+	}
+	of_address_to_resource(np, 0, &pte_table->res);
+	dev_dbg(dev, "pte_table->base(%px)=0x%llx, res.start=0x%llx\n", pte_table->base, ioread64(pte_table->base), pte_table->res.start);
+	ret = clk_bulk_prepare_enable(pte_table->num_clks, pte_table->clks);
+	if (ret < 0) {
+		dev_err(dev, "enabling genz_pte_table clocks failed, ret=%d\n", ret);
+	}
+
+	/* Revisit: add other pte_table init */
+
+	return ret;
+}
+
+static int orthus_genz_pte_table_remove(struct platform_device *pdev,
+					struct orthus_bridge *obr)
+{
+	struct iprop_genz_pte_table *const pte_table = &obr->pte_table;
+	struct device *dev = &pdev->dev;
+
+	dev_dbg(dev, "entered\n");
+	clk_bulk_disable_unprepare(pte_table->num_clks, pte_table->clks);
+	return 0;
+}
+
+static int orthus_genz_raw_cb_table_probe(struct platform_device *pdev,
+					  struct orthus_bridge *obr)
+{
+	struct iprop_genz_raw_cb_table *raw_cb_table = &obr->raw_cb_table;
+	struct device *dev = &pdev->dev;
+	struct device_node *const np = dev->of_node;
+	int ret;
+
+	raw_cb_table->dev = dev;
+	ret = devm_clk_bulk_get_all(dev, &raw_cb_table->clks);
+	if (ret < 0) {
+		dev_err(dev, "failed to get genz_raw_cb_table clocks, ret=%d\n", ret);
+		return ret;
+	}
+	raw_cb_table->num_clks = ret;
+	raw_cb_table->base = of_io_request_and_map(np, 0, of_node_full_name(np));
+	if (IS_ERR(raw_cb_table->base)) {
+		ret = PTR_ERR(raw_cb_table->base);
+		dev_err(dev, "mapping genz_raw_cb_table failed, ret=%d\n", ret);
+		return ret;
+	}
+	of_address_to_resource(np, 0, &raw_cb_table->res);
+	dev_dbg(dev, "raw_cb_table->base(%px)=0x%llx, res.start=0x%llx\n", raw_cb_table->base, ioread64(raw_cb_table->base), raw_cb_table->res.start);
+	ret = clk_bulk_prepare_enable(raw_cb_table->num_clks, raw_cb_table->clks);
+	if (ret < 0) {
+		dev_err(dev, "enabling genz_raw_cb_table clocks failed, ret=%d\n", ret);
+	}
+
+	/* Revisit: add other raw_cb_table init */
+
+	return ret;
+}
+
+static int orthus_genz_raw_cb_table_remove(struct platform_device *pdev,
+					   struct orthus_bridge *obr)
+{
+	struct iprop_genz_raw_cb_table *const raw_cb_table = &obr->raw_cb_table;
+	struct device *dev = &pdev->dev;
+
+	dev_dbg(dev, "entered\n");
+	clk_bulk_disable_unprepare(raw_cb_table->num_clks, raw_cb_table->clks);
+	return 0;
+}
+
 static const struct iprop_block_data iprop_genz_phy_data = {
 	.type = IPROP_GENZ_PHY,
 	.block_probe = orthus_genz_phy_probe,
@@ -736,6 +868,18 @@ static const struct iprop_block_data iprop_genz_thin_sw_layer_data = {
 	.block_remove = orthus_genz_thin_sw_layer_remove,
 };
 
+static const struct iprop_block_data iprop_genz_pte_table_data = {
+	.type = IPROP_GENZ_PTE_TABLE,
+	.block_probe = orthus_genz_pte_table_probe,
+	.block_remove = orthus_genz_pte_table_remove,
+};
+
+static const struct iprop_block_data iprop_genz_raw_cb_table_data = {
+	.type = IPROP_GENZ_RAW_CB_TABLE,
+	.block_probe = orthus_genz_raw_cb_table_probe,
+	.block_remove = orthus_genz_raw_cb_table_remove,
+};
+
 static const struct of_device_id orthus_dt_ids[] = {
 	{ .compatible = "xlnx,iprop-genz-802-3-phy-layer-1.0",
 	  .data = &iprop_genz_phy_data },
@@ -749,6 +893,10 @@ static const struct of_device_id orthus_dt_ids[] = {
 	  .data = &iprop_genz_req_layer_data },
 	{ .compatible = "xlnx,iprop-genz-thin-switch-layer-1.0",
 	  .data = &iprop_genz_thin_sw_layer_data },
+	{ .compatible = "xlnx,iprop-genz-pte-table",
+	  .data = &iprop_genz_pte_table_data },
+	{ .compatible = "xlnx,iprop-genz-raw-cb-table",
+	  .data = &iprop_genz_raw_cb_table_data },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, orthus_dt_ids);
