@@ -166,10 +166,13 @@ static bool genz_validate_table_type(int type)
  * int type - the control table type
  * Returns the name of a table type or "unknown" if the type is not vaild.
  */
-static inline const char *genz_table_name(int type)
+static inline const char *genz_table_name(int type,
+				const struct genz_control_structure_ptr *csp)
 {
 	if (!genz_validate_table_type(type))
 		return "unknown";
+	if (csp)
+		return csp->ptr_name;
 
 	return genz_table_type_to_ptrs[type-GENZ_TABLE_ENUM_START].name;
 }
@@ -196,14 +199,16 @@ static inline bool is_struct_type(int type)
 /**
  * genz_control_name - return the name of a given control structure/table
  * int type - the control structure/table type
+ * csp - pointer to the genz_control_structure_ptr
  * Returns the name or "unknown" if the type is not vaild.
  */
-static inline const char *genz_control_name(int type)
+static inline const char *genz_control_name(int type,
+				const struct genz_control_structure_ptr *csp)
 {
 	if (is_struct_type(type))
 		return genz_structure_name(type);
 	else
-		return genz_table_name(type);
+		return genz_table_name(type, csp);
 }
 
 static void control_info_release(struct kobject *kobj)
@@ -1038,7 +1043,7 @@ static int traverse_table(struct genz_bridge_dev *zbdev,
 	}
 	ci->type = csp->struct_type;
 	ci->size = (*csp->size_fn)(ci);
-	table_name = genz_table_name(ci->type);
+	table_name = genz_table_name(ci->type, csp);
 
 	pr_debug("table type 0x%x size 0x%lx name %s\n", ci->type, ci->size, table_name);
 
@@ -1253,7 +1258,7 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 		return chain_offset;
 	}
 
-	name = genz_control_name(type);
+	name = genz_control_name(type, csp);
 
 	while (!done) {
 		/* Allocate a genz_control_info/kobject for this directory */
