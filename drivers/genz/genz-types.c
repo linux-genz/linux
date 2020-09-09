@@ -106,7 +106,7 @@ struct genz_control_structure_ptr core_structure_ptrs[] = {
 
 struct genz_control_structure_ptr opcode_set_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x18, GENZ_OPCODE_SET_UUID_TABLE, "opcode_set_uuid", genz_opcode_set_uuid_table_size },
-    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x1c, GENZ_OPCODE_SET_TABLE, "opcode_set", genz_opcode_set_table_size },
+    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x1c, GENZ_OPCODE_SET_TABLE, "opcode_set_table", genz_opcode_set_table_size },
 };
 
 struct genz_control_structure_ptr interface_structure_ptrs[] = {
@@ -230,10 +230,10 @@ struct genz_control_structure_ptr requester_p2p_structure_ptrs[] = {
 
 struct genz_control_structure_ptr component_pa_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x1c, GENZ_PA_TABLE, "pa", genz_pa_table_size },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x20, GENZ_SSAP_MCAP_MSAP_AND_MSMCAP_TABLE, "ssap", genz_ssap_mcap_msap_and_msmcap_table_size },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x24, GENZ_SSAP_MCAP_MSAP_AND_MSMCAP_TABLE, "msap", genz_ssap_mcap_msap_and_msmcap_table_size },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x28, GENZ_SSAP_MCAP_MSAP_AND_MSMCAP_TABLE, "mcap", genz_ssap_mcap_msap_and_msmcap_table_size },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0x2c, GENZ_SSAP_MCAP_MSAP_AND_MSMCAP_TABLE, "msmcap", genz_ssap_mcap_msap_and_msmcap_table_size },
+    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x20, GENZ_SSAP_MCAP_MSAP_AND_MSMCAP_TABLE, "ssap", genz_ssap_mcap_msap_and_msmcap_table_size },
+    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x24, GENZ_SSAP_MCAP_MSAP_AND_MSMCAP_TABLE, "msap", genz_ssap_mcap_msap_and_msmcap_table_size },
+    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x28, GENZ_SSAP_MCAP_MSAP_AND_MSMCAP_TABLE, "mcap", genz_ssap_mcap_msap_and_msmcap_table_size },
+    { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x2c, GENZ_SSAP_MCAP_MSAP_AND_MSMCAP_TABLE, "msmcap", genz_ssap_mcap_msap_and_msmcap_table_size },
 };
 
 struct genz_control_structure_ptr component_lpd_structure_ptrs[] = {
@@ -271,11 +271,11 @@ struct genz_control_structure_ptr component_lph_structure_ptrs[] = {
 
 struct genz_control_structure_ptr component_page_grid_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x18, GENZ_PAGE_GRID_RESTRICTED_PAGE_GRID_TABLE, "pg_base", genz_page_grid_restricted_page_grid_table_size },
-    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x1c, GENZ_PTE_RESTRICTED_PTE_TABLE, "pte_base", genz_pte_restricted_pte_table_size },
+    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x1c, GENZ_PTE_RESTRICTED_PTE_TABLE, "pte_table", genz_pte_restricted_pte_table_size },
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x20, GENZ_VENDOR_DEFINED_WITH_UUID_STRUCTURE, "vendor_defined" },
     { GENZ_CONTROL_POINTER_CHAINED, GENZ_4_BYTE_POINTER, 0x24, GENZ_COMPONENT_PAGE_GRID_STRUCTURE, "next_component_page_grid" },
     { GENZ_CONTROL_POINTER_ARRAY, GENZ_4_BYTE_POINTER, 0x28, GENZ_PAGE_GRID_RESTRICTED_PAGE_GRID_TABLE, "restricted_pg_base", genz_page_grid_restricted_page_grid_table_size },
-    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x2c, GENZ_PTE_RESTRICTED_PTE_TABLE, "restricted_pte_base", genz_pte_restricted_pte_table_size },
+    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0x2c, GENZ_PTE_RESTRICTED_PTE_TABLE, "restricted_pte_table", genz_pte_restricted_pte_table_size },
 };
 
 struct genz_control_structure_ptr component_page_table_structure_ptrs[] = {
