@@ -30,7 +30,7 @@ enum iprop_genz_block_type {
 
 /* Revisit: fix these, or better yet, read values from HW/FW */
 #define GB(_x)                      ((_x)*BIT_ULL(30))
-#define ORTHUS_PAGE_GRID_ENTRIES    32
+#define ORTHUS_PAGE_GRID_ENTRIES    16
 #define ORTHUS_REQ_ZMMU_ENTRIES     1024
 #define ORTHUS_MIN_CPUVISIBLE_ADDR  GB(6)
 #define ORTHUS_MAX_CPUVISIBLE_ADDR  GB(250)
@@ -65,6 +65,7 @@ struct iprop_genz_req_zmmu {
 	struct clk_bulk_data    *clks;
 	int                     num_clks;
 	void __iomem            *base;
+	void __iomem            *pg_base; /* pointer to page grid table */
 	struct resource         res;
 };
 

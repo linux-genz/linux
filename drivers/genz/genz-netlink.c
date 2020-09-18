@@ -88,6 +88,15 @@ const static struct nla_policy genz_genl_fabric_policy[GENZ_A_F_MAX + 1] = {
 	[GENZ_A_F_MGR_UUID_LIST] = { .type = NLA_NESTED },
 };
 
+const static struct nla_policy genz_genl_fab_comp_policy[GENZ_A_FC_MAX + 1] = {
+	[GENZ_A_FC_GCID]         = { .type = NLA_U32 },
+	[GENZ_A_FC_BRIDGE_GCID]  = { .type = NLA_U32 },
+	[GENZ_A_FC_TEMP_GCID]    = { .type = NLA_U32 },
+	[GENZ_A_FC_DR_GCID]      = { .type = NLA_U32 },
+	[GENZ_A_FC_DR_INTERFACE] = { .type = NLA_U16 },
+	[GENZ_A_FC_MGR_UUID]     = { .len = UUID_LEN },
+};
+
 static inline int check_netlink_perm(void)
 {
 	if (!capable(CAP_SYS_RAWIO)) {  /* Revisit: best CAP? */
@@ -414,11 +423,11 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 	}
 /*
 	ret = genz_create_gcid_file(&(zcomp->kobj));
-*/
 	if (ret) {
 		pr_debug("genz_create_gcid_file failed\n");
 		return -EINVAL;
 	}
+*/
 
 	if (info->attrs[GENZ_A_CCLASS]) {
 		zcomp->cclass = nla_get_u16(info->attrs[GENZ_A_CCLASS]);
@@ -557,6 +566,203 @@ err:
 	return ret;
 }
 
+static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info)
+{
+	struct genz_component *zcomp = NULL;
+	uint32_t fabric_num, gcid, br_gcid, tmp_gcid, dr_gcid;
+	uint16_t dr_iface;
+	int ret = 0;
+	struct genz_fabric *f;
+	struct genz_subnet *s;
+	struct uuid_tracker *uu;
+	uuid_t mgr_uuid;
+	struct genz_bridge_dev *zbdev;
+
+	pr_debug("entered\n");
+	ret = check_netlink_perm();
+	if (ret < 0)
+		goto err;
+
+	if (info->attrs[GENZ_A_FC_MGR_UUID]) {
+		bytes_to_uuid(&mgr_uuid,
+			      nla_data(info->attrs[GENZ_A_FC_MGR_UUID]));
+		pr_debug("\tMGR_UUID: %pUb\n", &mgr_uuid);
+	} else {
+		pr_debug("missing required MGR_UUID\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	uu = genz_fabric_uuid_tracker_alloc_and_insert(&mgr_uuid);
+	if (!uu) {
+		return -ENOMEM;
+		goto err;
+	}
+	fabric_num = uu->fabric->fabric_num;
+	f = uu->fabric->fabric;
+	if (info->attrs[GENZ_A_FC_GCID]) {
+		gcid = nla_get_u32(info->attrs[GENZ_A_FC_GCID]);
+		pr_debug("\tGCID: %d ", gcid);
+	} else {
+		pr_debug("missing required GCID\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	/* validate the GCID */
+	if (gcid > MAX_GCID) {
+		pr_debug("GCID is invalid.\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	s = genz_add_subnet(genz_gcid_sid(gcid), f);
+	if (s == NULL) {
+		pr_debug("genz_add_subnet failed\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	zcomp = genz_add_component(s, genz_gcid_cid(gcid));
+	if (zcomp == NULL) {
+		pr_debug("genz_add_component failed\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	if (info->attrs[GENZ_A_FC_BRIDGE_GCID]) {
+		br_gcid = nla_get_u32(info->attrs[GENZ_A_FC_BRIDGE_GCID]);
+		pr_debug("\tBRIDGE_GCID: %d ", br_gcid);
+	} else {
+		pr_debug("missing required BRIDGE_GCID\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	if (info->attrs[GENZ_A_FC_TEMP_GCID]) {
+		tmp_gcid = nla_get_u32(info->attrs[GENZ_A_FC_TEMP_GCID]);
+		pr_debug("\tTEMP_GCID: %d ", tmp_gcid);
+	} else {
+		pr_debug("missing required TEMP_GCID\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	if (info->attrs[GENZ_A_FC_DR_GCID]) {
+		dr_gcid = nla_get_u32(info->attrs[GENZ_A_FC_DR_GCID]);
+		pr_debug("\tDR_GCID: %d ", dr_gcid);
+	} else {
+		pr_debug("missing required DR_GCID\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	if (info->attrs[GENZ_A_FC_DR_INTERFACE]) {
+		dr_iface = nla_get_u16(info->attrs[GENZ_A_FC_DR_INTERFACE]);
+		pr_debug("\tDR_INTERFACE: %d ", dr_iface);
+	} else {
+		pr_debug("missing required DR_INTERFACE\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	/*
+	 * There are 3 main scenarios handled here:
+	 * 1. A local bridge being moved from its temporary subsystem-assigned
+	 *    fabric/GCID to its permanent home.
+	 *    GCID: new, BRIDGE_GCID: same as GCID, TEMP_GCID: on temp subnet
+	 *    DR_GCID: invalid
+	 * 2. A new, directly-attached component.
+	 *    GCID: new, BRIDGE_GCID: not same as GCID, TEMP_GCID: invalid
+	 *    DR_GCID: invalid
+	 * 3. An existing directed-relay component being moved to its
+	 *    permanent GCID.
+	 *    GCID: new, BRIDGE_GCID: not same as GCID, TEMP_GCID: invalid
+	 *    DR_GCID: valid
+	 */
+	if (tmp_gcid != GENZ_INVALID_GCID && dr_gcid == GENZ_INVALID_GCID) {
+		/* scenario 1 */
+		if (gcid != br_gcid) {
+			pr_debug("scenario 1, gcid (%d) != br_gcid(%d)\n",
+				 gcid, br_gcid);
+			ret = -EINVAL;
+			goto err;
+		}
+		zbdev = genz_lookup_zbdev(genz_temp_fabric, tmp_gcid);
+		if (zbdev == NULL) {
+			pr_debug("scenario 1, tmp_gcid (%d) not found\n",
+				 tmp_gcid);
+			ret = -EINVAL;
+			goto err;
+		}
+		/* Revisit: can we use kobject_move instead? */
+		/* copy over values from old zcomp */
+		zcomp->cclass = zbdev->zdev.zcomp->cclass;
+		zcomp->c_uuid = zbdev->zdev.zcomp->c_uuid;
+		zcomp->fru_uuid = zbdev->zdev.zcomp->fru_uuid;
+		/* remove old zbdev stuff */
+		genz_bridge_remove_control_files(zbdev);
+		genz_remove_zbdev_from_fabric(zbdev);
+		/* add new zbdev stuff */
+		genz_add_zbdev_to_fabric(zbdev, f);
+		zbdev->zdev.zcomp = zcomp;
+		ret = genz_bridge_create_control_files(zbdev);
+		if (ret < 0) {
+			pr_debug("genz_bridge_create_control_files failed, ret=%d\n", ret);
+			goto err;
+		}
+	} else if (tmp_gcid == GENZ_INVALID_GCID && dr_gcid == GENZ_INVALID_GCID) {
+		/* scenario 2 */
+		pr_debug("scenario 2 - not yet implemented\n");
+		/* Revisit: finish this */
+	} else if (tmp_gcid == GENZ_INVALID_GCID && dr_gcid != GENZ_INVALID_GCID) {
+		/* scenario 3 */
+		pr_debug("scenario 3 - not yet implemented\n");
+	} else {
+		pr_debug("invalid combination of GCIDs\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	return ret;
+err:
+	if (zcomp)
+		kref_put(&zcomp->kref, genz_free_component);
+	return ret;
+}
+
+static int genz_remove_fabric_component(struct sk_buff *skb, struct genl_info *info)
+{
+	int ret = 0;
+
+	pr_debug("entered\n");
+	ret = check_netlink_perm();
+	if (ret < 0)
+		goto err;
+	/* Revisit: finish this */
+err:
+	return ret;
+}
+
+static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *info)
+{
+	int ret = 0;
+
+	pr_debug("entered\n");
+	ret = check_netlink_perm();
+	if (ret < 0)
+		goto err;
+	/* Revisit: finish this */
+	/* One scenario: A switch-attached component is to be accessed via
+	 * directed relay.
+	 */
+err:
+	return ret;
+}
+
+static int genz_remove_fabric_dr_component(struct sk_buff *skb, struct genl_info *info)
+{
+	int ret = 0;
+
+	pr_debug("entered\n");
+	ret = check_netlink_perm();
+	if (ret < 0)
+		goto err;
+	/* Revisit: finish this */
+err:
+	return ret;
+}
+
 static int genz_add_fabric(struct sk_buff *skb, struct genl_info *info)
 {
 	int ret = 0;
@@ -604,6 +810,23 @@ static struct genl_ops genz_gnl_ops[] = {
 	{
 	.cmd = GENZ_C_SYMLINK_OS_COMPONENT,
 	.doit = genz_symlink_os_component,
+	},
+	{
+	.cmd = GENZ_C_ADD_FABRIC_COMPONENT,
+	.doit = genz_add_fabric_component,
+	.policy = genz_genl_fab_comp_policy,
+	},
+	{
+	.cmd = GENZ_C_REMOVE_FABRIC_COMPONENT,
+	.doit = genz_remove_fabric_component,
+	},
+	{
+	.cmd = GENZ_C_ADD_FABRIC_DR_COMPONENT,
+	.doit = genz_add_fabric_dr_component,
+	},
+	{
+	.cmd = GENZ_C_REMOVE_FABRIC_DR_COMPONENT,
+	.doit = genz_remove_fabric_dr_component,
 	},
 	{
 	.cmd = GENZ_C_ADD_FABRIC,
