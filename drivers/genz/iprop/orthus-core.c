@@ -184,7 +184,7 @@ static int orthus_control_offset_to_base(struct orthus_bridge *obr,
 	return ret;
 }
 
-#define ORTHUS_FIXUPS_V0P5
+//#define ORTHUS_FIXUPS_V0P5
 /* Revisit: temporary - fill in some PTRs & Vdef Hdrs missing in HW */
 static int orthus_local_control_read_fixup(struct orthus_bridge *obr, loff_t offset,
 					   size_t size, void *data, uint flags)
@@ -238,9 +238,7 @@ static int orthus_local_control_read_fixup(struct orthus_bridge *obr, loff_t off
 		*((uint32_t *)data) = 0x00061021;
 		return 1;
 	} else if (offset == 0x50018 && size == 4) {   /* PGBasePTR */
-		/* Revisit: workaround to prevent HW hang */
-		//*((uint32_t *)data) = 0x00005300;
-		*((uint32_t *)data) = 0x00000000;
+		*((uint32_t *)data) = 0x00005400;
 		return 1;
 	} else if (offset == 0x5001c && size == 4) {   /* PTEBasePTR */
 		*((uint32_t *)data) = 0x00008000;
@@ -253,10 +251,10 @@ static int orthus_local_control_read_fixup(struct orthus_bridge *obr, loff_t off
 	return 0;
 }
 
-static int orthus_local_control_read(struct genz_bridge_dev *gzbr, loff_t offset,
-			       size_t size, void *data, uint flags)
+static int orthus_local_control_read(struct orthus_bridge *obr,
+				     struct device *dev, loff_t offset,
+				     size_t size, void *data, uint flags)
 {
-	struct orthus_bridge   *obr = orthus_gzbr_to_obr(gzbr);
 	uint64_t               csr_val = 0, val;
 	uint64_t               csr;
 	uint                   csr_align;
@@ -283,13 +281,13 @@ static int orthus_local_control_read(struct genz_bridge_dev *gzbr, loff_t offset
 	/* control space accessible only with 8-byte size & alignment */
 	shift = csr_align * 8;                       /* 0 - 56 */
 	write = min((size_t)(8 - csr_align), size);  /* 1 - 8 */
-	dev_dbg(&gzbr->zdev.dev, "obr=%px, offset=0x%llx, size=%lu, shift=%u, write=%ld, csr=0x%llx, base=%px\n",
+	dev_dbg(dev, "obr=%px, offset=0x%llx, size=%lu, shift=%u, write=%ld, csr=0x%llx, base=%px\n",
 		obr, offset, size, shift, write, csr, base);
 
 	/* Revisit: locking */
 	while (size > 0) {
 		csr_val = ioread64(base + csr);
-		dev_dbg(&gzbr->zdev.dev, "csr=0x%llx, csr_val=0x%llx, shifted val=0x%llx, size=%zu\n",
+		dev_dbg(dev, "csr=0x%llx, csr_val=0x%llx, shifted val=0x%llx, size=%zu\n",
 			csr, csr_val, csr_val >> shift, size);
 		val = csr_val >> shift;
 		/* Revisit: endianness */
@@ -308,22 +306,22 @@ static int orthus_control_read(struct genz_bridge_dev *gzbr, loff_t offset,
 			       size_t size, void *data,
 			       struct genz_rmr_info *rmri, uint flags)
 {
-	struct orthus_bridge *obr;
+	struct orthus_bridge *obr = orthus_gzbr_to_obr(gzbr);
+	struct device *dev = &gzbr->zdev.dev;
 	int ret = -EOPNOTSUPP; /* Revisit: temporary */
 
 	if (genz_is_local_bridge(gzbr, rmri)) {
-		return orthus_local_control_read(gzbr, offset, size, data, flags);
+		return orthus_local_control_read(obr, dev, offset, size, data, flags);
 	}
 
-	obr = orthus_gzbr_to_obr(gzbr);
 	/* Revisit: implement this */
 	return ret;
 }
 
-static int orthus_local_control_write(struct genz_bridge_dev *gzbr, loff_t offset,
-			       size_t size, void *data, uint flags)
+static int orthus_local_control_write(struct orthus_bridge *obr,
+				      struct device *dev, loff_t offset,
+				      size_t size, void *data, uint flags)
 {
-	struct orthus_bridge   *obr = orthus_gzbr_to_obr(gzbr);
 	uint64_t               val;
 	uint32_t               val4;
 	uint16_t               val2;
@@ -342,13 +340,13 @@ static int orthus_local_control_write(struct genz_bridge_dev *gzbr, loff_t offse
 		return ret;
 
 	csr_align = (uint)blk_offset & 7u;
-	dev_dbg(&gzbr->zdev.dev, "offset=0x%llx, size=%lu\n", offset, size);
+	dev_dbg(dev, "offset=0x%llx, size=%lu\n", offset, size);
 
 	/* Revisit: locking */
 	/* do small writes until csr is 8-byte aligned */
 	if (csr_align & 0x1) {  /* do 1-byte write */
 		val1 = *((uint8_t *)data);
-		dev_dbg(&gzbr->zdev.dev, "val1=0x%x, blk_offset=0x%llx\n",
+		dev_dbg(dev, "val1=0x%x, blk_offset=0x%llx\n",
 			val1, blk_offset);
 		iowrite8(val1, base + blk_offset);
 		data++;
@@ -357,7 +355,7 @@ static int orthus_local_control_write(struct genz_bridge_dev *gzbr, loff_t offse
 	}
 	if ((size > 0) && (csr_align & 0x2)) {  /* do 2-byte write */
 		val2 = *((uint16_t *)data);  /* Revisit: endianness */
-		dev_dbg(&gzbr->zdev.dev, "val2=0x%x, blk_offset=0x%llx\n",
+		dev_dbg(dev, "val2=0x%x, blk_offset=0x%llx\n",
 			val2, blk_offset);
 		iowrite16(val2, base + blk_offset);
 		data += 2;
@@ -366,7 +364,7 @@ static int orthus_local_control_write(struct genz_bridge_dev *gzbr, loff_t offse
 	}
 	if ((size > 0) && (csr_align & 0x4)) {  /* do 4-byte write */
 		val4 = *((uint32_t *)data);  /* Revisit: endianness */
-		dev_dbg(&gzbr->zdev.dev, "val4=0x%x, blk_offset=0x%llx\n",
+		dev_dbg(dev, "val4=0x%x, blk_offset=0x%llx\n",
 			val4, blk_offset);
 		iowrite32(val4, base + blk_offset);
 		data += 4;
@@ -376,7 +374,7 @@ static int orthus_local_control_write(struct genz_bridge_dev *gzbr, loff_t offse
 
 	while (size >= 8) {  /* do aligned 8-byte writes */
 		memcpy(&val, data, 8);
-		dev_dbg(&gzbr->zdev.dev, "val=0x%llx, blk_offset=0x%llx\n",
+		dev_dbg(dev, "val=0x%llx, blk_offset=0x%llx\n",
 			val, blk_offset);
 		iowrite64(val, base + blk_offset);
 		data += 8;
@@ -386,7 +384,7 @@ static int orthus_local_control_write(struct genz_bridge_dev *gzbr, loff_t offse
 
 	if (size & 0x4) {  /* do 4-byte write */
 		val4 = *((uint32_t *)data);  /* Revisit: endianness */
-		dev_dbg(&gzbr->zdev.dev, "val4=0x%x, blk_offset=0x%llx\n",
+		dev_dbg(dev, "val4=0x%x, blk_offset=0x%llx\n",
 			val4, blk_offset);
 		iowrite32(val4, base + blk_offset);
 		data += 4;
@@ -395,7 +393,7 @@ static int orthus_local_control_write(struct genz_bridge_dev *gzbr, loff_t offse
 	}
 	if (size & 0x2) {  /* do 2-byte write */
 		val2 = *((uint16_t *)data);  /* Revisit: endianness */
-		dev_dbg(&gzbr->zdev.dev, "val2=0x%x, blk_offset=0x%llx\n",
+		dev_dbg(dev, "val2=0x%x, blk_offset=0x%llx\n",
 			val2, blk_offset);
 		iowrite16(val2, base + blk_offset);
 		data += 2;
@@ -404,7 +402,7 @@ static int orthus_local_control_write(struct genz_bridge_dev *gzbr, loff_t offse
 	}
 	if (size & 0x1) {  /* do 1-byte write */
 		val1 = *((uint8_t *)data);
-		dev_dbg(&gzbr->zdev.dev, "val1=0x%x, blk_offset=0x%llx\n",
+		dev_dbg(dev, "val1=0x%x, blk_offset=0x%llx\n",
 			val1, blk_offset);
 		iowrite8(val1, base + blk_offset);
 		data++;
@@ -420,14 +418,14 @@ static int orthus_control_write(struct genz_bridge_dev *gzbr, loff_t offset,
 				size_t size, void *data,
 				struct genz_rmr_info *rmri, uint flags)
 {
-	struct orthus_bridge *obr;
+	struct orthus_bridge *obr = orthus_gzbr_to_obr(gzbr);
+	struct device *dev = &gzbr->zdev.dev;
 	int ret = -EOPNOTSUPP; /* Revisit: temporary */
 
 	if (genz_is_local_bridge(gzbr, rmri)) {
-		return orthus_local_control_write(gzbr, offset, size, data, flags);
+		return orthus_local_control_write(obr, dev, offset, size, data, flags);
 	}
 
-	obr = orthus_gzbr_to_obr(gzbr);
 	/* Revisit: implement this */
 	return ret;
 }
@@ -435,9 +433,27 @@ static int orthus_control_write(struct genz_bridge_dev *gzbr, loff_t offset,
 static int orthus_req_page_grid_write(struct genz_bridge_dev *gzbr, uint pg_index,
 				      struct genz_page_grid genz_pg[])
 {
+	struct orthus_bridge *obr = orthus_gzbr_to_obr(gzbr);
+	struct device *dev = &gzbr->zdev.dev;
+	union pg_u {
+		struct genz_page_grid_restricted_page_grid_table_array pg;
+		uint64_t val[2];
+	} *u;
+	uint32_t offset;
+	void __iomem *entry;
 	int ret = 0;
 
-	/* Revisit: implement this */
+	u = (union pg_u *)&genz_pg[pg_index].page_grid;
+	offset = pg_index * sizeof(*u);
+	entry = obr->req_zmmu.pg_base + offset;
+	dev_dbg(dev,
+		"pg[%u]: base_addr=0x%llx, page_count=%d, page_size=%u, "
+		"base_pte_idx=%u, res=%u, entry=%px\n", pg_index,
+		(uint64_t)u->pg.pg_base_address_0, u->pg.page_count_0,
+		u->pg.page_size_0, u->pg.base_pte_index_0, u->pg.res, entry);
+	/* Revisit: locking */
+	iowrite64(u->val[0], entry);
+	iowrite64(u->val[1], entry + 8);
 	return ret;
 }
 
@@ -642,6 +658,26 @@ static int orthus_genz_req_zmmu_probe(struct platform_device *pdev,
 
 	/* Revisit: add other req_zmmu init */
 
+	return ret;
+}
+
+static int orthus_genz_req_zmmu_setup(struct orthus_bridge *obr)
+{
+	struct iprop_genz_req_zmmu *const req_zmmu = &obr->req_zmmu;
+	struct device *dev = req_zmmu->dev;
+	uint32_t pg_base_ptr;
+	loff_t blk_offset;
+	int ret;
+
+	/* compute req zmmu pg_base */
+	/* Revisit: hardcoded offset */
+	ret = orthus_local_control_read(obr, dev, 0x50018, 4, &pg_base_ptr, 0);
+	if (ret < 0)
+		return ret;
+	ret = orthus_control_offset_to_base(obr, pg_base_ptr << 4, &blk_offset,
+					    &req_zmmu->pg_base);
+	req_zmmu->pg_base += blk_offset;
+	dev_dbg(dev, "req_zmmu->pg_base=%px\n", req_zmmu->pg_base);
 	return ret;
 }
 
@@ -920,7 +956,7 @@ static struct genz_bridge_info orthus_br_info = {
 static int orthus_bridge_info(struct genz_bridge_dev *gzbr,
 			      struct genz_bridge_info *info)
 {
-	struct orthus_bridge *obr = genz_get_drvdata(&gzbr->zdev);
+	struct orthus_bridge *obr = orthus_gzbr_to_obr(gzbr);
 
 	if (obr != &bridge)  /* not our bridge */
 		return -EINVAL;
@@ -980,6 +1016,7 @@ static int orthus_probe(struct platform_device *pdev)
 	bcnt = atomic_inc_return(&obr->block_cnt);
 	if (bcnt == IPROP_BLOCK_CNT) {
 		obr->obr_dev = dev;
+		orthus_genz_req_zmmu_setup(obr);
 		dev_dbg(dev, "calling genz_register_bridge\n");
 		ret = genz_register_bridge(dev,
 					   &orthus_genz_bridge_driver, obr);

@@ -97,6 +97,19 @@ enum {
 };
 #define GENZ_A_F_MAX (__GENZ_A_F_MAX - 1)
 
+/* Gen-Z Fabric Component Structure */
+enum {
+	GENZ_A_FC_UNSPEC,
+	GENZ_A_FC_GCID,         /* new GCID for component */
+	GENZ_A_FC_BRIDGE_GCID,  /* GCID of bridge used to reach component */
+	GENZ_A_FC_TEMP_GCID,    /* temporary GCID assigned by subsystem */
+	GENZ_A_FC_DR_GCID,      /* directed relay switch GCID */
+	GENZ_A_FC_DR_INTERFACE, /* directed relay switch interface */
+	GENZ_A_FC_MGR_UUID,     /* Revisit: FABRIC_UUID? */
+	__GENZ_A_FC_MAX,
+};
+#define GENZ_A_FC_MAX (__GENZ_A_FC_MAX - 1)
+
 #define GENZ_CONTROL_STR_LEN	21  /* 0000:000 controlNNNN */
 #define GENZ_DATA_STR_LEN	18  /* 0000:000 dataNNNN */
 
@@ -110,6 +123,8 @@ enum {
 	GENZ_C_REMOVE_FABRIC_COMPONENT,
 	GENZ_C_ADD_FABRIC,
 	GENZ_C_REMOVE_FABRIC,
+	GENZ_C_ADD_FABRIC_DR_COMPONENT,
+	GENZ_C_REMOVE_FABRIC_DR_COMPONENT,
 	__GENZ_C_MAX,
 };
 #define GENZ_C_MAX (__GENZ_C_MAX - 1)
