@@ -60,6 +60,8 @@ static char *rsp_page_grid = "4K:448,128T^64,1G:256,2M:256";
 module_param(rsp_page_grid, charp, 0444);
 MODULE_PARM_DESC(rsp_page_grid, "responder page grid allocations - page_sz{^:}page_cnt[, ...]");
 
+struct genz_fabric *genz_temp_fabric = NULL;
+
 /**
  * genz_disabled - determine if the Gen-Z sub-system is disabled
  *
@@ -258,6 +260,50 @@ static int get_new_bridge_number(void)
         return atomic_inc_return(&__bridge_number) - 1;
 }
 
+struct genz_bridge_dev *genz_lookup_zbdev(struct genz_fabric *f, uint32_t gcid)
+{
+	unsigned long flags;
+	struct genz_bridge_dev *b, *zbdev = NULL;
+
+	spin_lock_irqsave(&f->bridges_lock, flags);
+	list_for_each_entry(b, &f->bridges, fab_bridge_node) {
+		if (genz_dev_gcid(&b->zdev, 0) == gcid) {
+			zbdev = b;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&f->bridges_lock, flags);
+	return zbdev;
+}
+
+void genz_add_zbdev_to_fabric(struct genz_bridge_dev *zbdev,
+			      struct genz_fabric *f)
+{
+	unsigned long flags;
+
+	zbdev->fabric = f;
+	spin_lock_irqsave(&f->bridges_lock, flags);
+	list_add_tail(&zbdev->fab_bridge_node, &f->bridges);
+	spin_unlock_irqrestore(&f->bridges_lock, flags);
+	spin_lock_irqsave(&f->devices_lock, flags);
+	list_add_tail(&zbdev->zdev.fab_dev_node, &f->devices);
+	spin_unlock_irqrestore(&f->devices_lock, flags);
+}
+
+void genz_remove_zbdev_from_fabric(struct genz_bridge_dev *zbdev)
+{
+	struct genz_fabric *f = zbdev->fabric;
+	unsigned long flags;
+
+	spin_lock_irqsave(&f->bridges_lock, flags);
+	list_del_init(&zbdev->fab_bridge_node);
+	spin_unlock_irqrestore(&f->bridges_lock, flags);
+	spin_lock_irqsave(&f->devices_lock, flags);
+	list_del_init(&zbdev->zdev.fab_dev_node);
+	spin_unlock_irqrestore(&f->devices_lock, flags);
+	zbdev->fabric = NULL;
+}
+
 static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 			    struct device *dev,
 			    struct genz_bridge_driver *zbdrv,
@@ -269,7 +315,6 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	int ret = 0;
 	bool uninit = false;
 	struct genz_subnet *s;
-	unsigned long flags;
 	struct genz_fabric *f;
 
 	zbdev->zbdrv = zbdrv;
@@ -292,19 +337,15 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	if (!uu) {
 		return -ENOMEM;
 	}
-	f = zbdev->fabric = uu->fabric->fabric;
+	f = uu->fabric->fabric;
 	if (f == NULL) {
 		pr_debug("fabric is NULL\n");
 		ret = -ENODEV;
 		goto error;
 	}
-	spin_lock_irqsave(&f->bridges_lock, flags);
-	list_add_tail(&zbdev->fab_bridge_node, &f->bridges);
-	spin_unlock_irqrestore(&f->bridges_lock, flags);
-	spin_lock_irqsave(&f->devices_lock, flags);
-	list_add_tail(&zbdev->zdev.fab_dev_node, &f->devices);
-	spin_unlock_irqrestore(&f->devices_lock, flags);
+	genz_add_zbdev_to_fabric(zbdev, f);
 	if (uninit) {
+		genz_temp_fabric = f;
 		sid = GENZ_UNKNOWN_SID;
 	} else {
 		ret = genz_control_read_sid(zbdev, NULL, &sid);
