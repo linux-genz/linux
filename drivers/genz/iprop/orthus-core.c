@@ -435,25 +435,21 @@ static int orthus_req_page_grid_write(struct genz_bridge_dev *gzbr, uint pg_inde
 {
 	struct orthus_bridge *obr = orthus_gzbr_to_obr(gzbr);
 	struct device *dev = &gzbr->zdev.dev;
-	union pg_u {
-		struct genz_page_grid_restricted_page_grid_table_array pg;
-		uint64_t val[2];
-	} *u;
+	struct iprop_genz_req_zmmu *const req_zmmu = &obr->req_zmmu;
+	struct genz_page_grid_restricted_page_grid_table_array *pg;
 	uint32_t offset;
-	void __iomem *entry;
 	int ret = 0;
 
-	u = (union pg_u *)&genz_pg[pg_index].page_grid;
-	offset = pg_index * sizeof(*u);
-	entry = obr->req_zmmu.pg_base + offset;
+	pg = &genz_pg[pg_index].page_grid;
+	offset = pg_index * sizeof(*pg);
 	dev_dbg(dev,
 		"pg[%u]: base_addr=0x%llx, page_count=%d, page_size=%u, "
-		"base_pte_idx=%u, res=%u, entry=%px\n", pg_index,
-		(uint64_t)u->pg.pg_base_address_0, u->pg.page_count_0,
-		u->pg.page_size_0, u->pg.base_pte_index_0, u->pg.res, entry);
-	/* Revisit: locking */
-	iowrite64(u->val[0], entry);
-	iowrite64(u->val[1], entry + 8);
+		"base_pte_idx=%u, res=%u, sizeof=%u\n", pg_index,
+		(uint64_t)pg->pg_base_address_0, pg->page_count_0,
+		pg->page_size_0, pg->base_pte_index_0, pg->res,
+		(uint)sizeof(*pg));
+	orthus_local_control_write(obr, dev, req_zmmu->pg_base_offset + offset,
+				   sizeof(*pg), pg, 0);
 	return ret;
 }
 
@@ -669,15 +665,14 @@ static int orthus_genz_req_zmmu_setup(struct orthus_bridge *obr)
 	loff_t blk_offset;
 	int ret;
 
-	/* compute req zmmu pg_base */
+	/* compute req zmmu pg_base_offset */
 	/* Revisit: hardcoded offset */
 	ret = orthus_local_control_read(obr, dev, 0x50018, 4, &pg_base_ptr, 0);
 	if (ret < 0)
 		return ret;
-	ret = orthus_control_offset_to_base(obr, pg_base_ptr << 4, &blk_offset,
-					    &req_zmmu->pg_base);
-	req_zmmu->pg_base += blk_offset;
-	dev_dbg(dev, "req_zmmu->pg_base=%px\n", req_zmmu->pg_base);
+	req_zmmu->pg_base_offset = (loff_t)pg_base_ptr << 4;
+	dev_dbg(dev, "req_zmmu->pg_base_offset=0x%llx\n",
+		req_zmmu->pg_base_offset);
 	return ret;
 }
 
