@@ -160,8 +160,8 @@ uint genz_parse_page_grid_opt(char *str, uint64_t max_page_count,
 
 		if (k)
 			*k++ = 0;
-		pr_debug("calling parse_page_grid_one(s=%s,max_page_count=%llu, &pg[cnt]=%px)\n",
-			 s, max_page_count, &pg[cnt]);
+		pr_debug("calling parse_page_grid_one(s=%s,max_page_count=%llu, &pg[%u]=%px)\n",
+			 s, max_page_count, cnt, &pg[cnt]);
 		ret = parse_page_grid_one(s, max_page_count, allow_cpu_visible,
 					  allow_humongous, &pg[cnt]);
 		pr_debug("ret=%d, page_size=%u, page_count=%u, "
