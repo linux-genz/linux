@@ -722,7 +722,8 @@ static inline bool genz_is_local_bridge(struct genz_bridge_dev *br,
 					struct genz_rmr_info *rmri)
 {
 	return ((rmri == NULL) ? true :
-		(genz_dev_gcid(&br->zdev, 0) == rmri->gcid));
+		((genz_dev_gcid(&br->zdev, 0) == rmri->gcid) &&
+		 (rmri->dr_iface == GENZ_DR_IFACE_NONE)));
 }
 
 static inline int genz_uuid_cmp(const uuid_t *u1, const uuid_t *u2)
@@ -870,6 +871,9 @@ int genz_rmr_import(
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint32_t rkey,
 	uint16_t dr_iface, const char *rmr_name, struct genz_rmr_info *rmri);
 int genz_rmr_free(struct genz_mem_data *mdata, struct genz_rmr_info *rmri);
+int genz_rmr_resize(
+	struct genz_mem_data *mdata, uuid_t *uuid,
+	uint64_t new_len, struct genz_rmr_info *rmri);
 bool genz_gcid_is_local(struct genz_bridge_dev *br, uint32_t gcid);
 int genz_alloc_queues(struct genz_bridge_dev *br,
 		      struct genz_xdm_info *xdmi, struct genz_rdm_info *rdmi);

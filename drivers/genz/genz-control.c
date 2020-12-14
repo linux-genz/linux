@@ -976,7 +976,7 @@ static struct genz_control_info *alloc_control_info(
 	struct genz_control_structure_header *hdr,
 	off_t offset,
 	struct genz_control_info *parent, struct genz_control_info **sibling,
-	const struct genz_control_structure_ptr *csp)
+	const struct genz_control_structure_ptr *csp, struct genz_rmr_info *rmri)
 {
 	struct genz_control_info *ci;
 
@@ -990,6 +990,7 @@ static struct genz_control_info *alloc_control_info(
 	ci->zbdev = zbdev;
 	ci->start = offset;
 	ci->csp = csp;
+	ci->rmri = rmri;
 	if (hdr) { /* root control dir and chained dirs have no header. */
 		ci->type = hdr->type;
 		ci->vers = hdr->vers;
@@ -1041,7 +1042,7 @@ static int traverse_table(struct genz_bridge_dev *zbdev,
 	}
 
 	/* Allocate a genz_control_info/kobject for this directory */
-	ci = alloc_control_info(zbdev, NULL, table_ptr, parent, sibling, csp);
+	ci = alloc_control_info(zbdev, NULL, table_ptr, parent, sibling, csp, rmri);
 	if (ci == NULL) {
 		pr_debug("failed to allocate control_info\n");
 		return -ENOMEM;
@@ -1267,7 +1268,7 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 
 	while (!done) {
 		/* Allocate a genz_control_info/kobject for this directory */
-		ci = alloc_control_info(zbdev, hdrp, hdr_offset, parent, sibling, csp);
+		ci = alloc_control_info(zbdev, hdrp, hdr_offset, parent, sibling, csp, rmri);
 		if (ci == NULL) {
 			pr_debug("failed to allocate control_info\n");
 			return -ENOMEM;
@@ -1331,10 +1332,9 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 			vers = 0;
 		}
 
-		/* The pointer is NULL - this is the end of the list */
-		if (ret == ENOENT)
+		/* The pointer is NULL - the end of the list - or some problem */
+		if (ret != 0)
 			done = 1;
-		/* Revisit: ret < 0 */
 	}
 	return ret;
 }
@@ -1354,49 +1354,51 @@ static int start_core_structure(struct genz_bridge_dev *zbdev,
 			struct kobject *con_dir)
 {
 	int ret;
-	struct genz_control_structure_header hdr;
+	struct genz_core_structure core;
+	struct genz_control_structure_header *hdr =
+		(struct genz_control_structure_header *)&core;
 	struct genz_control_info *ci, *sibling = NULL;
+	uint64_t max_ctl;
 
 	if (zbdev == NULL) {
 		pr_debug("zbdev is NULL\n");
 		return -1;
 	}
 
-	/* Read the core structure header at offset 0 of control space */
-	ret = genz_control_read(zbdev, 0x0,
-				sizeof(struct genz_control_structure_header),
-				&hdr, rmri, 0);
+	pr_debug("reading core structure\n");
+	/* Read the first 64 bytes of core struct at control space offset 0 */
+	ret = genz_control_read(zbdev, 0x0, 64, &core, rmri, 0);
 	if (ret) {
-		pr_debug("genz_control_read of core structure header failed with %d\n", ret);
+		pr_debug("genz_control_read of core structure failed with %d\n", ret);
 		return ret;
 	}
 
 	/* Validate the header is as expected */
-	if (hdr.type != GENZ_CORE_STRUCTURE) {
-		pr_debug("expected type 0 but found %u\n", hdr.type);
+	if (core.type != GENZ_CORE_STRUCTURE) {
+		pr_debug("expected type 0 but found %u\n", core.type);
 		return -EINVAL;
 	}
 	/*  Validate the structure size */
-	if (hdr.size * GENZ_CONTROL_SIZE_UNIT != pi->struct_bytes) {
+	if (core.size * GENZ_CONTROL_SIZE_UNIT != pi->struct_bytes) {
 		pr_debug("structure size mismatch, expected %ld but found %u\n",
-			 pi->struct_bytes, hdr.size * GENZ_CONTROL_SIZE_UNIT);
+			 pi->struct_bytes, core.size * GENZ_CONTROL_SIZE_UNIT);
 		return -EINVAL;
 	}
 	/* Validate the version. */
-	if (hdr.vers != pi->vers) {
-		pr_debug("structure version mismatch expected %u but found %u\n", pi->vers, hdr.vers);
+	if (core.vers != pi->vers) {
+		pr_debug("structure version mismatch expected %u but found %u\n", pi->vers, core.vers);
 		return -EINVAL;
 	}
 
 	/* Allocate a genz_control_info with a kobject for this directory */
-	ci = alloc_control_info(zbdev, &hdr, 0x0, NULL, &sibling, NULL);
+	ci = alloc_control_info(zbdev, hdr, 0x0, NULL, &sibling, NULL, rmri);
 	if (ci == NULL) {
 		pr_debug("failed to allocate control_info\n");
 		return -ENOMEM;
 	}
 
 	ret = kobject_init_and_add(&ci->kobj, &control_info_ktype, con_dir,
-			"%s@0x%lx", genz_structure_name(hdr.type), ci->start);
+			"%s@0x%lx", genz_structure_name(core.type), ci->start);
 	if (ret < 0) {
 		pr_debug("kobject_add failed with %d\n", ret);
 		kobject_put(&ci->kobj);
@@ -1406,7 +1408,7 @@ static int start_core_structure(struct genz_bridge_dev *zbdev,
 
 	/* Now initialize the binary attribute file. */
 	sysfs_bin_attr_init(&ci->battr);
-	ci->battr.attr.name = genz_structure_name(hdr.type);
+	ci->battr.attr.name = genz_structure_name(core.type);
 	ci->battr.attr.mode = 0600;
 	ci->battr.size = ci->size;
 	ci->battr.read =  read_control_structure;
@@ -1420,8 +1422,18 @@ static int start_core_structure(struct genz_bridge_dev *zbdev,
 			 ret, ci->battr.attr.name);
 		return ret;
 	}
+	max_ctl = core.max_ctl;
+	/* Resize the requester ZMMU mapping to cover all of control space */
+	ret = genz_rmr_resize(zbdev->control_mdata, &zbdev->fabric->mgr_uuid,
+			      max_ctl, rmri);
+	if (ret < 0) {
+		/* Revisit: handle error */
+		pr_debug("genz_rmr_resize for %s failed with %d\n",
+			 ci->battr.attr.name, ret);
+		return ret;
+	}
 	/* Recursively traverse any pointers in this structure */
-	ret = traverse_control_pointers(zbdev, rmri, ci, hdr.type, hdr.vers,
+	ret = traverse_control_pointers(zbdev, rmri, ci, core.type, core.vers,
 					con_dir, core_ptr_order);
 	if (ret < 0) {
 		/* Revisit: handle error */
@@ -1447,18 +1459,16 @@ static int traverse_structure(struct genz_bridge_dev *zbdev,
 	pr_debug("in traverse_structure\n");
 	ret = read_and_validate_header(zbdev, rmri, parent->start, csp,
 		&hdr, &hdr_offset);
-
-	/* This pointer is NULL. Not an error.*/
 	if (ret == ENOENT) {
-		pr_debug("pointer is NULL. Not an error.\n");
+		pr_debug("pointer is NULL, which is ok\n");
 		return 0;
 	} else if (ret) {
-		pr_debug("read_and_validate_header failed with %d\n", ret);
+		pr_debug("read_and_validate_header returned with %d\n", ret);
 		return ret;
 	}
 
 	/* Allocate a genz_control_info with a kobject for this directory */
-	ci = alloc_control_info(zbdev, &hdr, hdr_offset, parent, sibling, csp);
+	ci = alloc_control_info(zbdev, &hdr, hdr_offset, parent, sibling, csp, rmri);
 	if (ci == NULL) {
 		pr_debug("failed to allocate control_info\n");
 		return -ENOMEM;
@@ -1858,15 +1868,16 @@ static struct kobject *genz_comp_iface_dir(struct genz_component *dr_comp,
  * genz_dr_create_control_files() - read control space for a directed-relay component
  */
 int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
-				 struct genz_component *dr_comp,
+				 struct genz_component *dr_comp, uint32_t gcid,
 				 uint16_t dr_iface, uuid_t *mgr_uuid)
 {
 	struct kobject           *dr_dir, *iface_dir;
 	struct genz_rmr_info     *rmri;
 	struct genz_dr_iface     *di;
 	struct genz_mem_data     *mdata;
+	struct uuid_tracker      *uu;
+	struct uuid_node         *md_node;
 	uint64_t                 access;
-	uint32_t                 gcid;
 	uint32_t                 rkey;
 	ulong                    flags;
 	int                      ret;
@@ -1876,11 +1887,13 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 		pr_debug("failed to allocate genz_mem_data\n");
 		return -ENOMEM;
 	}
+	genz_init_mem_data(mdata, zbdev);
 	spin_lock_irqsave(&zbdev->zmmu_lock, flags);
 	if (zbdev->control_mdata == NULL) {
 		zbdev->control_mdata = mdata;
 	} else {
 		kfree(mdata);
+		mdata = zbdev->control_mdata;
 	}
 	spin_unlock_irqrestore(&zbdev->zmmu_lock, flags);
 	di = kzalloc(sizeof(*di), GFP_KERNEL);
@@ -1908,7 +1921,20 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 		goto err_list;
 	}
 
-	gcid = genz_gcid(dr_comp->subnet->sid, dr_comp->cid);
+	/* Need mgr_uuid REMOTE tracker to do rmr_imports against */
+	uu = genz_uuid_tracker_alloc_and_insert(
+		mgr_uuid, UUID_TYPE_REMOTE,
+		0, mdata, GFP_KERNEL, &ret);
+	if (!uu)
+		goto err_kobj;
+	/* we now hold a reference to uu */
+	/* add uu to mdata->md_remote_uuid_tree */
+	md_node = genz_remote_uuid_alloc_and_insert(uu, &mdata->uuid_lock,
+					    &mdata->md_remote_uuid_tree,
+					    GFP_KERNEL, &ret);
+	if (ret < 0)
+		goto err_uu;
+
 	access = GENZ_MR_READ_REMOTE|GENZ_MR_WRITE_REMOTE|
 		 GENZ_MR_INDIVIDUAL|GENZ_MR_CONTROL;
 	access |= (zbdev->br_info.load_store) ?
@@ -1917,11 +1943,11 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 	rmri = &di->rmr_info;
 	pr_debug("calling genz_rmr_import\n");
 	/* initial mapping is for one 4KiB page covering the core struct */
-	ret = genz_rmr_import(zbdev->control_mdata, mgr_uuid, gcid, 0, 4096,
+	ret = genz_rmr_import(mdata, mgr_uuid, gcid, 0, 4096,
 			      access, rkey, dr_iface, "control", rmri);
 	if (ret < 0) {
 		pr_debug("genz_rmr_import error ret=%d\n", ret);
-		goto err_kobj;
+		goto err_md_node;
 	}
 	pr_debug("calling start_core_structure\n");
 	ret = start_core_structure(zbdev, rmri,
@@ -1930,10 +1956,15 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 			dr_dir);
 	if (ret < 0) {
 		pr_debug("start_core_structure error ret=%d\n", ret);
-		goto err_kobj;
+		goto err_md_node;
 	}
 	return 0;
 
+err_md_node:
+	genz_free_uuid_node(mdata, &mdata->uuid_lock,
+			    &mdata->md_remote_uuid_tree, mgr_uuid, false);
+err_uu:
+	genz_uuid_remove(uu);
 err_kobj:
 	/* Revisit: error handling */
 err_list:
