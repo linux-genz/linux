@@ -192,23 +192,6 @@ struct genz_dev_attribute {
 };
 #define to_genz_dev_attr(x) container_of(x, struct genz_dev_attribute, attr)
 
-/* SID is 16 bits starting at bit 13 of a GCID */
-static inline int genz_gcid_sid(int gcid)
-{
-	return (0xFFFF & (gcid >> 12));
-}
-
-/* CID is first 12 bits of a GCID */
-static inline int genz_gcid_cid(int gcid)
-{
-	return (0xFFF & gcid);
-}
-
-static inline int genz_gcid(int sid, int cid)
-{
-	return ((sid<<12) | cid);
-}
-
 extern struct device_type genz_bridge_type;
 
 static inline int is_genz_bridge_device(struct device *dev)
