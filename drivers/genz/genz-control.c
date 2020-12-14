@@ -316,7 +316,8 @@ static ssize_t read_control_structure(struct file *fd,
 		/* Revisit: what should it return on error? */
 		return err;
 	}
-	pr_debug("reading %s at offset=0x%llx, size=0x%lx, ci->start=0x%lx, ci->size=0x%lx\n", kobject_name(kobj), offset, size, ci->start, ci->size);
+	pr_debug("reading %s, offset=0x%llx, size=0x%lx, ci->start=0x%lx, ci->size=0x%lx, rmri=%px\n",
+		 kobject_name(kobj), offset, size, ci->start, ci->size, rmri);
 
 	ret = genz_control_read(zbdev, ci->start+offset, size, data, rmri, 0);
 	if (ret) {
@@ -344,6 +345,9 @@ static ssize_t write_control_structure(struct file *fd,
 		pr_debug("arguments invalid error: %d\n", err);
 		return err;
 	}
+	pr_debug("writing %s, offset=0x%llx, size=0x%lx, ci->start=0x%lx, ci->size=0x%lx, rmri=%px\n",
+		 kobject_name(kobj), offset, size, ci->start, ci->size, rmri);
+
 	ret = genz_control_write(zbdev, ci->start+offset, size, data, rmri, 0);
 	if (ret) {
 		pr_debug("genz_control_write failed with %ld\n", ret);
@@ -923,7 +927,6 @@ static int read_and_validate_header(struct genz_bridge_dev *zbdev,
 				csp->pointer_offset, hdr, hdr_offset);
 	/* Revisit: if the pointer is required, issue a warning */
 	if (ret == ENOENT) {  /* This pointer is NULL. Not an error. */
-		pr_debug("read_header_at_offset returned ENOENT\n");
 		return ENOENT;
 	} else if (ret) {
 		pr_debug("read_header_at_offset returned %d\n", ret);
@@ -1524,6 +1527,7 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 {
 	const struct genz_control_structure_ptr *csp, *csp_entry;
 	struct genz_control_info *sibling = NULL;
+	bool is_chain;
 	int i, ret, num_ptrs;
 
 	ret = get_control_ptr(zbdev, struct_type, struct_vers, &csp, &num_ptrs);
@@ -1538,24 +1542,23 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 			csp_entry = &csp[i];
 		switch (csp_entry->ptr_type) {
 		case GENZ_CONTROL_POINTER_NONE:
-			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_NONE\n",
+			pr_debug("%s, ignoring ptr_type GENZ_CONTROL_POINTER_NONE\n",
 				 csp_entry->ptr_name);
 			break;
 		case GENZ_CONTROL_POINTER_STRUCTURE:
-			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_STRUCTURE\n",
-				 csp_entry->ptr_name);
-			if (is_head_of_chain(csp_entry)) {
-				pr_debug("is_head_of_chain is true\n");
+			is_chain = is_head_of_chain(csp_entry);
+			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_STRUCTURE, is_chain=%d\n",
+				 csp_entry->ptr_name, is_chain);
+			if (is_chain)
 				ret = traverse_chained_control_pointers(
 					zbdev, rmri, parent, &sibling, dir,
 					csp_entry, num_ptrs);
-			} else {
+			else
 				ret = traverse_structure(zbdev, rmri, parent,
 							 &sibling, dir, csp_entry);
-			}
 			break;
 		case GENZ_CONTROL_POINTER_CHAINED:
-			pr_debug("%s, skipping ptr_type GENZ_CONTROL_POINTER_CHAINED\n",
+			pr_debug("%s, caller will handle ptr_type GENZ_CONTROL_POINTER_CHAINED\n",
 				 csp_entry->ptr_name);
 			break;
 		case GENZ_CONTROL_POINTER_ARRAY:
