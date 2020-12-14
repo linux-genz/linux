@@ -1425,7 +1425,8 @@ static int start_core_structure(struct genz_bridge_dev *zbdev,
 			 ret, ci->battr.attr.name);
 		return ret;
 	}
-	max_ctl = core.max_ctl;
+	/* Revisit: temporary hack to workaround incorrect mamba value */
+	max_ctl = max((uint64_t)core.max_ctl, 0xd0000ull);
 	/* Resize the requester ZMMU mapping to cover all of control space */
 	ret = genz_rmr_resize(zbdev->control_mdata, &zbdev->fabric->mgr_uuid,
 			      max_ctl, rmri);
