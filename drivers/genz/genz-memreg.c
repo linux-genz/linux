@@ -937,6 +937,7 @@ int genz_rmr_import(
 	rmri->cpu_addr = NULL;
 	rmri->pg_ps = 0;
 	rmri->dr_iface = dr_iface;
+	rmri->zres.ro_rkey = rmri->zres.rw_rkey = rkey;
 	remote = !!(access & (GENZ_MR_GET_REMOTE|GENZ_MR_PUT_REMOTE));
 	writable = !!(access & GENZ_MR_PUT_REMOTE);
 	cpu_visible = !!(access & GENZ_MR_REQ_CPU);
@@ -979,11 +980,11 @@ int genz_rmr_import(
 		if (kmap)
 			rmri->cpu_addr = memremap(PFN_PHYS(rmr->mmap_pfn),
 						  len, mflags);
-		rmri->res.start = PFN_PHYS(rmr->mmap_pfn);
-		rmri->res.end = rmri->res.start + rmri->len - 1;
-		rmri->res.flags = IORESOURCE_MEM;
-		rmri->res.name = rmr_name;
-		insert_resource(&rmr->pte_info->pg->res, &rmri->res);
+		rmri->zres.res.start = PFN_PHYS(rmr->mmap_pfn);
+		rmri->zres.res.end = rmri->zres.res.start + rmri->len - 1;
+		rmri->zres.res.flags = IORESOURCE_MEM;
+		rmri->zres.res.name = rmr_name;
+		insert_resource(&rmr->pte_info->pg->res, &rmri->zres.res);
 	}
 
  out:
