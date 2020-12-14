@@ -771,21 +771,21 @@ static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *i
 	/* Revisit: finish this */
 	/* Two scenarios:
 	 * 1. A direct-attached component is to be accessed via directed relay
-	 *    GCID: invalid, BRIDGE_GCID: valid, TEMP_GCID: invalid
+	 *    GCID: valid, BRIDGE_GCID: valid, TEMP_GCID: invalid
 	 *    DR_GCID: same as BRIDGE_GCID
 	 * 2. A switch-attached component is to be accessed via directed relay
-	 *    GCID: invalid, BRIDGE_GCID: valid, TEMP_GCID: invalid
+	 *    GCID: valid, BRIDGE_GCID: valid, TEMP_GCID: invalid
 	 *    DR_GCID: not the same as BRIDGE_GCID
 	 */
-	if (fci.gcid != GENZ_INVALID_GCID || fci.tmp_gcid != GENZ_INVALID_GCID) {
-		pr_debug("gcid (%d) != tmp_gcid(%d) != INVALID\n",
-			 fci.gcid, fci.tmp_gcid);
+	if (fci.tmp_gcid != GENZ_INVALID_GCID) {
+		pr_debug("tmp_gcid(%d) != INVALID\n", fci.tmp_gcid);
 		ret = -EINVAL;
 		goto err;
 	}
-	if (fci.br_gcid == GENZ_INVALID_GCID || fci.dr_gcid == GENZ_INVALID_GCID) {
-		pr_debug("br_gcid (%d) or dr_gcid(%d) == INVALID\n",
-			 fci.br_gcid, fci.dr_gcid);
+	if (fci.br_gcid == GENZ_INVALID_GCID ||
+	    fci.dr_gcid == GENZ_INVALID_GCID || fci.gcid == GENZ_INVALID_GCID) {
+		pr_debug("br_gcid (%d) or dr_gcid(%d) or gcid(%d) == INVALID\n",
+			 fci.br_gcid, fci.dr_gcid, fci.gcid);
 		ret = -EINVAL;
 		goto err;
 	}
@@ -804,7 +804,7 @@ static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *i
 			goto err;
 		}
 		dr_comp = zbdev->zdev.zcomp;
-		ret = genz_dr_create_control_files(zbdev, dr_comp,
+		ret = genz_dr_create_control_files(zbdev, dr_comp, fci.gcid,
 						   fci.dr_iface, &fci.mgr_uuid);
 		if (ret < 0) {
 			pr_debug("genz_dr_create_control_files failed, ret=%d\n", ret);
