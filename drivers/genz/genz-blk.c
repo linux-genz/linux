@@ -524,7 +524,7 @@ static long genz_blk_dax_direct_access(struct dax_device *dax_dev,
 	if (kaddr)
 		*kaddr = rmri->cpu_addr + offset;
 	if (pfn)
-		*pfn = phys_to_pfn_t(rmri->res.start + offset, pfn_flags);
+		*pfn = phys_to_pfn_t(rmri->zres.res.start + offset, pfn_flags);
 
 	return PHYS_PFN(zbd->size - offset);
 }
@@ -695,7 +695,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		}
 		zbd->pgmap.ref = &zbd->queue->q_usage_counter;
 		zbd->pgmap.type = MEMORY_DEVICE_FS_DAX;
-		zbd->pgmap.res = zbd->rmr_info.res;
+		zbd->pgmap.res = zbd->rmr_info.zres.res;
 		zbd->pgmap.page_free = genz_blk_pagemap_page_free;
 		/* Revisit: support struct pages on device with pgmap->altmap */
 		addr = devm_memremap_pages(dev, &zbd->pgmap);

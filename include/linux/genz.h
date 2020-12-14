@@ -644,15 +644,15 @@ struct genz_umem {
 
 /* Revisit: embed this in genz_rmr? */
 struct genz_rmr_info {
-	uint64_t        rsp_zaddr;
-	uint64_t        req_addr;
-	uint64_t        len;
-	uint64_t        access;
-	void            *cpu_addr;
-	uint32_t        pg_ps;
-	uint32_t        gcid;
-	uint16_t        dr_iface;  /* directed-relay interface */
-	struct resource res;  /* Revisit: change to zres, which has rkeys */
+	uint64_t             rsp_zaddr;
+	uint64_t             req_addr;
+	uint64_t             len;
+	uint64_t             access;
+	void                 *cpu_addr;
+	uint32_t             pg_ps;
+	uint32_t             gcid;
+	uint16_t             dr_iface;  /* directed-relay interface */
+	struct genz_resource zres;
 };
 
 /* Revisit: probably should have equivalent genz_mr_info */
