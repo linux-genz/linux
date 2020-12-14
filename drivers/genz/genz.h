@@ -211,6 +211,21 @@ static inline uint get_uint_len(uint val)
 	return l;
 }
 
+static inline bool is_genz_offset_mapped(loff_t offset, struct genz_rmr_info *rmri)
+{
+	/* Revisit: this is only correct for control space, which is always
+	 * mapped starting at offset 0
+	 */
+	return (!rmri || (offset < rmri->len));
+}
+
+static inline bool is_genz_range_mapped(loff_t offset, size_t size,
+					struct genz_rmr_info *rmri)
+{
+	return (is_genz_offset_mapped(offset, rmri) &&
+		is_genz_offset_mapped(offset+size-1, rmri));
+}
+
 /* Control space structure used to represent the /sys hierarchy. */
 struct genz_control_info {
 	struct kobject          kobj;
