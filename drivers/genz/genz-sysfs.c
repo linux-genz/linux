@@ -53,8 +53,8 @@ static ssize_t read_control(struct file *file,
 	loff_t offset = zres->zres.res.start + pos;
 	uint flags = 0;  /* Revisit */
 
-	dev_dbg(&zdev->dev, "pos=%llx, size=%zu, offset=%llx\n",
-		pos, size, offset);
+	dev_dbg(&zdev->dev, "pos=%llx, size=%zu, offset=%llx, rmri=%px\n",
+		pos, size, offset, rmri);
 	return genz_control_read(zdev->zbdev, offset, size, buffer,
 				 rmri, flags);
 }
@@ -72,8 +72,8 @@ static ssize_t write_control(struct file *file,
 	loff_t offset = zres->zres.res.start + pos;
 	uint flags = 0;  /* Revisit */
 
-	dev_dbg(&zdev->dev, "pos=%llx, size=%zu, offset=%llx\n",
-		pos, size, offset);
+	dev_dbg(&zdev->dev, "pos=%llx, size=%zu, offset=%llx, rmri=%px\n",
+		pos, size, offset, rmri);
 	return genz_control_write(zdev->zbdev, offset, size, buffer,
 				  rmri, flags);
 }
