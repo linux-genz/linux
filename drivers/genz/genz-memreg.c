@@ -42,7 +42,8 @@
 
 #include "genz.h"
 
-#define USER_ACCESS(_acc)  ((_acc) & ~(GENZ_MR_REQ|GENZ_MR_RSP))
+/* USER_ACCESS removes subsystem-internal flags */
+#define USER_ACCESS(_acc)  ((_acc) & ~(GENZ_MR_REQ|GENZ_MR_RSP|GENZ_MR_MAPPED))
 
 static void umem_free(struct kref *ref);  /* forward references */
 static void pte_info_free(struct kref *ref);
@@ -793,7 +794,7 @@ struct genz_rmr *genz_rmr_get(
 		ret = -ENOMEM;
 		goto out;
 	}
-	pr_debug("rmr=%p\n", rmr);
+	pr_debug("rmr=%px\n", rmr);
 	unode = genz_remote_uuid_get(mdata, uuid);
 	if (!unode) {
 		kfree(rmr);
@@ -925,9 +926,10 @@ int genz_rmr_import(
 	int                     status = 0;
 	struct genz_rmr         *rmr;
 	bool                    remote, cpu_visible, writable, individual, kmap;
-	bool                    control;
+	bool                    control, dr;
 	ulong                   mflags;
 	uint64_t cpuvisible_offset = br_info->cpuvisible_phys_offset;
+	char                    gcstr[GCID_STRING_LEN+1];
 
 	rmri->rsp_zaddr = rsp_zaddr;
 	rmri->len = len;
@@ -944,17 +946,20 @@ int genz_rmr_import(
 	individual = !!(access & GENZ_MR_INDIVIDUAL);
 	kmap = !!(access & GENZ_MR_KERN_MAP);
 	control = !!(access & GENZ_MR_CONTROL);
+	dr = control && (dr_iface != GENZ_DR_IFACE_NONE);
 	mflags = (control) ? MEMREMAP_WC : MEMREMAP_WB; /* Revisit: WC ok? */
 
-	pr_debug("uuid=%pUb, rsp_zaddr=0x%016llx, "
+	pr_debug("uuid=%pUb, gcid=%s, rsp_zaddr=0x%016llx, "
 		 "len=0x%llx, access=0x%llx, rkey=0x%x, dr_iface=%u, "
 		 "remote=%u, writable=%u, cpu_visible=%u, individual=%u, "
-		 "kmap=%u, control=%u\n",
-		 uuid, rsp_zaddr, len, access, rkey, dr_iface, remote, writable,
-		 cpu_visible, individual, kmap, control);
+		 "kmap=%u, control=%u, dr=%u\n",
+		 uuid, genz_gcid_str(dgcid, gcstr, sizeof(gcstr)),
+		 rsp_zaddr, len, access, rkey, dr_iface, remote, writable,
+		 cpu_visible, individual, kmap, control, dr);
 
 	if (!remote || !individual || /* Revisit: allow !individual */
-	    (genz_gcid_is_local(mdata->bridge, dgcid) && !br_info->loopback)) {
+	    (genz_gcid_is_local(mdata->bridge, dgcid) && !br_info->loopback &&
+	     !dr)) {
 		status = -EINVAL;  /* only individual remote access allowed */
 		goto out;
 	}
@@ -1017,3 +1022,28 @@ unlock:
 	return status;
 }
 EXPORT_SYMBOL(genz_rmr_free);
+
+int genz_rmr_resize(
+	struct genz_mem_data *mdata, uuid_t *uuid,
+	uint64_t new_len, struct genz_rmr_info *rmri)
+{
+	int                     status = 0;
+	struct genz_rmr_info    prev;
+
+	pr_debug("mdata=%px, uuid=%pUb, new_len=0x%llx, rmri=%px\n",
+		 mdata, uuid, new_len, rmri);
+	if (!mdata || genz_is_local_bridge(mdata->bridge, rmri) ||
+	    (new_len == rmri->len))  /* nothing to do */
+		return 0;
+
+	prev = *rmri;
+	status = genz_rmr_import(mdata, uuid, prev.gcid, prev.rsp_zaddr,
+				 new_len, prev.access, prev.zres.rw_rkey,
+				 prev.dr_iface,
+				 prev.zres.res.name, rmri);
+	if (status < 0)
+		return status;
+	status = genz_rmr_free(mdata, &prev);
+	return status;
+}
+EXPORT_SYMBOL(genz_rmr_resize);
