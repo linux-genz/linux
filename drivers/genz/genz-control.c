@@ -933,8 +933,20 @@ static int read_and_validate_header(struct genz_bridge_dev *zbdev,
 	/* Validate the header is as expected */
 	if ((csp->struct_type != GENZ_GENERIC_STRUCTURE) &&
 	    (hdr->type != csp->struct_type)) {
-		pr_debug("expected type %d but found %d\n",
+		pr_debug("expected structure type %d but found %d\n",
 			csp->struct_type, hdr->type);
+		return EINVAL;
+	} else if ((csp->struct_type == GENZ_GENERIC_STRUCTURE) &&
+		   ((hdr->type == GENZ_OPCODE_SET_STRUCTURE) ||
+		    (hdr->type == GENZ_COMPONENT_C_ACCESS_STRUCTURE) ||
+		    (hdr->type == GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE) ||
+		    (hdr->type == GENZ_INTERFACE_STRUCTURE) ||
+		    (hdr->type == GENZ_COMPONENT_ERROR_AND_SIGNAL_EVENT_STRUCTURE) ||
+		    (hdr->type == GENZ_INTERFACE_PHY_STRUCTURE) ||
+		    (hdr->type == GENZ_INTERFACE_STATISTICS_STRUCTURE) ||
+		    (hdr->type == GENZ_COMPONENT_MECHANICAL_STRUCTURE) ||
+		    (hdr->type == GENZ_COMPONENT_EXTENSION_STRUCTURE))) {
+		pr_debug("found structure type %d in generic PTR\n", hdr->type);
 		return EINVAL;
 	}
 	/* Check if this is a known type */
