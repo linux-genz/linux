@@ -701,6 +701,23 @@ enum {
 
 uint32_t genz_dev_gcid(struct genz_dev *zdev, uint index);
 
+/* SID is 16 bits starting at bit 13 of a GCID */
+static inline int genz_gcid_sid(int gcid)
+{
+	return (0xFFFF & (gcid >> 12));
+}
+
+/* CID is first 12 bits of a GCID */
+static inline int genz_gcid_cid(int gcid)
+{
+	return (0xFFF & gcid);
+}
+
+static inline int genz_gcid(int sid, int cid)
+{
+	return ((sid<<12) | cid);
+}
+
 static inline bool genz_is_local_bridge(struct genz_bridge_dev *br,
 					struct genz_rmr_info *rmri)
 {
