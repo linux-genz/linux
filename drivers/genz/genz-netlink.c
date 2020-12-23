@@ -250,7 +250,7 @@ static inline void bytes_to_uuid(uuid_t *uuid, uint8_t *ub)
 }
 
 static int parse_resource_list(const struct nlattr *resource_list,
-	struct genz_component *zcomp)
+			       struct genz_os_comp *zcomp)
 {
 	struct nlattr *nested_attr;
 	struct nlattr *u_attrs[GENZ_A_U_MAX + 1];
@@ -261,7 +261,7 @@ static int parse_resource_list(const struct nlattr *resource_list,
 	struct genz_dev *zdev;
 	char gcstr[GCID_STRING_LEN+1];
 
-	fabric = zcomp->subnet->fabric;
+	fabric = zcomp->subnet->subnet.fabric;
 	if (!fabric)  {
 		pr_debug("zcomp->subnet doesn't have a fabric yet\n");
 		return -ENOENT;
@@ -317,7 +317,7 @@ static int parse_resource_list(const struct nlattr *resource_list,
 			 * The condensed class is used as the device name along
 			 * with the count of that class. e.g. "memory0"
 			 */
-			dev_set_name(&zdev->dev, "genz%u %s %s%u",
+			dev_set_name(&zdev->dev, "genz%u:%s:%s%u",
 				fabric->number,
 				genz_gcid_str(genz_dev_gcid(zdev, 0),
 					      gcstr, sizeof(gcstr)),
@@ -364,11 +364,11 @@ err:
 /* Netlink Generic Handlers */
 static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 {
-	struct genz_component *zcomp = NULL;
+	struct genz_os_comp *zcomp = NULL;
 	uint32_t fabric_num, gcid;
 	int ret = 0;
 	struct genz_fabric *f;
-	struct genz_subnet *s;
+	struct genz_os_subnet *s;
 	struct uuid_tracker *uu;
 	uuid_t mgr_uuid;
 
@@ -408,17 +408,17 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 	}
 	/* validate the GCID */
 	if (gcid > MAX_GCID) {
-		pr_debug("GCID is invalid.\n");
+		pr_debug("GCID is out of range\n");
 		return -EINVAL;
 	}
-	s = genz_add_subnet(genz_gcid_sid(gcid), f);
+	s = genz_add_os_subnet(genz_gcid_sid(gcid), f);
 	if (s == NULL) {
 		pr_debug("genz_add_subnet failed\n");
 		return -ENOMEM;
 	}
-	zcomp = genz_add_component(s, genz_gcid_cid(gcid));
+	zcomp = genz_add_os_comp(s, genz_gcid_cid(gcid));
 	if (zcomp == NULL) {
-		pr_debug("genz_add_component failed\n");
+		pr_debug("genz_add_os_comp failed\n");
 		return -ENOMEM;
 	}
 /*
@@ -430,15 +430,16 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 */
 
 	if (info->attrs[GENZ_A_CCLASS]) {
-		zcomp->cclass = nla_get_u16(info->attrs[GENZ_A_CCLASS]);
+		zcomp->comp.cclass = nla_get_u16(info->attrs[GENZ_A_CCLASS]);
 		pr_debug("\tC-Class = %d\n",
-			(uint32_t) zcomp->cclass);
+			(uint32_t) zcomp->comp.cclass);
 	} else {
 		pr_debug("missing required CCLASS\n");
 		ret = -EINVAL;
 		goto err;
 	}
-	if (zcomp->cclass <= 0 || zcomp->cclass >= genz_hardware_classes_nelems) {
+	if (zcomp->comp.cclass <= 0 ||
+	    zcomp->comp.cclass >= genz_hardware_classes_nelems) {
 		pr_debug("CCLASS invalid\n");
 		ret = -EINVAL;
 		goto err;
@@ -448,9 +449,9 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 */
 
 	if (info->attrs[GENZ_A_FRU_UUID]) {
-		bytes_to_uuid(&zcomp->fru_uuid,
+		bytes_to_uuid(&zcomp->comp.fru_uuid,
 			      nla_data(info->attrs[GENZ_A_FRU_UUID]));
-		pr_debug("\tFRU_UUID: %pUb\n", &zcomp->fru_uuid);
+		pr_debug("\tFRU_UUID: %pUb\n", &zcomp->comp.fru_uuid);
 	} else {
 		pr_debug("missing required FRU_UUID\n");
 		ret = -EINVAL;
@@ -481,19 +482,19 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 	return ret;
 err:
 	if (zcomp)
-		kref_put(&zcomp->kref, genz_free_component);
+		device_unregister(&zcomp->dev);
 	return ret;
 }
 
 static int genz_remove_os_component(struct sk_buff *skb, struct genl_info *info)
 {
-	int ret = 0;
-	uint32_t gcid;
 	struct genz_fabric *f;
-	struct genz_subnet *s;
-	struct genz_component *zcomp = NULL;
+	struct genz_os_subnet *s;
+	struct genz_os_comp *zcomp = NULL;
 	struct uuid_tracker *uu;
 	uuid_t mgr_uuid;
+	uint32_t gcid;
+	int ret;
 
 	pr_debug("entered\n");
 	ret = check_netlink_perm();
@@ -524,19 +525,19 @@ static int genz_remove_os_component(struct sk_buff *skb, struct genl_info *info)
 	}
 	/* validate the GCID */
 	if (gcid > MAX_GCID) {
-		pr_debug("GCID is invalid.\n");
+		pr_debug("GCID is out of range\n");
 		ret = -EINVAL;
 		goto mgr_uuid;
 	}
-	s = genz_lookup_subnet(genz_gcid_sid(gcid), f);
+	s = genz_lookup_os_subnet(genz_gcid_sid(gcid), f);
 	if (s == NULL) {
-		pr_debug("genz_lookup_subnet failed\n");
+		pr_debug("genz_lookup_os_subnet failed\n");
 		ret = -EINVAL;
 		goto mgr_uuid;
 	}
-	zcomp = genz_lookup_component(s, genz_gcid_cid(gcid));
+	zcomp = genz_lookup_os_comp(s, genz_gcid_cid(gcid));
 	if (zcomp == NULL) {
-		pr_debug("genz_lookup_component failed\n");
+		pr_debug("genz_lookup_os_comp failed\n");
 		ret = -EINVAL;
 		goto mgr_uuid;
 	}
@@ -551,7 +552,7 @@ err:
 
 static int genz_symlink_os_component(struct sk_buff *skb, struct genl_info *info)
 {
-	int ret = 0;
+	int ret;
 
 	/* Revisit: implement this
 	 * message handling code goes here; return 0 on success,
@@ -570,17 +571,27 @@ struct genz_fab_comp_info {
 	uint32_t              fabric_num, gcid, br_gcid, tmp_gcid, dr_gcid;
 	uint16_t              dr_iface;
 	struct genz_fabric    *f;
-	struct genz_subnet    *s;
-	struct genz_component *zcomp;
+	union {
+		struct genz_subnet    *zsub;
+		struct genz_os_subnet *osub;
+	};
+	union {
+		struct genz_comp      *zcomp;
+		struct genz_os_comp   *ocomp;
+	};
 	struct uuid_tracker   *uu;
 	uuid_t                mgr_uuid;
 };
 
 static int parse_fabric_component(struct genl_info *info,
-				  struct genz_fab_comp_info *fci)
+				  struct genz_fab_comp_info *fci, bool dr,
+				  uint *scenario)
 {
+	bool os = false;
+	bool valid_dr_iface;
 	int ret = 0;
 
+	*scenario = 0;  /* illegal scenario */
 	if (info->attrs[GENZ_A_FC_MGR_UUID]) {
 		bytes_to_uuid(&fci->mgr_uuid,
 			      nla_data(info->attrs[GENZ_A_FC_MGR_UUID]));
@@ -604,26 +615,6 @@ static int parse_fabric_component(struct genl_info *info,
 		pr_debug("missing required GCID\n");
 		ret = -EINVAL;
 		goto err;
-	}
-	if (fci->gcid != GENZ_INVALID_GCID) {
-		/* validate the GCID */
-		if (fci->gcid > MAX_GCID) {
-			pr_debug("GCID is invalid.\n");
-			ret = -EINVAL;
-			goto err;
-		}
-		fci->s = genz_add_subnet(genz_gcid_sid(fci->gcid), fci->f);
-		if (fci->s == NULL) {
-			pr_debug("genz_add_subnet failed\n");
-			ret = -EINVAL;
-			goto err;
-		}
-		fci->zcomp = genz_add_component(fci->s, genz_gcid_cid(fci->gcid));
-		if (fci->zcomp == NULL) {
-			pr_debug("genz_add_component failed\n");
-			ret = -EINVAL;
-			goto err;
-		}
 	}
 	if (info->attrs[GENZ_A_FC_BRIDGE_GCID]) {
 		fci->br_gcid = nla_get_u32(info->attrs[GENZ_A_FC_BRIDGE_GCID]);
@@ -652,10 +643,107 @@ static int parse_fabric_component(struct genl_info *info,
 	if (info->attrs[GENZ_A_FC_DR_INTERFACE]) {
 		fci->dr_iface = nla_get_u16(info->attrs[GENZ_A_FC_DR_INTERFACE]);
 		pr_debug("\tDR_INTERFACE: %d ", fci->dr_iface);
+		valid_dr_iface = (fci->dr_iface != GENZ_DR_IFACE_NONE);
 	} else {
 		pr_debug("missing required DR_INTERFACE\n");
 		ret = -EINVAL;
 		goto err;
+	}
+	if (genz_valid_gcid(fci->gcid)) {
+		/* validate the GCID */
+		if (fci->gcid > MAX_GCID) {
+			pr_debug("GCID is out of range\n");
+			ret = -EINVAL;
+			goto err;
+		}
+	} else {
+		pr_debug("GCID is invalid\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	/* Determine the scenario - one of these 5:
+	 * 1. A local bridge being moved from its temporary subsystem-assigned
+	 *    fabric/GCID to its permanent home.
+	 * 2. A new, directly-attached component.
+	 * 3. An existing directed-relay component being moved to its
+	 *    permanent GCID.
+	 * 4. A direct-attached component is to be accessed via directed relay
+	 * 5. A switch-attached component is to be accessed via directed relay
+	 *
+	 * Scenario  GCID   BR_GCID  TEMP_GCID    DR_GCID  dr
+	 * --------------------------------------------------------------
+	 *    1      valid  GCID     temp subnet  invalid  false
+	 *    2      valid  !GCID    invalid      invalid  false
+	 *    3      valid  !GCID    invalid      valid    false
+	 *    4      valid  valid    invalid      BR_GCID  true
+	 *    5      valid  valid    invalid      !BR_GCID true
+	 */
+	if (!dr && genz_valid_gcid(fci->tmp_gcid) &&
+	    !genz_valid_gcid(fci->dr_gcid)) {
+		if (fci->gcid != fci->br_gcid) {
+			pr_debug("scenario 1, gcid (%d) != br_gcid(%d)\n",
+				 fci->gcid, fci->br_gcid);
+			ret = -EINVAL;
+			goto err;
+		}
+		*scenario = 1;
+	} else if (!dr && !genz_valid_gcid(fci->tmp_gcid) &&
+		   !genz_valid_gcid(fci->dr_gcid)) {
+		if (fci->gcid == fci->br_gcid) {
+			pr_debug("scenario 2, gcid (%d) == br_gcid(%d)\n",
+				 fci->gcid, fci->br_gcid);
+			ret = -EINVAL;
+			goto err;
+		}
+		*scenario = 2;
+	} else if (!dr && !genz_valid_gcid(fci->tmp_gcid) &&
+		   genz_valid_gcid(fci->dr_gcid)) {
+		if (fci->gcid == fci->br_gcid) {
+			pr_debug("scenario 3, gcid (%d) == br_gcid(%d)\n",
+				 fci->gcid, fci->br_gcid);
+			ret = -EINVAL;
+			goto err;
+		}
+		*scenario = 3;
+	} else if (dr && fci->br_gcid == fci->dr_gcid) {
+		*scenario = 4;
+	} else if (dr && fci->br_gcid != fci->dr_gcid) {
+		*scenario = 5;
+	} else {
+		pr_debug("invalid scenario\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	os = (*scenario == 1 || *scenario == 2);
+	if (os) {
+		fci->osub = genz_add_os_subnet(genz_gcid_sid(fci->gcid),
+					       fci->f);
+		if (fci->osub == NULL) {
+			pr_debug("genz_add_os_subnet failed\n");
+			ret = -EINVAL;
+			goto err;
+		}
+		fci->ocomp = genz_add_os_comp(fci->osub,
+					      genz_gcid_cid(fci->gcid));
+		if (fci->ocomp == NULL) {
+			pr_debug("genz_add_os_comp failed\n");
+			ret = -EINVAL;
+			goto err;
+		}
+	} else {
+		fci->zsub = genz_add_subnet(genz_gcid_sid(fci->gcid), fci->f);
+		if (fci->zsub == NULL) {
+			pr_debug("genz_add_subnet failed\n");
+			ret = -EINVAL;
+			goto err;
+		}
+		fci->zcomp = genz_add_comp(fci->zsub,
+					   genz_gcid_cid(fci->gcid));
+		if (fci->zcomp == NULL) {
+			pr_debug("genz_add_comp failed\n");
+			ret = -EINVAL;
+			goto err;
+		}
 	}
 
 err:
@@ -665,40 +753,29 @@ err:
 static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info)
 {
 	struct genz_fab_comp_info fci;
-	int ret = 0;
 	struct genz_bridge_dev *zbdev;
+	uint scenario;
+	int ret;
 
 	pr_debug("entered\n");
 	ret = check_netlink_perm();
 	if (ret < 0)
 		goto err;
 
-	ret = parse_fabric_component(info, &fci);
+	ret = parse_fabric_component(info, &fci, false, &scenario);
 	if (ret < 0)
 		goto err;
 	/*
-	 * There are 3 main scenarios handled here:
+	 * There are 3 scenarios handled here.  See parse_fabric_component()
+	 * for details.
 	 * 1. A local bridge being moved from its temporary subsystem-assigned
 	 *    fabric/GCID to its permanent home.
-	 *    GCID: new, BRIDGE_GCID: same as GCID, TEMP_GCID: on temp subnet
-	 *    DR_GCID: invalid
 	 * 2. A new, directly-attached component.
-	 *    GCID: new, BRIDGE_GCID: not same as GCID, TEMP_GCID: invalid
-	 *    DR_GCID: invalid
 	 * 3. An existing directed-relay component being moved to its
 	 *    permanent GCID.
-	 *    GCID: new, BRIDGE_GCID: not same as GCID, TEMP_GCID: invalid
-	 *    DR_GCID: valid
+
 	 */
-	if (fci.tmp_gcid != GENZ_INVALID_GCID &&
-	    fci.dr_gcid == GENZ_INVALID_GCID) {
-		/* scenario 1 */
-		if (fci.gcid != fci.br_gcid) {
-			pr_debug("scenario 1, gcid (%d) != br_gcid(%d)\n",
-				 fci.gcid, fci.br_gcid);
-			ret = -EINVAL;
-			goto err;
-		}
+	if (scenario == 1) {
 		zbdev = genz_lookup_zbdev(genz_temp_fabric, fci.tmp_gcid);
 		if (zbdev == NULL) {
 			pr_debug("scenario 1, tmp_gcid (%d) not found\n",
@@ -708,29 +785,48 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 		}
 		/* Revisit: can we use kobject_move instead? */
 		/* copy over values from old zbdev */
-		fci.zcomp->cclass = zbdev->zdev.zcomp->cclass;
-		fci.zcomp->c_uuid = zbdev->zdev.zcomp->c_uuid;
-		fci.zcomp->fru_uuid = zbdev->zdev.zcomp->fru_uuid;
+		fci.ocomp->comp.cclass = zbdev->zdev.zcomp->comp.cclass;
+		fci.ocomp->comp.c_uuid = zbdev->zdev.zcomp->comp.c_uuid;
+		fci.ocomp->comp.fru_uuid = zbdev->zdev.zcomp->comp.fru_uuid;
 		/* remove old zbdev stuff */
 		genz_bridge_remove_control_files(zbdev);
 		genz_remove_zbdev_from_fabric(zbdev);
 		/* add new zbdev stuff */
 		genz_add_zbdev_to_fabric(zbdev, fci.f);
-		zbdev->zdev.zcomp = fci.zcomp;
+		zbdev->zdev.zcomp = fci.ocomp;
 		ret = genz_bridge_create_control_files(zbdev);
 		if (ret < 0) {
 			pr_debug("genz_bridge_create_control_files failed, ret=%d\n", ret);
 			goto err;
 		}
-	} else if (fci.tmp_gcid == GENZ_INVALID_GCID &&
-		   fci.dr_gcid == GENZ_INVALID_GCID) {
-		/* scenario 2 */
-		pr_debug("scenario 2 - not yet implemented\n");
-		/* Revisit: finish this */
-	} else if (fci.tmp_gcid == GENZ_INVALID_GCID &&
-		   fci.dr_gcid != GENZ_INVALID_GCID) {
-		/* scenario 3 */
-		pr_debug("scenario 3 - not yet implemented\n");
+	} else if (scenario == 2) {
+		zbdev = genz_lookup_zbdev(fci.f, fci.br_gcid);
+		if (zbdev == NULL) {
+			pr_debug("scenario 2, br_gcid (%d) not found\n",
+				 fci.br_gcid);
+			ret = -EINVAL;
+			goto err;
+		}
+		ret = genz_fab_create_control_files(zbdev, fci.zcomp,
+						    GENZ_DR_IFACE_NONE, &fci.mgr_uuid);
+		if (ret < 0) {
+			pr_debug("genz_fab_create_control_files failed, ret=%d\n", ret);
+			goto err;
+		}
+	} else if (scenario == 3) {
+		zbdev = genz_lookup_zbdev(fci.f, fci.br_gcid);
+		if (zbdev == NULL) {
+			pr_debug("scenario 3, br_gcid (%d) not found\n",
+				 fci.br_gcid);
+			ret = -EINVAL;
+			goto err;
+		}
+		ret = genz_fab_create_control_files(zbdev, fci.zcomp,
+						    fci.dr_iface, &fci.mgr_uuid);
+		if (ret < 0) {
+			pr_debug("genz_fab_create_control_files failed, ret=%d\n", ret);
+			goto err;
+		}
 	} else {
 		pr_debug("invalid combination of GCIDs\n");
 		ret = -EINVAL;
@@ -738,8 +834,9 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 	}
 	return ret;
 err:
+	/* Revisit: need scenario-dependent error cleanup */
 	if (fci.zcomp)
-		kref_put(&fci.zcomp->kref, genz_free_component);
+		kobject_put(&fci.zcomp->kobj);
 	return ret;
 }
 
@@ -761,31 +858,27 @@ static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *i
 	int ret = 0;
 	struct genz_fab_comp_info fci;
 	struct genz_bridge_dev *zbdev;
-	struct genz_component *dr_comp;
+	struct genz_comp *dr_comp;
+	uint scenario;
 
 	pr_debug("entered\n");
 	ret = check_netlink_perm();
 	if (ret < 0)
 		goto err;
-	ret = parse_fabric_component(info, &fci);
+	ret = parse_fabric_component(info, &fci, true, &scenario);
 	/* Revisit: finish this */
-	/* Two scenarios:
-	 * 1. A direct-attached component is to be accessed via directed relay
-	 *    GCID: valid, BRIDGE_GCID: valid, TEMP_GCID: invalid
-	 *    DR_GCID: same as BRIDGE_GCID
-	 * 2. A switch-attached component is to be accessed via directed relay
-	 *    GCID: valid, BRIDGE_GCID: valid, TEMP_GCID: invalid
-	 *    DR_GCID: not the same as BRIDGE_GCID
+	/* Two scenarios.  See parse_fabric_component() for details.
+	 * 4. A direct-attached component is to be accessed via directed relay
+	 * 5. A switch-attached component is to be accessed via directed relay
 	 */
-	if (fci.tmp_gcid != GENZ_INVALID_GCID) {
+	if (genz_valid_gcid(fci.tmp_gcid)) {
 		pr_debug("tmp_gcid(%d) != INVALID\n", fci.tmp_gcid);
 		ret = -EINVAL;
 		goto err;
 	}
-	if (fci.br_gcid == GENZ_INVALID_GCID ||
-	    fci.dr_gcid == GENZ_INVALID_GCID || fci.gcid == GENZ_INVALID_GCID) {
-		pr_debug("br_gcid (%d) or dr_gcid(%d) or gcid(%d) == INVALID\n",
-			 fci.br_gcid, fci.dr_gcid, fci.gcid);
+	if (!genz_valid_gcid(fci.br_gcid) || !genz_valid_gcid(fci.dr_gcid)) {
+		pr_debug("br_gcid (%d) or dr_gcid(%d) == INVALID\n",
+			 fci.br_gcid, fci.dr_gcid);
 		ret = -EINVAL;
 		goto err;
 	}
@@ -794,31 +887,33 @@ static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *i
 		ret = -EINVAL;
 		goto err;
 	}
-	if (fci.br_gcid == fci.dr_gcid) {
-		/* scenario 1 */
+	if (scenario == 4) {
 		zbdev = genz_lookup_zbdev(fci.f, fci.br_gcid);
 		if (zbdev == NULL) {
-			pr_debug("scenario 1, br_gcid (%d) not found\n",
+			pr_debug("scenario 4, br_gcid (%d) not found\n",
 				 fci.br_gcid);
 			ret = -EINVAL;
 			goto err;
 		}
-		dr_comp = zbdev->zdev.zcomp;
-		ret = genz_dr_create_control_files(zbdev, dr_comp, fci.gcid,
+		dr_comp = &zbdev->zdev.zcomp->comp;
+		ret = genz_dr_create_control_files(zbdev, fci.zcomp, dr_comp,
 						   fci.dr_iface, &fci.mgr_uuid);
 		if (ret < 0) {
 			pr_debug("genz_dr_create_control_files failed, ret=%d\n", ret);
 			goto err;
 		}
-	} else {
-		/* scenario 2 */
-		pr_debug("scenario 2 - not yet implemented\n");
+	} else if (scenario == 5) {
 		/* Revisit: finish this */
+		pr_debug("scenario 5 - not yet implemented\n");
+	} else {
+		pr_debug("invalid combination of GCIDs\n");
+		ret = -EINVAL;
+		goto err;
 	}
 	return ret;
 err:
 	if (fci.zcomp)
-		kref_put(&fci.zcomp->kref, genz_free_component);
+		kobject_put(&fci.zcomp->kobj);
 	return ret;
 }
 
