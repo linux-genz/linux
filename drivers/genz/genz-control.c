@@ -417,12 +417,12 @@ static struct kobj_type chain_dir_ktype = {
 	.release = chain_dir_release
 };
 
-static ssize_t gcid_show(struct kobject *kobj,
+static ssize_t gcid_br_show(struct kobject *kobj,
 		struct kobj_attribute *attr,
 		char *buf)
 {
 	struct genz_bridge_dev *zbdev;
-	struct genz_component *comp;
+	struct genz_os_comp *comp;
 
 	zbdev = kobj_to_zbdev(kobj);
 	if (zbdev == NULL) {
@@ -430,22 +430,23 @@ static ssize_t gcid_show(struct kobject *kobj,
 		return(snprintf(buf, PAGE_SIZE, "bad zbdev\n"));
 	}
 	comp = zbdev->zdev.zcomp;
-	if (comp->subnet == NULL) {
+	if (comp->comp.subnet == NULL) {
 		pr_debug("comp->subnet is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component subnet\n"));
 	}
-	return(snprintf(buf, PAGE_SIZE, "%04x:%03x\n", comp->subnet->sid, comp->cid));
+	return snprintf(buf, PAGE_SIZE, "%04x:%03x\n",
+			comp->comp.subnet->sid, comp->comp.cid);
 }
 
-static struct kobj_attribute gcid_attribute =
-	__ATTR(gcid, (0444), gcid_show, NULL);
+static struct kobj_attribute gcid_br_attribute =
+	__ATTR(gcid, (0444), gcid_br_show, NULL);
 
-static ssize_t cuuid_show(struct kobject *kobj,
+static ssize_t cclass_br_show(struct kobject *kobj,
 		struct kobj_attribute *attr,
 		char *buf)
 {
 	struct genz_bridge_dev *zbdev;
-	struct genz_component *comp;
+	struct genz_os_comp *comp;
 
 	zbdev = kobj_to_zbdev(kobj);
 	if (zbdev == NULL) {
@@ -453,15 +454,196 @@ static ssize_t cuuid_show(struct kobject *kobj,
 		return(snprintf(buf, PAGE_SIZE, "bad zbdev\n"));
 	}
 	comp = zbdev->zdev.zcomp;
+	return snprintf(buf, PAGE_SIZE, "%u\n", comp->comp.cclass);
+}
+
+static struct kobj_attribute cclass_br_attribute =
+	__ATTR(cclass, (0444), cclass_br_show, NULL);
+
+static ssize_t serial_br_show(struct kobject *kobj,
+		struct kobj_attribute *attr,
+		char *buf)
+{
+	struct genz_bridge_dev *zbdev;
+	struct genz_os_comp *comp;
+
+	zbdev = kobj_to_zbdev(kobj);
+	if (zbdev == NULL) {
+		pr_debug("zbdev is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad zbdev\n"));
+	}
+	comp = zbdev->zdev.zcomp;
+	return snprintf(buf, PAGE_SIZE, "0x%llx\n", comp->comp.serial);
+}
+
+static struct kobj_attribute serial_br_attribute =
+	__ATTR(serial, (0444), serial_br_show, NULL);
+
+static ssize_t cuuid_br_show(struct kobject *kobj,
+		struct kobj_attribute *attr,
+		char *buf)
+{
+	struct genz_bridge_dev *zbdev;
+	struct genz_os_comp *comp;
+
+	zbdev = kobj_to_zbdev(kobj);
+	if (zbdev == NULL) {
+		pr_debug("zbdev is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad zbdev\n"));
+	}
+	comp = zbdev->zdev.zcomp;
+	return snprintf(buf, PAGE_SIZE, "%pUb\n", &comp->comp.c_uuid);
+}
+
+static struct kobj_attribute cuuid_br_attribute =
+	__ATTR(c_uuid, (0444), cuuid_br_show, NULL);
+
+static ssize_t fru_uuid_br_show(struct kobject *kobj,
+		struct kobj_attribute *attr,
+		char *buf)
+{
+	struct genz_bridge_dev *zbdev;
+	struct genz_os_comp *comp;
+
+	zbdev = kobj_to_zbdev(kobj);
+	if (zbdev == NULL) {
+		pr_debug("zbdev is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad zbdev\n"));
+	}
+	comp = zbdev->zdev.zcomp;
+	return snprintf(buf, PAGE_SIZE, "%pUb\n", &comp->comp.fru_uuid);
+}
+
+static struct kobj_attribute fru_uuid_br_attribute =
+	__ATTR(fru_uuid, (0444), fru_uuid_br_show, NULL);
+
+static int genz_create_bridge_files(struct kobject *genz_dir)
+{
+	int ret;
+
+	ret  = sysfs_create_file(genz_dir, &gcid_br_attribute.attr);
+	ret |= sysfs_create_file(genz_dir, &cclass_br_attribute.attr);
+	ret |= sysfs_create_file(genz_dir, &serial_br_attribute.attr);
+	ret |= sysfs_create_file(genz_dir, &fru_uuid_br_attribute.attr);
+	ret |= sysfs_create_file(genz_dir, &cuuid_br_attribute.attr);
+	return ret;
+}
+
+static void genz_remove_bridge_files(struct kobject *genz_dir)
+{
+	sysfs_remove_file(genz_dir, &gcid_br_attribute.attr);
+	sysfs_remove_file(genz_dir, &cclass_br_attribute.attr);
+	sysfs_remove_file(genz_dir, &serial_br_attribute.attr);
+	sysfs_remove_file(genz_dir, &fru_uuid_br_attribute.attr);
+	sysfs_remove_file(genz_dir, &cuuid_br_attribute.attr);
+}
+
+static ssize_t gcid_fab_show(struct kobject *kobj,
+			     struct kobj_attribute *attr, char *buf)
+{
+	struct genz_comp *comp;
+
+	comp = kobj_to_genz_comp(kobj);
+	if (comp == NULL) {
+		pr_debug("comp is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad comp\n"));
+	}
 	if (comp->subnet == NULL) {
 		pr_debug("comp->subnet is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component subnet\n"));
 	}
-	return(snprintf(buf, PAGE_SIZE, "%pUb\n", &comp->c_uuid));
+	return snprintf(buf, PAGE_SIZE, "%04x:%03x\n",
+			comp->subnet->sid, comp->cid);
 }
 
-static struct kobj_attribute cuuid_attribute =
-	__ATTR(cuuid, (0444), cuuid_show, NULL);
+static struct kobj_attribute gcid_fab_attribute =
+	__ATTR(gcid, (0444), gcid_fab_show, NULL);
+
+static ssize_t cclass_fab_show(struct kobject *kobj,
+			       struct kobj_attribute *attr, char *buf)
+{
+	struct genz_comp *comp;
+
+	comp = kobj_to_genz_comp(kobj);
+	if (comp == NULL) {
+		pr_debug("comp is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad comp\n"));
+	}
+	return snprintf(buf, PAGE_SIZE, "%u\n", comp->cclass);
+}
+
+static struct kobj_attribute cclass_fab_attribute =
+	__ATTR(cclass, (0444), cclass_fab_show, NULL);
+
+static ssize_t serial_fab_show(struct kobject *kobj,
+			       struct kobj_attribute *attr, char *buf)
+{
+	struct genz_comp *comp;
+
+	comp = kobj_to_genz_comp(kobj);
+	if (comp == NULL) {
+		pr_debug("comp is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad comp\n"));
+	}
+	return snprintf(buf, PAGE_SIZE, "0x%llx\n", comp->serial);
+}
+
+static struct kobj_attribute serial_fab_attribute =
+	__ATTR(serial, (0444), serial_fab_show, NULL);
+
+static ssize_t cuuid_fab_show(struct kobject *kobj,
+			      struct kobj_attribute *attr, char *buf)
+{
+	struct genz_comp *comp;
+
+	comp = kobj_to_genz_comp(kobj);
+	if (comp == NULL) {
+		pr_debug("comp is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad comp\n"));
+	}
+	return snprintf(buf, PAGE_SIZE, "%pUb\n", &comp->c_uuid);
+}
+
+static struct kobj_attribute cuuid_fab_attribute =
+	__ATTR(c_uuid, (0444), cuuid_fab_show, NULL);
+
+static ssize_t fru_uuid_fab_show(struct kobject *kobj,
+		struct kobj_attribute *attr,
+		char *buf)
+{
+	struct genz_comp *comp;
+
+	comp = kobj_to_genz_comp(kobj);
+	if (comp == NULL) {
+		pr_debug("comp is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad comp\n"));
+	}
+	return snprintf(buf, PAGE_SIZE, "%pUb\n", &comp->fru_uuid);
+}
+
+static struct kobj_attribute fru_uuid_fab_attribute =
+	__ATTR(fru_uuid, (0444), fru_uuid_fab_show, NULL);
+
+static int genz_create_fab_files(struct kobject *comp_dir)
+{
+	int ret;
+
+	ret  = sysfs_create_file(comp_dir, &gcid_fab_attribute.attr);
+	ret |= sysfs_create_file(comp_dir, &cclass_fab_attribute.attr);
+	ret |= sysfs_create_file(comp_dir, &serial_fab_attribute.attr);
+	ret |= sysfs_create_file(comp_dir, &fru_uuid_fab_attribute.attr);
+	ret |= sysfs_create_file(comp_dir, &cuuid_fab_attribute.attr);
+	return ret;
+}
+
+static void genz_remove_fab_files(struct kobject *comp_dir)
+{
+	sysfs_remove_file(comp_dir, &gcid_fab_attribute.attr);
+	sysfs_remove_file(comp_dir, &cclass_fab_attribute.attr);
+	sysfs_remove_file(comp_dir, &serial_fab_attribute.attr);
+	sysfs_remove_file(comp_dir, &fru_uuid_fab_attribute.attr);
+	sysfs_remove_file(comp_dir, &cuuid_fab_attribute.attr);
+}
 
 #ifdef NOT_YET
 
@@ -510,6 +692,10 @@ static int genz_create_control_chain_siblings(
 			return -EINVAL;
 		}
 		s = alloc_control_info(hdr->size, offset);
+		if (s == NULL) {
+			pr_debug("failed to allocate control_info\n");
+			return -ENOMEM;
+		}
 		s->parent = parent;
 		if (parent->child == NULL) { /* first child */
 			parent->child = s;
@@ -566,6 +752,10 @@ static int genz_create_control_children(
 			return -EINVAL;
 		}
 		c = alloc_control_info(hdr->size, offset);
+		if (c == NULL) {
+			pr_debug("failed to allocate control_info\n");
+			return -ENOMEM;
+		}
 		c->parent = parent;
 		if (parent->child == NULL) { /* first child */
 			parent->child = c;
@@ -1020,6 +1210,28 @@ static struct genz_control_info *alloc_control_info(
 	 */
 
 	return ci;
+}
+
+static struct genz_mem_data *alloc_mdata(struct genz_bridge_dev *zbdev)
+{
+	struct genz_mem_data     *mdata;
+	ulong                    flags;
+
+	mdata = kzalloc(sizeof(*mdata), GFP_KERNEL);
+	if (!mdata) {
+		pr_debug("failed to allocate genz_mem_data\n");
+		return NULL;
+	}
+	genz_init_mem_data(mdata, zbdev);
+	spin_lock_irqsave(&zbdev->zmmu_lock, flags);
+	if (zbdev->control_mdata == NULL) {
+		zbdev->control_mdata = mdata;
+	} else {
+		kfree(mdata);
+		mdata = zbdev->control_mdata;
+	}
+	spin_unlock_irqrestore(&zbdev->zmmu_lock, flags);
+	return mdata;
 }
 
 static int traverse_table(struct genz_bridge_dev *zbdev,
@@ -1690,6 +1902,18 @@ int genz_control_read_sid(struct genz_bridge_dev *zbdev,
 	return ret;
 }
 
+int genz_control_read_serial(struct genz_bridge_dev *zbdev,
+			     struct genz_rmr_info *rmri, uint64_t *serial)
+{
+	int ret;
+
+	ret = genz_control_read_structure(zbdev, rmri, serial, 0,
+			offsetof(struct genz_core_structure, serial_number),
+			sizeof(*serial));
+	pr_debug("0x%llx\n", *serial);
+	return ret;
+}
+
 int genz_control_read_cclass(struct genz_bridge_dev *zbdev,
 			     struct genz_rmr_info *rmri, uint16_t *cclass)
 {
@@ -1772,7 +1996,7 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	/* Create a symlink from genzN to /sys/devices/genzN/bridgeN */
 	snprintf(bridgeN, MAX_GENZ_NAME, "bridge%d", zbdev->bridge_num);
 	/* Revisit: check all those pointers are not NULL */
-	ret = sysfs_create_link(&zbdev->zdev.zcomp->subnet->fabric->dev.kobj,
+	ret = sysfs_create_link(&zbdev->zdev.zcomp->subnet->subnet.fabric->dev.kobj,
 			genz_dir, bridgeN);
 	if (ret < 0) {
 		pr_debug("unable to create %s symlink\n", bridgeN);
@@ -1782,72 +2006,38 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	/* Make control directory under genzN */
 	/* Revisit: error handling */
 	//zdev->root_control_info->kobj.kset = zbdev->genz_kset; /* Revisit */
-	ret = kobject_init_and_add(&zdev->zcomp->root_kobj,
+	ret = kobject_init_and_add(&zdev->zcomp->comp.ctl_kobj,
 				   &control_dir_ktype, genz_dir, "control");
 	if (ret < 0) {
 		pr_debug("unable to create bridge control directory\n");
 		goto err_control;
 	}
 
-	/* Make gcid file under native device/genzN directory */
-	ret = sysfs_create_file(genz_dir, &gcid_attribute.attr);
+	/* Make gcid/cclass/serial files under native device/genzN directory */
+	ret = genz_create_bridge_files(genz_dir);
 	if (ret < 0) {
-		pr_debug("unable to create bridge gcid file\n");
-		goto err_control;
-	}
-
-	/* Make cuuid file under native device/genzN directory */
-	ret = sysfs_create_file(genz_dir, &cuuid_attribute.attr);
-	if (ret < 0) {
-		pr_debug("unable to create bridge cuuid file\n");
+		pr_debug("unable to create bridge files\n");
 		goto err_control;
 	}
 
 	/* Populate native device/genzN/control directory */
-
-#ifdef NOT_YET
-	/* Read the GCID from control space to create subnet/component dirs */
-	ret = genz_control_read_sid(zbdev, NULL, &sid);
-	if (ret) {
-		pr_debug("couldn't read sid for bridge\n");
-		return -EINVAL;
-	}
-	f = zbdev->fabric;
-	s = genz_add_subnet(sid, f);
-	if (s == NULL) {
-		pr_debug("genz_add_subnet failed\n");
-		return -ENOMEM;
-	}
-	ret =  genz_control_read_cid0(zbdev, NULL, &cid);
-	if (ret) {
-		pr_debug("couldn't read cid for bridge\n");
-		return -EINVAL;
-	}
-	zcomp = genz_add_component(s, cid);
-	if (zcomp == NULL) {
-		pr_debug("genz_add_component failed\n");
-		return -ENOMEM;
-	}
-#endif
-
 	/* Revisit: error handling */
-
 	pr_debug("calling start_core_structure\n");
 	ret = start_core_structure(zbdev, NULL,
-			&zdev->zcomp->root_control_info,
+			&zdev->zcomp->comp.root_control_info,
 			&genz_struct_type_to_ptrs[GENZ_CORE_STRUCTURE],
-			&zdev->zcomp->root_kobj); /* control dir */
+			&zdev->zcomp->comp.ctl_kobj); /* control dir */
 	return 0;
 
 err_control:
-	kobject_put(&zdev->zcomp->root_control_info->kobj);
+	kobject_put(&zdev->zcomp->comp.root_control_info->kobj);
 err_kobj:
 err_genz_dir:
 	kobject_put(genz_dir);
 	return ret;
 }
 
-static struct kobject *genz_comp_iface_dir(struct genz_component *dr_comp,
+static struct kobject *genz_comp_iface_dir(struct genz_comp *dr_comp,
 					   uint16_t dr_iface)
 {
 	struct genz_control_info *ci, *core;
@@ -1872,46 +2062,27 @@ static struct kobject *genz_comp_iface_dir(struct genz_component *dr_comp,
  * genz_dr_create_control_files() - read control space for a directed-relay component
  */
 int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
-				 struct genz_component *dr_comp, uint32_t gcid,
+				 struct genz_comp *f_comp,
+				 struct genz_comp *dr_comp,
 				 uint16_t dr_iface, uuid_t *mgr_uuid)
 {
+	uint32_t                 gcid = genz_comp_gcid(f_comp);
 	struct kobject           *dr_dir, *iface_dir;
-	struct genz_rmr_info     *rmri;
-	struct genz_dr_iface     *di;
+	struct genz_rmr_info     *dr_rmri;
 	struct genz_mem_data     *mdata;
 	struct uuid_tracker      *uu;
 	struct uuid_node         *md_node;
 	uint64_t                 access;
 	uint32_t                 rkey;
-	ulong                    flags;
 	int                      ret;
 
-	mdata = kzalloc(sizeof(*mdata), GFP_KERNEL);
+	mdata = alloc_mdata(zbdev);
 	if (!mdata) {
 		pr_debug("failed to allocate genz_mem_data\n");
 		return -ENOMEM;
 	}
-	genz_init_mem_data(mdata, zbdev);
-	spin_lock_irqsave(&zbdev->zmmu_lock, flags);
-	if (zbdev->control_mdata == NULL) {
-		zbdev->control_mdata = mdata;
-	} else {
-		kfree(mdata);
-		mdata = zbdev->control_mdata;
-	}
-	spin_unlock_irqrestore(&zbdev->zmmu_lock, flags);
-	di = kzalloc(sizeof(*di), GFP_KERNEL);
-	if (!di) {
-		pr_debug("failed to allocate genz_dr_iface\n");
-		ret = -ENOMEM;
-		goto err_mdata;
-	}
-	di->dr_iface = dr_iface;
-	dr_dir = &di->dr_kobj;
-	/* add di to dr_iface_list */
-	spin_lock(&dr_comp->dr_lock);
-	list_add_tail(&di->dr_iface_node, &dr_comp->dr_iface_list);
-	spin_unlock(&dr_comp->dr_lock);
+	dr_dir = &f_comp->ctl_kobj;
+	dr_rmri = &f_comp->ctl_rmr_info;
 	iface_dir = genz_comp_iface_dir(dr_comp, dr_iface);
 	if (!iface_dir) {
 		pr_debug("dr_iface %u not found\n", dr_iface);
@@ -1944,18 +2115,17 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 	access |= (zbdev->br_info.load_store) ?
 		(GENZ_MR_REQ_CPU|GENZ_MR_KERN_MAP) : 0;
 	rkey = 0;  /* Revisit */
-	rmri = &di->rmr_info;
 	pr_debug("calling genz_rmr_import\n");
 	/* initial mapping is for one 4KiB page covering the core struct */
 	ret = genz_rmr_import(mdata, mgr_uuid, gcid, 0, 4096,
-			      access, rkey, dr_iface, "control", rmri);
+			      access, rkey, dr_iface, "control", dr_rmri);
 	if (ret < 0) {
 		pr_debug("genz_rmr_import error ret=%d\n", ret);
 		goto err_md_node;
 	}
 	pr_debug("calling start_core_structure\n");
-	ret = start_core_structure(zbdev, rmri,
-			&di->dr_control_info,
+	ret = start_core_structure(zbdev, dr_rmri,
+			&f_comp->root_control_info,
 			&genz_struct_type_to_ptrs[GENZ_CORE_STRUCTURE],
 			dr_dir);
 	if (ret < 0) {
@@ -1972,11 +2142,156 @@ err_uu:
 err_kobj:
 	/* Revisit: error handling */
 err_list:
-	spin_lock(&dr_comp->dr_lock);
-	list_del(&di->dr_iface_node);
-	spin_unlock(&dr_comp->dr_lock);
-	kfree(di);
-err_mdata:
+	kfree(mdata);
+	return ret;
+}
+
+int genz_comp_read_attrs(struct genz_bridge_dev *zbdev,
+			 struct genz_rmr_info *rmri, struct genz_comp *comp)
+{
+	int ret;
+
+	/* gcid has already been read */
+	ret = genz_control_read_cclass(zbdev, rmri, &comp->cclass);
+	if (ret) {
+		pr_debug("genz_control_read_cclass returned %d\n", ret);
+		return ret;
+	}
+	ret = genz_control_read_serial(zbdev, rmri, &comp->serial);
+	if (ret) {
+		pr_debug("genz_control_read_serial returned %d\n", ret);
+		return ret;
+	}
+	ret =  genz_control_read_c_uuid(zbdev, rmri, &comp->c_uuid);
+	if (ret < 0) {
+		pr_debug("genz_control_read_c_uuid returned %d\n", ret);
+		return ret;
+	}
+	ret = genz_control_read_fru_uuid(zbdev, rmri, &comp->fru_uuid);
+	if (ret < 0) {
+		pr_debug("genz_control_read_fru_uuid returned %d\n", ret);
+	}
+	return ret;
+}
+
+/**
+ * genz_fab_create_control_files() - read control space for a "normal" fabric component
+ */
+int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
+				  struct genz_comp *f_comp,
+				  uint16_t dr_iface, uuid_t *mgr_uuid)
+{
+	uint32_t                 gcid = genz_comp_gcid(f_comp);
+	struct genz_rmr_info     *rmri;
+	struct genz_mem_data     *mdata;
+	struct uuid_tracker      *uu;
+	struct uuid_node         *md_node;
+	uint64_t                 access;
+	uint32_t                 rkey;
+	int                      ret;
+
+	rmri = &f_comp->ctl_rmr_info;
+	mdata = alloc_mdata(zbdev);
+	if (!mdata) {
+		pr_debug("failed to allocate genz_mem_data\n");
+		return -ENOMEM;
+	}
+	if (dr_iface != GENZ_DR_IFACE_NONE) {
+		/* we already have (dr) control space - move/update it */
+		ret = kobject_move(&f_comp->ctl_kobj, &f_comp->kobj);
+		if (ret < 0) {
+			/* Revisit: error handling */
+			return ret;
+		}
+		ret = kobject_rename(&f_comp->ctl_kobj, "control");
+		if (ret < 0) {
+			/* Revisit: error handling */
+			return ret;
+		}
+		/* update rmr with GENZ_DR_IFACE_NONE */
+		ret = genz_rmr_update(mdata, rmri->zres.rw_rkey,
+				      GENZ_DR_IFACE_NONE, rmri);
+		if (ret < 0) {
+			/* Revisit: error handling */
+			pr_debug("genz_rmr_update error ret=%d\n", ret);
+			return ret;
+		}
+		ret = genz_comp_read_attrs(zbdev, rmri, f_comp);
+		if (ret < 0) {
+			pr_debug("genz_comp_read_attrs error ret=%d\n", ret);
+			return ret;
+		}
+		ret = genz_create_fab_files(&f_comp->kobj);
+		return ret;
+	}
+	/* Make the control directory under the component */
+	ret = kobject_init_and_add(&f_comp->ctl_kobj, &control_dir_ktype,
+				   &f_comp->kobj, "control");
+	if (ret < 0) {
+		pr_debug("unable to create control directory\n");
+		goto err_list;
+	}
+
+	/* Need mgr_uuid REMOTE tracker to do rmr_imports against */
+	uu = genz_uuid_tracker_alloc_and_insert(
+		mgr_uuid, UUID_TYPE_REMOTE,
+		0, mdata, GFP_KERNEL, &ret);
+	if (!uu)
+		goto err_kobj;
+	/* we now hold a reference to uu */
+	/* add uu to mdata->md_remote_uuid_tree */
+	md_node = genz_remote_uuid_alloc_and_insert(uu, &mdata->uuid_lock,
+					    &mdata->md_remote_uuid_tree,
+					    GFP_KERNEL, &ret);
+	if (ret < 0)
+		goto err_uu;
+
+	access = GENZ_MR_READ_REMOTE|GENZ_MR_WRITE_REMOTE|
+		 GENZ_MR_INDIVIDUAL|GENZ_MR_CONTROL;
+	access |= (zbdev->br_info.load_store) ?
+		(GENZ_MR_REQ_CPU|GENZ_MR_KERN_MAP) : 0;
+	rkey = 0;  /* Revisit */
+	pr_debug("calling genz_rmr_import\n");
+	/* initial mapping is for one 4KiB page covering the core struct */
+	ret = genz_rmr_import(mdata, mgr_uuid, gcid, 0, 4096,
+			      access, rkey, dr_iface, "control", rmri);
+	if (ret < 0) {
+		pr_debug("genz_rmr_import error ret=%d\n", ret);
+		goto err_md_node;
+	}
+	ret = genz_comp_read_attrs(zbdev, rmri, f_comp);
+	if (ret < 0) {
+		pr_debug("genz_comp_read_attrs error ret=%d\n", ret);
+		goto err_rmr;
+	}
+	ret = genz_create_fab_files(&f_comp->kobj);
+	if (ret < 0) {
+		pr_debug("genz_create_fab_files error ret=%d\n", ret);
+		goto err_rmr;
+	}
+	pr_debug("calling start_core_structure\n");
+	ret = start_core_structure(zbdev, rmri,
+			&f_comp->root_control_info,
+			&genz_struct_type_to_ptrs[GENZ_CORE_STRUCTURE],
+			&f_comp->ctl_kobj);
+	if (ret < 0) {
+		pr_debug("start_core_structure error ret=%d\n", ret);
+		goto err_fab_files;
+	}
+	return 0;
+
+err_fab_files:
+	genz_remove_fab_files(&f_comp->kobj);
+err_rmr:
+	genz_rmr_free(mdata, rmri);
+err_md_node:
+	genz_free_uuid_node(mdata, &mdata->uuid_lock,
+			    &mdata->md_remote_uuid_tree, mgr_uuid, false);
+err_uu:
+	genz_uuid_remove(uu);
+err_kobj:
+	/* Revisit: error handling */
+err_list:
 	kfree(mdata);
 	return ret;
 }
@@ -2059,10 +2374,10 @@ int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev)
 	 */
 	remove_all_ci(zbdev->genz_control_kset);
 #endif
-	/* remove the genzN/gcid file */
-	sysfs_remove_file(&zbdev->genzN_dir, &gcid_attribute.attr);
+	/* remove the genzN/{gcid,cclass,serial,fru_uuid,c_uuid} files */
+	genz_remove_bridge_files(&zbdev->genzN_dir);
 	/* remove the symlink associated with this genzN directory */
-	dir = &zbdev->zdev.zcomp->subnet->fabric->dev.kobj;
+	dir = &zbdev->zdev.zcomp->comp.subnet->fabric->dev.kobj;
 	snprintf(bridgeN, MAX_GENZ_NAME, "bridge%d", zbdev->bridge_num);
 	dev_dbg(zbdev->bridge_dev, "removing %s symlink for kobj %s\n",
 		bridgeN, kobject_name(dir));
@@ -2072,8 +2387,8 @@ int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev)
 #ifdef BROKEN
 	pr_debug("kset_unregister %s\n", kobject_name(&zbdev->genz_control_kset->kobj));
 	kset_unregister(zbdev->genz_control_kset);
-	kobject_put(&zbdev->genzN_dir); /* the genzN directory under PCI */
 #endif
+	kobject_put(&zbdev->genzN_dir); /* free the genzN directory */
 	return 0;
 }
 
@@ -2101,7 +2416,7 @@ int genz_create_sysfs_dev_files(struct genz_dev *zdev)
 	sid = kobject_create();
 	if (sid == NULL)
 		goto err_genz;
-	ret = kobject_init_and_add(sid, &control_info_ktype, zdev->root_kobj,
+	ret = kobject_init_and_add(sid, &control_info_ktype, zdev->ctl_kobj,
 			"%04d", genz_gcid_sid(zdev->zcomp->gcid));
 	if (ret < 0)
 		goto err_sid;
@@ -2131,7 +2446,7 @@ err_cid:
 err_sid:
 	kobject_put(sid);
 err_genz:
-	kobject_put(zdev->root_kobj);
+	kobject_put(zdev->ctl_kobj);
 	return ret;
 }
 #endif

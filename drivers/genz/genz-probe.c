@@ -48,6 +48,16 @@
 LIST_HEAD(genz_fabrics);
 DEFINE_SPINLOCK(genz_fabrics_lock);
 
+static void genz_fabric_release(struct kobject *kobj)
+{
+	/* Revisit: implement this */
+}
+
+static struct kobj_type genz_fabric_ktype = {
+	.sysfs_ops = &kobj_sysfs_ops,
+	.release = genz_fabric_release
+};
+
 static int call_probe(struct genz_dev *zdev, struct genz_driver *zdrv, const struct genz_device_id *zid);
 
 /**
@@ -210,6 +220,8 @@ static struct genz_fabric *genz_alloc_fabric(uint32_t fabric_num)
 
 	INIT_LIST_HEAD(&f->subnets);
 	INIT_LIST_HEAD(&f->components);
+	INIT_LIST_HEAD(&f->os_subnets);
+	INIT_LIST_HEAD(&f->os_components);
 	INIT_LIST_HEAD(&f->devices);
 	INIT_LIST_HEAD(&f->bridges);
 	spin_lock_init(&f->devices_lock);
@@ -237,7 +249,7 @@ static int genz_init_fabric(struct genz_fabric *f)
 	/* setting the bus and id uses simple enumeration to get genz<N> */
 	f->dev.bus = &genz_bus_type;
 	f->dev.id = f->number;
-	f->dev.release = genz_free_fabric;
+	f->dev.release = genz_release_fabric;
 	f->dev.parent = NULL;
 	dev_set_name(&f->dev, "genz%u", f->number);
 
@@ -248,13 +260,24 @@ static int genz_init_fabric(struct genz_fabric *f)
 		return ret;
 	}
 
+	/*
+	 * The /sys/bus/genz/fabrics/fabric<N> directory is created using
+	 * bus_kobj.
+	 */
+	f->bus_kobj.kset = genz_fabrics_kset;
+	ret = kobject_init_and_add(&f->bus_kobj, &genz_fabric_ktype, NULL,
+				   "fabric%u", f->number);
+	if (ret < 0) {
+		kobject_put(&f->bus_kobj);
+		return ret;
+	}
 	spin_lock_irqsave(&genz_fabrics_lock, flags);
 	f->status = GENZ_FABRIC_STATUS_INITED;
 	spin_unlock_irqrestore(&genz_fabrics_lock, flags);
 	return ret;
 }
 
-void genz_free_fabric(struct device *dev)
+void genz_release_fabric(struct device *dev)
 {
 	struct genz_fabric *f;
 	unsigned long flags;
@@ -262,6 +285,7 @@ void genz_free_fabric(struct device *dev)
 	f = dev_to_genz_fabric(dev);
 
 	pr_debug("%s\n", dev_name(dev));
+	kobject_put(&f->bus_kobj);
 	spin_lock_irqsave(&genz_fabrics_lock, flags);
 	list_del(&f->node);
 	spin_unlock_irqrestore(&genz_fabrics_lock, flags);
@@ -351,34 +375,75 @@ static struct genz_subnet *genz_alloc_subnet(void)
 	return s;
 }
 
-void genz_free_subnet(struct device *dev)
+static struct genz_os_subnet *genz_alloc_os_subnet(void)
 {
-	struct genz_subnet *s;
-	struct genz_fabric *f;
-	unsigned long      flags;
+	struct genz_os_subnet *s;
 
-	pr_debug("genz_free_subnet %s\n", dev_name(dev));
-	s = dev_to_genz_subnet(dev);
-	f = s->fabric;
+	s = kzalloc(sizeof(*s), GFP_KERNEL);
+	if (!s)
+		return NULL;
+	INIT_LIST_HEAD(&s->subnet.node);
+	return s;
+}
+
+void genz_release_os_subnet(struct device *dev)
+{
+	struct genz_os_subnet *s;
+	struct genz_fabric    *f;
+	unsigned long         flags;
+
+	pr_debug("%s\n", dev_name(dev));
+	s = dev_to_genz_os_subnet(dev);
+	f = s->subnet.fabric;
 
 	spin_lock_irqsave(&f->subnets_lock, flags);
-	list_del(&s->node);
+	list_del(&s->subnet.node);
 	spin_unlock_irqrestore(&f->subnets_lock, flags);
 	kfree(s);
 }
 
+static void genz_release_subnet(struct kobject *kobj)
+{
+	struct genz_subnet *s;
+
+	pr_debug("entered\n");
+	s = container_of(kobj, struct genz_subnet, kobj);
+	kfree(s);
+}
+
+static struct kobj_type genz_subnet_ktype = {
+	.sysfs_ops = &kobj_sysfs_ops,
+	.release = genz_release_subnet
+};
+
 static int genz_init_subnet(struct genz_subnet *s,
-		uint32_t sid, struct genz_fabric *f)
+			    uint32_t sid, struct genz_fabric *f, bool add_kobj)
 {
 	int ret = 0;
 
 	s->sid = sid;
 	s->fabric = f;
+	kobject_init(&s->kobj, &genz_subnet_ktype);
+	if (add_kobj) {
+		ret = kobject_add(&s->kobj, &f->bus_kobj,
+				  "%u:%04x", f->number, s->sid);
+	}
+	return ret;
+}
+
+static int genz_init_os_subnet(struct genz_os_subnet *s,
+			       uint32_t sid, struct genz_fabric *f)
+{
+	int ret = 0;
+
+	ret = genz_init_subnet(&s->subnet, sid, f, false);
+	if (ret != 0)
+		return ret;
 	s->dev.bus = &genz_bus_type;
 	s->dev.id = sid;
-	s->dev.release = genz_free_subnet;
+	s->dev.release = genz_release_os_subnet;
 	s->dev.parent = &f->dev;
-	dev_set_name(&s->dev, "%04x", sid);
+	dev_set_name(&s->dev, "%u:%04x", f->number, sid);
 
 	ret = device_register(&s->dev);
 	if (ret) {
@@ -410,9 +475,30 @@ struct genz_subnet *genz_lookup_subnet(uint32_t sid, struct genz_fabric *f)
 	return found;
 }
 
+struct genz_os_subnet *genz_lookup_os_subnet(uint32_t sid, struct genz_fabric *f)
+{
+	struct genz_os_subnet *s, *found = NULL;
+	unsigned long flags;
+
+	spin_lock_irqsave(&f->subnets_lock, flags);
+	list_for_each_entry(s, &f->os_subnets, subnet.node) {
+		pr_debug("subnets list genz_subnet %px\n", s);
+		pr_debug("\tsubnet fabric is %px \n", s->subnet.fabric);
+		pr_debug("\ts->sid is %d looking for sid %d\n", s->subnet.sid, sid);
+		if (s->subnet.sid == sid) {
+			found = s;
+			/* Revisit: kref? */
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&f->subnets_lock, flags);
+
+	return found;
+}
+
 struct genz_subnet *genz_add_subnet(uint32_t sid, struct genz_fabric *f)
 {
-	struct genz_subnet *found = NULL;
+	struct genz_subnet *found;
 	int ret = 0;
 	unsigned long flags;
 
@@ -427,7 +513,7 @@ struct genz_subnet *genz_add_subnet(uint32_t sid, struct genz_fabric *f)
 			pr_debug("alloc_subnet failed\n");
 			return found;
 		}
-		ret = genz_init_subnet(found, sid, f);
+		ret = genz_init_subnet(found, sid, f, true);
 		if (ret) {
 			pr_debug("init_subnet failed\n");
 			return NULL;
@@ -441,33 +527,77 @@ struct genz_subnet *genz_add_subnet(uint32_t sid, struct genz_fabric *f)
 	return found;
 }
 
+struct genz_os_subnet *genz_add_os_subnet(uint32_t sid, struct genz_fabric *f)
+{
+	struct genz_os_subnet *found;
+	int ret = 0;
+	unsigned long flags;
+
+	pr_debug("entered\n");
+	found = genz_lookup_os_subnet(sid, f);
+
+	if (!found) {
+		pr_debug("sid %d is not in the os subnets list yet\n", sid);
+		/* Allocate a new genz_os_subnet and add to list */
+		found = genz_alloc_os_subnet();
+		if (!found) {
+			pr_debug("alloc_os_subnet failed\n");
+			return found;
+		}
+		ret = genz_init_os_subnet(found, sid, f);
+		if (ret) {
+			pr_debug("init_subnet failed\n");
+			return NULL;
+		}
+		/* Revisit: make sure this has not already been added. */
+		spin_lock_irqsave(&f->subnets_lock, flags);
+		list_add_tail(&found->subnet.node, &f->os_subnets);
+		spin_unlock_irqrestore(&f->subnets_lock, flags);
+		pr_debug("added to the subnet list\n");
+	}
+	return found;
+}
+
 /* Component Attributes */
 static ssize_t cclass_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
-	struct genz_component *comp;
+	struct genz_os_comp *comp;
 
-	comp = dev_to_genz_component(dev);
+	comp = dev_to_genz_os_comp(dev);
 	if (comp == NULL) {
 		pr_debug("comp is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
 	}
-	return snprintf(buf, PAGE_SIZE, "%d\n", comp->cclass);
+	return snprintf(buf, PAGE_SIZE, "%d\n", comp->comp.cclass);
 }
 static DEVICE_ATTR(cclass, (S_IRUGO), cclass_show, NULL);
+
+static ssize_t serial_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct genz_os_comp *comp;
+
+	comp = dev_to_genz_os_comp(dev);
+	if (comp == NULL) {
+		pr_debug("comp is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
+	}
+	return snprintf(buf, PAGE_SIZE, "0x%llx\n", comp->comp.serial);
+}
+static DEVICE_ATTR(serial, (S_IRUGO), serial_show, NULL);
 
 static ssize_t gcid_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
-	struct genz_component *comp;
-	uint32_t              gcid;
-	char                  str[GCID_STRING_LEN+1];
+	struct genz_os_comp *comp;
+	uint32_t                 gcid;
+	char                     str[GCID_STRING_LEN+1];
 
-	comp = dev_to_genz_component(dev);
-	pr_debug("comp is %px\n", comp);
-
+	comp = dev_to_genz_os_comp(dev);
 	if (comp == NULL) {
 		pr_debug("comp is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
@@ -476,7 +606,7 @@ static ssize_t gcid_show(struct device *dev,
 		pr_debug("comp->subnet is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component subnet\n"));
 	}
-	gcid = genz_gcid(comp->subnet->sid, comp->cid);
+	gcid = genz_gcid(comp->subnet->subnet.sid, comp->comp.cid);
 	return snprintf(buf, PAGE_SIZE, "%s\n",
 			genz_gcid_str(gcid, str, sizeof(str)));
 }
@@ -486,109 +616,166 @@ static ssize_t fru_uuid_show(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
-	struct genz_component *comp;
+	struct genz_os_comp *comp;
 
-	comp = dev_to_genz_component(dev);
-	pr_debug("comp is %px\n", comp);
-
+	comp = dev_to_genz_os_comp(dev);
 	if (comp == NULL) {
 		pr_debug("comp is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
 	}
-	return snprintf(buf, PAGE_SIZE, "%pUb\n", &comp->fru_uuid);
+	return snprintf(buf, PAGE_SIZE, "%pUb\n", &comp->comp.fru_uuid);
 }
 static DEVICE_ATTR(fru_uuid, (S_IRUGO), fru_uuid_show, NULL);
 
-static int genz_create_component_files(struct device *dev)
+static ssize_t c_uuid_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
 {
-	int ret = 0;
+	struct genz_os_comp *comp;
 
-	pr_debug("create_files for device %px\n", dev);
-	ret = device_create_file(dev, &dev_attr_gcid);
-	ret = device_create_file(dev, &dev_attr_cclass);
-	ret = device_create_file(dev, &dev_attr_fru_uuid);
+	comp = dev_to_genz_os_comp(dev);
+	if (comp == NULL) {
+		pr_debug("comp is NULL\n");
+		return(snprintf(buf, PAGE_SIZE, "bad component\n"));
+	}
+	return snprintf(buf, PAGE_SIZE, "%pUb\n", &comp->comp.c_uuid);
+}
+static DEVICE_ATTR(c_uuid, (S_IRUGO), c_uuid_show, NULL);
+
+static int genz_create_os_comp_files(struct device *dev)
+{
+	int ret;
+
+	pr_debug("create files for device %s\n", dev_name(dev));
+	ret  = device_create_file(dev, &dev_attr_gcid);
+	ret |= device_create_file(dev, &dev_attr_cclass);
+	ret |= device_create_file(dev, &dev_attr_serial);
+	ret |= device_create_file(dev, &dev_attr_fru_uuid);
+	ret |= device_create_file(dev, &dev_attr_c_uuid);
 	return ret;
 }
 
-struct genz_component *genz_alloc_component(void)
+struct genz_comp *genz_alloc_comp(void)
 {
-	struct genz_component *zcomp;
+	struct genz_comp *zcomp;
 
 	zcomp = kzalloc(sizeof(*zcomp), GFP_KERNEL);
 	if (!zcomp)
 		return NULL;
 
-	kref_init(&zcomp->kref);
 	spin_lock_init(&zcomp->dr_lock);
 	INIT_LIST_HEAD(&zcomp->dr_iface_list);
 	return zcomp;
 }
 
-void genz_free_comp(struct device *dev)
+struct genz_os_comp *genz_alloc_os_comp(void)
 {
-	struct genz_component *c;
+	struct genz_os_comp *ocomp;
+	struct genz_comp    *zcomp;
+
+	ocomp = kzalloc(sizeof(*ocomp), GFP_KERNEL);
+	if (!ocomp)
+		return NULL;
+
+	zcomp = &ocomp->comp;
+	spin_lock_init(&zcomp->dr_lock);
+	INIT_LIST_HEAD(&zcomp->dr_iface_list);
+	return ocomp;
+}
+
+void genz_release_os_comp(struct device *dev)
+{
+	struct genz_os_comp *c;
 	unsigned long flags;
 
-	pr_debug("genz_free_comp %s\n", dev_name(dev));
-	c = dev_to_genz_component(dev);
+	pr_debug("%s\n", dev_name(dev));
+	c = dev_to_genz_os_comp(dev);
 
-	spin_lock_irqsave(&c->subnet->fabric->components_lock, flags);
-	list_del(&c->fab_comp_node);
-	spin_unlock_irqrestore(&c->subnet->fabric->components_lock, flags);
+	spin_lock_irqsave(&c->comp.subnet->fabric->components_lock, flags);
+	list_del(&c->comp.fab_comp_node);
+	spin_unlock_irqrestore(&c->comp.subnet->fabric->components_lock, flags);
 	kfree(c);
 }
 
-int genz_init_component(struct genz_component *zcomp,
-		struct genz_subnet *s,
-		uint32_t cid)
+static void genz_release_comp(struct kobject *kobj)
 {
+	struct genz_comp *c;
+
+	pr_debug("entered\n");
+	c = container_of(kobj, struct genz_comp, kobj);
+	kfree(c);
+}
+
+static struct kobj_type genz_comp_ktype = {
+	.sysfs_ops = &kobj_sysfs_ops,
+	.release = genz_release_comp
+};
+
+int genz_init_comp(struct genz_comp *zcomp,
+		   struct genz_subnet *s, uint32_t cid, bool add_kobj)
+{
+	struct genz_fabric *f = s->fabric;
 	int ret = 0;
 
 	zcomp->subnet = s;
 	zcomp->cid = cid;
-	zcomp->dev.bus = &genz_bus_type;
-	zcomp->dev.id = cid;
-	zcomp->dev.release = genz_free_comp;
-	zcomp->dev.parent = &s->dev;
-	dev_set_name(&zcomp->dev, "%03x", cid);
-	pr_debug("in genz_init_component name is cid %03x\n", cid);
-	ret = device_register(&zcomp->dev);
+	kobject_init(&zcomp->kobj, &genz_comp_ktype);
+	if (add_kobj) {
+		ret = kobject_add(&zcomp->kobj, &s->kobj,
+				  "%u:%04x:%03x", f->number, s->sid, cid);
+	}
+	return ret;
+}
+
+int genz_init_os_comp(struct genz_os_comp *ocomp,
+		      struct genz_os_subnet *s, uint32_t cid)
+{
+	struct genz_fabric *f = s->subnet.fabric;
+	int ret = 0;
+
+	ret = genz_init_comp(&ocomp->comp, &s->subnet, cid, false);
+	if (ret != 0)
+		return ret;
+	ocomp->subnet = s;
+	ocomp->dev.bus = &genz_bus_type;
+	ocomp->dev.id = cid;
+	ocomp->dev.release = genz_release_os_comp;
+	ocomp->dev.parent = &s->dev;
+	dev_set_name(&ocomp->dev, "%u:%04x:%03x",
+		     f->number, s->subnet.sid, cid);
+	ret = device_register(&ocomp->dev);
 	if (ret) {
 		pr_debug("device_register failed with %d\n", ret);
-		put_device(&zcomp->dev);
+		put_device(&ocomp->dev);
 		return ret;
 	}
-	pr_debug("component kobj is %px\n", &(zcomp->dev.kobj));
-	pr_debug("subnet kobj is %px\n", &(s->dev.kobj));
-	kref_init(&zcomp->kref);
-	genz_create_component_files(&zcomp->dev);
+	genz_create_os_comp_files(&ocomp->dev);
 	return ret;
 }
 
 void print_components(struct genz_fabric *f)
 {
-	struct genz_component *c;
+	struct genz_comp *c;
 	int i = 0;
 
 	pr_debug("components list dump for fabric %px\n", f);
 	list_for_each_entry(c, &f->components, fab_comp_node) {
-		pr_debug("components list item %d: genz_component %px\n", i++, c);
+		pr_debug("components list item %d: genz_comp %px\n", i++, c);
 		pr_debug("\t subnet is %px gcid is %d:%d cclass is %d fru_uuid is %pUb\n", c->subnet, c->subnet->sid, c->cid, c->cclass, &c->fru_uuid);
 	}
 
 }
 
-struct genz_component *genz_lookup_component(struct genz_subnet *s,
-		uint32_t cid)
+struct genz_comp *genz_lookup_comp(struct genz_subnet *s, uint32_t cid)
 {
-	struct genz_component *c, *found = NULL;
+	struct genz_comp *c, *found = NULL;
 	unsigned long flags;
 
 	spin_lock_irqsave(&s->fabric->components_lock, flags);
 	list_for_each_entry(c, &s->fabric->components, fab_comp_node) {
 		if (c->cid == cid && s->sid == c->subnet->sid) {
 			found = c;
-			kref_get(&c->kref);
+			kobject_get(&c->kobj);
 			break;
 		}
 	}
@@ -596,26 +783,42 @@ struct genz_component *genz_lookup_component(struct genz_subnet *s,
 	return found;
 }
 
-struct genz_component *genz_add_component(struct genz_subnet *s,
-		uint32_t cid)
+struct genz_os_comp *genz_lookup_os_comp(struct genz_os_subnet *s,
+					 uint32_t cid)
 {
-	struct genz_component *found = NULL;
+	struct genz_os_comp *c, *found = NULL;
+	unsigned long flags;
+
+	spin_lock_irqsave(&s->subnet.fabric->components_lock, flags);
+	list_for_each_entry(c, &s->subnet.fabric->os_components, comp.fab_comp_node) {
+		if (c->comp.cid == cid && s->subnet.sid == c->subnet->subnet.sid) {
+			found = c;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&s->subnet.fabric->components_lock, flags);
+	return found;
+}
+
+struct genz_comp *genz_add_comp(struct genz_subnet *s,
+				uint32_t cid)
+{
+	struct genz_comp *found = NULL;
 	int ret = 0;
 	unsigned long flags;
 
-	found = genz_lookup_component(s, cid);
-
+	found = genz_lookup_comp(s, cid);
 	if (!found) {
 		pr_debug("cid %d is not in the components list yet\n", cid);
-		/* Allocate a new genz_component and add to list */
-		found = genz_alloc_component();
+		/* Allocate a new genz_comp and add to list */
+		found = genz_alloc_comp();
 		if (!found) {
-			pr_debug("alloc_componenet failed\n");
+			pr_debug("alloc_comp failed\n");
 			return found;
 		}
-		ret = genz_init_component(found, s, cid);
+		ret = genz_init_comp(found, s, cid, true);
 		if (ret) {
-			pr_debug("init_component failed\n");
+			pr_debug("init_comp failed\n");
 			return NULL;
 		}
 		/* Revisit: make sure this has not already been added. */
@@ -627,12 +830,34 @@ struct genz_component *genz_add_component(struct genz_subnet *s,
 	return found;
 }
 
-void genz_free_component(struct kref *kref)
+struct genz_os_comp *genz_add_os_comp(struct genz_os_subnet *s,
+				   uint32_t cid)
 {
-	struct genz_component *c;
+	struct genz_os_comp *found = NULL;
+	int ret = 0;
+	unsigned long flags;
 
-	c = container_of(kref, struct genz_component, kref);
-	kfree(c);
+	found = genz_lookup_os_comp(s, cid);
+	if (!found) {
+		pr_debug("cid %d is not in the os_comp list yet\n", cid);
+		/* Allocate a new genz_os_comp and add to list */
+		found = genz_alloc_os_comp();
+		if (!found) {
+			pr_debug("alloc_os_comp failed\n");
+			return found;
+		}
+		ret = genz_init_os_comp(found, s, cid);
+		if (ret) {
+			pr_debug("init_comp failed\n");
+			return NULL;
+		}
+		/* Revisit: make sure this has not already been added. */
+		spin_lock_irqsave(&s->subnet.fabric->components_lock, flags);
+		list_add_tail(&found->comp.fab_comp_node, &s->subnet.fabric->os_components);
+		spin_unlock_irqrestore(&s->subnet.fabric->components_lock, flags);
+		pr_debug("added component %px to the os_comp list\n", found);
+	}
+	return found;
 }
 
 /**
@@ -645,25 +870,12 @@ void genz_free_component(struct kref *kref)
  */
 static void genz_release_dev(struct device *dev)
 {
-	struct genz_dev *zdev;
+	struct genz_dev *zdev = to_genz_dev(dev);
 	unsigned long flags;
 	struct genz_fabric *f;
 
-	pr_debug("genz_release_dev %s\n", dev_name(dev));
-	zdev = to_genz_dev(dev);
-	if (zdev == NULL) {
-		pr_debug("zdev is NULL\n");
-		return;
-	}
-	if (zdev->zcomp == NULL) {
-		pr_debug("zdev->zcomp is NULL\n");
-		return;
-	}
-	if (zdev->zcomp->subnet == NULL) {
-		pr_debug("zdev->zcomp->subnet is NULL\n");
-		return;
-	}
-	f = zdev->zcomp->subnet->fabric;
+	pr_debug("%s\n", dev_name(dev));
+	f = zdev->zcomp->subnet->subnet.fabric;
 	if (f == NULL) {
 		pr_debug("zdev->zcomp->subnet->fabric is NULL\n");
 		return;
@@ -674,7 +886,7 @@ static void genz_release_dev(struct device *dev)
 	list_del(&zdev->fab_dev_node);
 	spin_unlock_irqrestore(&f->devices_lock, flags);
 	/* Revisit: this free's the dev and causes NULL pointer defererence? */
-	/*kfree(zdev); */
+	kfree(zdev);
 	pr_debug("returning\n");
 }
 
