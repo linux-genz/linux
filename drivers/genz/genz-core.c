@@ -314,7 +314,7 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	uint16_t sid, cid;
 	int ret = 0;
 	bool uninit = false;
-	struct genz_subnet *s;
+	struct genz_os_subnet *s;
 	struct genz_fabric *f;
 
 	zbdev->zbdrv = zbdrv;
@@ -354,7 +354,7 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 			goto error;
 		}
 	}
-	s = genz_add_subnet(sid, f);
+	s = genz_add_os_subnet(sid, f);
 	if (s == NULL) {
 		pr_debug("genz_add_subnet failed\n");
 		ret = -ENOMEM;
@@ -369,9 +369,9 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 			goto error;
 		}
 	}
-	zbdev->zdev.zcomp = genz_add_component(s, cid);
+	zbdev->zdev.zcomp = genz_add_os_comp(s, cid);
 	if (zbdev->zdev.zcomp == NULL) {
-		pr_debug("genz_add_component failed\n");
+		pr_debug("genz_add_os_comp failed\n");
 		ret = -ENOMEM;
 		goto error;
 	}
@@ -386,23 +386,14 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 		pr_debug("genz_device_add failed %d\n", ret);
 		goto error;
 	}
-	ret = genz_control_read_cclass(zbdev, NULL, &zbdev->zdev.zcomp->cclass);
+	ret = genz_comp_read_attrs(zbdev, NULL, &zbdev->zdev.zcomp->comp);
 	if (ret) {
-		pr_debug("genz_control_read_cclass returned %d\n", ret);
-	}
-	ret =  genz_control_read_c_uuid(zbdev, NULL,
-					&zbdev->zdev.zcomp->c_uuid);
-	if (ret < 0) {
-		pr_debug("genz_control_read_c_uuid returned %d\n", ret);
-	}
-	ret = genz_control_read_fru_uuid(zbdev, NULL,
-					 &zbdev->zdev.zcomp->fru_uuid);
-	if (ret < 0) {
-		pr_debug("genz_control_read_fru_uuid returned %d\n", ret);
+		pr_debug("genz_comp_read_attrs failed %d\n", ret);
+		goto error;
 	}
 	return 0;
 error:
-	genz_free_component(&zbdev->zdev.zcomp->kref);
+	/* Revisit: unregister &zbdev->zdev.zcomp->dev? */
 	return ret;
 }
 
@@ -583,9 +574,9 @@ struct genz_bridge_dev *genz_zdev_bridge(struct genz_dev *zdev)
 
 	pr_debug("zdev->zcomp is %px\n", zdev->zcomp);
 	pr_debug("zdev->zcomp->subnet is %px\n", zdev->zcomp->subnet);
-	pr_debug("zdev->zcomp->subnet->fabric is %px\n", zdev->zcomp->subnet->fabric);
+	pr_debug("zdev->zcomp->subnet->fabric is %px\n", zdev->zcomp->subnet->subnet.fabric);
 
-	fabric = zdev->zcomp->subnet->fabric;
+	fabric = zdev->zcomp->subnet->subnet.fabric;
 	dev_dbg(&zdev->dev, "fabric=%px\n", fabric);
 
 	/* Revisit: do something smarter than "first_entry" */
@@ -729,7 +720,7 @@ uint32_t genz_dev_gcid(struct genz_dev *zdev, uint index)
 	if (index != 0 || !zdev->zcomp || !zdev->zcomp->subnet)
 		return GENZ_INVALID_GCID;
 
-	return genz_gcid(zdev->zcomp->subnet->sid, zdev->zcomp->cid);
+	return genz_comp_gcid(&zdev->zcomp->comp);
 }
 EXPORT_SYMBOL(genz_dev_gcid);
 
@@ -742,8 +733,8 @@ static void force_dev_cleanup(void)
 	/* go through each fabric */
 	list_for_each_entry_safe(f, f_tmp, &genz_fabrics, node) {
 		struct genz_dev *zdev, *zdev_tmp;
-		struct genz_component *zcomp, *zcomp_tmp;
-		struct genz_subnet *zsub, *zsub_tmp;
+		struct genz_os_comp *zcomp, *zcomp_tmp;
+		struct genz_os_subnet *zsub, *zsub_tmp;
 
 		/* Each fabric has a reference to the mgr_uuid */
 		genz_fabric_uuid_tracker_free(&f->mgr_uuid);
@@ -756,12 +747,12 @@ static void force_dev_cleanup(void)
 
 		/* remove each component */
 		list_for_each_entry_safe(zcomp, zcomp_tmp, &f->components,
-				fab_comp_node) {
+					 comp.fab_comp_node) {
 			device_unregister(&zcomp->dev);
 		}
 
 		/* remove each subnet */
-		list_for_each_entry_safe(zsub, zsub_tmp, &f->subnets, node) {
+		list_for_each_entry_safe(zsub, zsub_tmp, &f->subnets, subnet.node) {
 			device_unregister(&zsub->dev);
 		}
 
@@ -783,8 +774,11 @@ static void force_dev_cleanup(void)
 	}
 }
 
+struct kset *genz_fabrics_kset;
+
 static int __init genz_init(void)
 {
+	struct kset *genz_bus_kset;
 	int ret = 0;
 
 	pr_debug("entered\n");
@@ -797,6 +791,13 @@ static int __init genz_init(void)
 		goto error_bus;
 	}
 
+	genz_bus_kset = bus_get_kset(&genz_bus_type);
+	genz_fabrics_kset = kset_create_and_add("fabrics", NULL,
+						&genz_bus_kset->kobj);
+	if (!genz_fabrics_kset) {
+		ret = -ENOMEM;
+		goto error_kset;
+	}
 	ret = genz_nl_init();
 	if (ret) {
 		pr_err("genz_nl_init failed (%d)\n", ret);
@@ -809,6 +810,8 @@ static int __init genz_init(void)
 
 	return ret;
 error_nl:
+	kset_unregister(genz_fabrics_kset);
+error_kset:
 	bus_unregister(&genz_bus_type);
 error_bus:
 	return ret;
@@ -819,6 +822,7 @@ static void __exit genz_exit(void)
 {
 	pr_debug("entered\n");
 	force_dev_cleanup();
+	kset_unregister(genz_fabrics_kset);
 	bus_unregister(&genz_bus_type);
 	genz_nl_exit();
 	genz_rkey_exit();
