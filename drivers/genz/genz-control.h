@@ -62,8 +62,14 @@ int genz_map_control_table(struct genz_dev *zdev,
 int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev);
 int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev);
 int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
-				 struct genz_component *dr_comp, uint32_t gcid,
+				 struct genz_comp *f_comp,
+				 struct genz_comp *dr_comp,
 				 uint16_t dr_iface, uuid_t *mgr_uuid);
+int genz_comp_read_attrs(struct genz_bridge_dev *zbdev,
+			 struct genz_rmr_info *rmri, struct genz_comp *comp);
+int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
+				  struct genz_comp *f_comp,
+				  uint16_t dr_iface, uuid_t *mgr_uuid);
 void genz_remove_uuid_file(struct genz_dev *zdev);
 int genz_control_read_structure(struct genz_bridge_dev *zbdev,
 		struct genz_rmr_info *rmri,
@@ -77,6 +83,8 @@ int genz_control_read_sid(struct genz_bridge_dev *zbdev,
 			  struct genz_rmr_info *rmri, uint16_t *sid);
 int genz_control_read_cclass(struct genz_bridge_dev *zbdev,
 			     struct genz_rmr_info *rmri, uint16_t *cclass);
+int genz_control_read_serial(struct genz_bridge_dev *zbdev,
+			     struct genz_rmr_info *rmri, uint64_t *serial);
 int genz_control_read_c_uuid(struct genz_bridge_dev *zbdev,
 			     struct genz_rmr_info *rmri, uuid_t *c_uuid);
 int genz_control_read_fru_uuid(struct genz_bridge_dev *zbdev,

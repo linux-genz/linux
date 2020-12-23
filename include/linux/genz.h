@@ -51,7 +51,7 @@ struct genz_resource;
 struct genz_control_info;
 struct genz_driver;
 struct genz_bridge_dev;
-struct genz_component;
+struct genz_os_comp;
 struct genz_pte_info;
 struct genz_mem_data;
 struct genz_driver_aux;
@@ -69,14 +69,14 @@ struct genz_driver_aux;
 
 struct genz_dev {
 	struct list_head	fab_dev_node; /* Node in the per-fabric list */
-	uuid_t 			class_uuid;      /* component/service/virtual UUID */
+	uuid_t 			class_uuid;   /* component/service/virtual UUID */
 	uuid_t 			instance_uuid;
 	uint16_t		class;
 	struct list_head	zres_list;  /* head of zres list */
-	struct list_head	uu_node;   /* list of zdevs with same UUID */
+	struct list_head	uu_node;    /* list of zdevs with same UUID */
 	struct genz_driver	*zdrv;
-	struct genz_bridge_dev	*zbdev;
-	struct genz_component	*zcomp;     /* parent component */
+	struct genz_bridge_dev	*zbdev;     /* bridge used to reach this dev */
+	struct genz_os_comp	*zcomp;     /* component containing this dev */
 	struct device		dev;	    /* Generic device interface */
 	uint16_t 		resource_count[2]; /* control 0; data 1 */
 };
@@ -484,6 +484,12 @@ static inline uint64_t genz_pg_size(struct genz_page_grid *genz_pg)
 }
 
 #define GENZ_INVALID_GCID       (-1u)
+
+static inline bool genz_valid_gcid(uint32_t gcid)
+{
+	return (gcid != GENZ_INVALID_GCID);
+}
+
 #define GCID_STRING_LEN              8
 
 #define GENZ_MR_GET             ((uint32_t)1 << 0)
@@ -806,6 +812,7 @@ char *genz_gcid_str(const uint32_t gcid, char *str, const size_t len);
 void genz_init_mem_data(struct genz_mem_data *mdata,
 			struct genz_bridge_dev *br);
 void genz_zmmu_clear_all(struct genz_bridge_dev *br, bool free_radix_tree);
+int genz_zmmu_req_pte_update(struct genz_pte_info *ptei);
 int genz_zmmu_req_pte_alloc(struct genz_pte_info *ptei,
                             struct genz_rmr_info *rmri);
 int genz_zmmu_rsp_pte_alloc(struct genz_pte_info *info, uint64_t *rsp_zaddr,
@@ -871,6 +878,8 @@ int genz_rmr_import(
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint32_t rkey,
 	uint16_t dr_iface, const char *rmr_name, struct genz_rmr_info *rmri);
 int genz_rmr_free(struct genz_mem_data *mdata, struct genz_rmr_info *rmri);
+int genz_rmr_update(struct genz_mem_data *mdata, uint32_t rkey,
+		    uint16_t dr_iface, struct genz_rmr_info *rmri);
 int genz_rmr_resize(
 	struct genz_mem_data *mdata, uuid_t *uuid,
 	uint64_t new_len, struct genz_rmr_info *rmri);
