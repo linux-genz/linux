@@ -43,7 +43,7 @@
 #include <linux/rbtree.h>
 #include <linux/genz.h>
 
-#define MAX_GCID (1<<28)
+#define MAX_GCID ((1<<28)-1)
 #define MAX_GENZ_NAME 16
 
 /* Value of Z-UUID in control space that indicates a Gen-Z device */
@@ -51,6 +51,7 @@
 #define GENZ_CAST_UUID(u) (*((uuid_t *)&(u)))
 
 extern struct bus_type genz_bus_type;
+extern struct kset *genz_fabrics_kset;
 
 /*
  * Gen-Z resources can be control or data space in the struct resources
@@ -88,13 +89,16 @@ struct genz_fabric {
 	struct list_head devices;	/* List of devices on this fabric */
 	spinlock_t devices_lock;	/* protects devices list */
 	struct list_head components;	/* List of components on this fabric */
-	spinlock_t components_lock;	/* protects components list */
+	struct list_head os_components;	/* List of os components on this fabric */
+	spinlock_t components_lock;	/* protects components lists */
+	struct list_head os_subnets;	/* List of os subnets on this fabric */
 	struct list_head subnets;	/* List of subnets on this fabric */
-	spinlock_t subnets_lock;	/* protects subnets list */
+	spinlock_t subnets_lock;	/* protects subnets lists */
 	struct list_head bridges;	/* List of local bridges on fabric */
 	spinlock_t bridges_lock;	/* protects bridges list */
 	struct kref	kref;		/* track bridges on fabric */
 	struct device   dev;		/* /sys/devices/genz<N> */
+	struct kobject  bus_kobj;       /* /sys/bus/genz/fabrics/fabric<N> */
 };
 #define to_genz_fabric(x) container_of(x, struct genz_fabric, kref)
 #define dev_to_genz_fabric(x) container_of(x, struct genz_fabric, dev)
@@ -114,10 +118,15 @@ struct genz_subnet {
 	struct genz_fabric	*fabric;
 	struct list_head	node; /* per-fabric list of subnets */
 	struct list_head	frus; /* list of frus in this subnet */
-	struct device		dev;  /* /sys/devices/genz<N>/SID */
+	struct kobject		kobj; /* kobj for subnet */
 };
 #define to_genz_subnet(x) container_of(x, struct genz_subnet, kobj)
-#define dev_to_genz_subnet(x) container_of(x, struct genz_subnet, dev)
+struct genz_os_subnet {
+	struct genz_subnet	subnet;
+	struct device		dev;     /* /sys/devices/genz<N>/SID */
+};
+#define dev_to_genz_os_subnet(x) container_of(x, struct genz_os_subnet, dev)
+#define subnet_to_genz_os_subnet(x) container_of(x, struct genz_os_subnet, subnet)
 
 struct genz_subnet_attribute {
 	struct attribute attr;
@@ -147,36 +156,42 @@ struct genz_fru_attribute {
 };
 #define to_genz_fru_attr(x) container_of(x, struct genz_fru_attribute, attr)
 
-struct genz_dr_iface {
-	uint16_t                 dr_iface;
-	struct genz_control_info *dr_control_info;
-	struct genz_rmr_info     rmr_info;
-	struct kobject           dr_kobj;       /* the "dr" directory */
-	struct list_head	 dr_iface_node; /* Node in the dr_iface list */
-};
-
-struct genz_component {
+struct genz_comp {
 	uint32_t		cid;
-	struct device		dev;  /* /sys/devices/genz<N>/SID/CID */
 	uint16_t		cclass;
+	uint64_t		serial;
 	uuid_t			c_uuid;
 	uuid_t			fru_uuid;
 	struct genz_subnet	*subnet;
 	struct list_head	fab_comp_node; /* Node in the per-fabric list */
+	struct genz_rmr_info    ctl_rmr_info;  /* Revisit: replace */
 	struct list_head        dr_iface_list; /* list of dr_ifaces */
 	spinlock_t              dr_lock;       /* protects dr_iface_list */
-	struct kref		kref;
 	struct genz_control_info *root_control_info;
-	struct kobject		root_kobj;     /* kobj for control space */
+	struct kobject		kobj;          /* kobj for component */
+	struct kobject		ctl_kobj;      /* kobj for control space */
+};
+#define kobj_to_genz_comp(x) container_of(x, struct genz_comp, kobj)
+
+struct genz_os_comp {
+	struct genz_comp	comp;
+	struct genz_os_subnet	*subnet;
+	struct device		dev;  /* /sys/devices/genz<N>/SID/CID */
 	atomic_t res_count[GENZ_NUM_HARDWARE_TYPES+1]; /* +1 for "unknown" */
 };
-#define dev_to_genz_component(x) container_of(x, struct genz_component, dev)
+#define dev_to_genz_os_comp(x) container_of(x, struct genz_os_comp, dev)
+#define comp_to_genz_os_comp(x) container_of(x, struct genz_os_comp, comp)
+
+static inline uint32_t genz_comp_gcid(struct genz_comp *zcomp)
+{
+	return genz_gcid(zcomp->subnet->sid, zcomp->cid);
+}
 
 struct genz_component_attribute {
 	struct attribute attr;
-	ssize_t (*show)(struct genz_component *c,
+	ssize_t (*show)(struct genz_comp *c,
 		struct genz_component_attribute *attr, char *buf);
-	ssize_t (*store)(struct genz_component *c,
+	ssize_t (*store)(struct genz_comp *c,
 		struct genz_component_attribute *attr,
 		const char *buf, size_t count);
 };
