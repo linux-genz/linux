@@ -947,7 +947,7 @@ int genz_rmr_import(
 	kmap = !!(access & GENZ_MR_KERN_MAP);
 	control = !!(access & GENZ_MR_CONTROL);
 	dr = control && (dr_iface != GENZ_DR_IFACE_NONE);
-	mflags = (control) ? MEMREMAP_WC : MEMREMAP_WB; /* Revisit: WC ok? */
+	mflags = (control) ? MEMREMAP_WC : MEMREMAP_WB;
 
 	pr_debug("uuid=%pUb, gcid=%s, rsp_zaddr=0x%016llx, "
 		 "len=0x%llx, access=0x%llx, rkey=0x%x, dr_iface=%u, "
@@ -1022,6 +1022,46 @@ unlock:
 	return status;
 }
 EXPORT_SYMBOL(genz_rmr_free);
+
+int genz_rmr_update(struct genz_mem_data *mdata, uint32_t rkey,
+		    uint16_t dr_iface, struct genz_rmr_info *rmri)
+{
+	struct genz_pte_info    *ptei;
+	int                     status = 0;
+	struct genz_rmr         *rmr;
+	ulong                   flags;
+	bool                    control, dr;
+
+	spin_lock_irqsave(&mdata->md_lock, flags);
+	rmr = genz_rmr_search(mdata, rmri->gcid, rmri->rsp_zaddr, rmri->len,
+			      rmri->access, rmri->req_addr);
+	if (!rmr) {
+		status = -EINVAL;
+		goto unlock;
+	}
+
+	spin_unlock_irqrestore(&mdata->md_lock, flags);
+	control = !!(rmri->access & GENZ_MR_CONTROL);
+	dr = control && (dr_iface != GENZ_DR_IFACE_NONE);
+	ptei = rmr->pte_info;
+	rmri->zres.ro_rkey = rmri->zres.rw_rkey = rkey;
+	ptei->pte.req.rkey = rkey;
+	if (control) {
+		ptei->pte.req.drc = dr;
+		ptei->pte.req.control.dr_iface = (dr) ? dr_iface : 0;
+	}
+	status = genz_zmmu_req_pte_update(ptei);
+	goto out;
+
+unlock:
+	spin_unlock_irqrestore(&mdata->md_lock, flags);
+out:
+	pr_debug("ret=%d, rsp_zaddr=0x%016llx, "
+		 "rkey=0x%x, dr_iface=%u\n",
+		 status, rmri->rsp_zaddr, rkey, dr_iface);
+	return status;
+}
+EXPORT_SYMBOL(genz_rmr_update);
 
 int genz_rmr_resize(
 	struct genz_mem_data *mdata, uuid_t *uuid,

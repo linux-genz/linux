@@ -833,6 +833,25 @@ static int zmmu_find_pte_range(struct genz_pte_info *ptei,
 	return ret;
 }
 
+int genz_zmmu_req_pte_update(struct genz_pte_info *ptei)
+{
+	struct genz_bridge_dev *br = ptei->bridge;
+	int                    ret;
+
+	pr_debug("pte_index=%u, zmmu_pages=%u\n",
+		 ptei->pte_index, ptei->zmmu_pages);
+
+	if (br->zbdrv->req_pte_write) { /* call bridge driver to write HW PTE */
+		ret = br->zbdrv->req_pte_write(br, ptei);
+	} else {
+		ret = -EINVAL;
+	}
+
+	pr_debug("ret=%d, addr=0x%llx\n", ret, ptei->addr);
+	return ret;
+}
+EXPORT_SYMBOL(genz_zmmu_req_pte_update);
+
 int genz_zmmu_req_pte_alloc(struct genz_pte_info *ptei,
 			    struct genz_rmr_info *rmri)
 {
@@ -859,16 +878,10 @@ int genz_zmmu_req_pte_alloc(struct genz_pte_info *ptei,
 	pr_debug("pte_index=%u, zmmu_pages=%u, pg_ps=%u\n",
 		 ptei->pte_index, ptei->zmmu_pages, rmri->pg_ps);
 
-	if (br->zbdrv->req_pte_write) { /* call bridge driver to write HW PTE */
-		ret = br->zbdrv->req_pte_write(br, ptei);
-	} else {
-		ret = -EINVAL;
-		goto out;
-	}
-
+	ret = genz_zmmu_req_pte_update(ptei); /* update PTEs */
 	if (ret < 0) {
 		/* Revisit: deallocate PTE? */
-	  goto out;
+		goto out;
 	}
 
 	rmri->access |= GENZ_MR_MAPPED;
