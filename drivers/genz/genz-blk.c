@@ -866,7 +866,8 @@ static int genz_bdev_probe(struct genz_blk_state *bstate,
 	rkey = zres->rw_rkey;
 	err = genz_rmr_import(mdata, &zdev->instance_uuid, gcid,
 			      zbd->base_zaddr, zbd->size, access,
-			      rkey, zres->res.name, &zbd->rmr_info);
+			      rkey, GENZ_DR_IFACE_NONE,
+			      zres->res.name, &zbd->rmr_info);
 	if (err < 0)
 		goto fail;  /* Revisit: other cleanup */
 	err = genz_blk_construct_bdev(zbd, bbr);

@@ -385,19 +385,12 @@ static struct kobj_type genz_dir_ktype = {
 
 static void control_dir_release(struct kobject *kobj)
 {
-	struct genz_dev *zdev;
-
 	/* Revisit: Is this just a debug function? It doesn't do anything */
 	if (kobj == NULL) {
 		pr_debug("NULL kobj\n");
 		return;
 	}
-	zdev = root_kobj_to_genz_dev(kobj);
-	if (zdev == NULL) {
-		pr_debug("failed to find zdev from kobject parent\n");
-		return;
-	}
-	dev_dbg(&zdev->dev, "kobj %s\n", kobject_name(kobj));
+	pr_debug("kobj %s\n", kobject_name(kobj));
 }
 
 static struct kobj_type control_dir_ktype = {
@@ -1594,6 +1587,26 @@ void *genz_control_structure_buffer_alloc(
 	return buf;
 }
 
+int genz_control_read(struct genz_bridge_dev *br, loff_t offset,
+		      size_t size, void *data,
+		      struct genz_rmr_info *rmri, uint flags)
+{
+	/* Revisit: need req ZMMU mapping */
+	if (!br->zbdrv->control_read)  /* control_read is required */
+		return -EINVAL;
+	return br->zbdrv->control_read(br, offset, size, data, rmri, flags);
+}
+
+int genz_control_write(struct genz_bridge_dev *br, loff_t offset,
+		       size_t size, void *data,
+		       struct genz_rmr_info *rmri, uint flags)
+{
+	/* Revisit: need req ZMMU mapping */
+	if (!br->zbdrv->control_write)  /* control_write is required */
+		return -EINVAL;
+	return br->zbdrv->control_write(br, offset, size, data, rmri, flags);
+}
+
 int genz_control_read_structure(struct genz_bridge_dev *zbdev,
 		struct genz_rmr_info *rmri,
 		void *buf, off_t cs_offset,
@@ -1741,7 +1754,7 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	/* Make control directory under genzN */
 	/* Revisit: error handling */
 	//zdev->root_control_info->kobj.kset = zbdev->genz_kset; /* Revisit */
-	ret = kobject_init_and_add(&zdev->root_kobj,
+	ret = kobject_init_and_add(&zdev->zcomp->root_kobj,
 				   &control_dir_ktype, genz_dir, "control");
 	if (ret < 0) {
 		pr_debug("unable to create bridge control directory\n");
@@ -1793,16 +1806,129 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 
 	pr_debug("calling start_core_structure\n");
 	ret = start_core_structure(zbdev, NULL,
-			&zdev->root_control_info,
+			&zdev->zcomp->root_control_info,
 			&genz_struct_type_to_ptrs[GENZ_CORE_STRUCTURE],
-			&zdev->root_kobj); /* control dir */
+			&zdev->zcomp->root_kobj); /* control dir */
 	return 0;
 
 err_control:
-	kobject_put(&zdev->root_control_info->kobj);
+	kobject_put(&zdev->zcomp->root_control_info->kobj);
 err_kobj:
 err_genz_dir:
 	kobject_put(genz_dir);
+	return ret;
+}
+
+static struct kobject *genz_comp_iface_dir(struct genz_component *dr_comp,
+					   uint16_t dr_iface)
+{
+	struct genz_control_info *ci, *core;
+	uint num = 0;
+
+	core = dr_comp->root_control_info;
+	/* Find the interface structure matching dr_iface */
+	for (ci = genz_first_struct_of_type(core, GENZ_INTERFACE_STRUCTURE);
+	     ci != NULL;
+	     ci = genz_next_struct_of_type(ci, GENZ_INTERFACE_STRUCTURE)) {
+		if (num == dr_iface)
+			break;
+		num++;
+	}
+
+	if (ci)
+		return &ci->kobj;
+	return 0;
+}
+
+/**
+ * genz_dr_create_control_files() - read control space for a directed-relay component
+ */
+int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
+				 struct genz_component *dr_comp,
+				 uint16_t dr_iface, uuid_t *mgr_uuid)
+{
+	struct kobject           *dr_dir, *iface_dir;
+	struct genz_rmr_info     *rmri;
+	struct genz_dr_iface     *di;
+	struct genz_mem_data     *mdata;
+	uint64_t                 access;
+	uint32_t                 gcid;
+	uint32_t                 rkey;
+	ulong                    flags;
+	int                      ret;
+
+	mdata = kzalloc(sizeof(*mdata), GFP_KERNEL);
+	if (!mdata) {
+		pr_debug("failed to allocate genz_mem_data\n");
+		return -ENOMEM;
+	}
+	spin_lock_irqsave(&zbdev->zmmu_lock, flags);
+	if (zbdev->control_mdata == NULL) {
+		zbdev->control_mdata = mdata;
+	} else {
+		kfree(mdata);
+	}
+	spin_unlock_irqrestore(&zbdev->zmmu_lock, flags);
+	di = kzalloc(sizeof(*di), GFP_KERNEL);
+	if (!di) {
+		pr_debug("failed to allocate genz_dr_iface\n");
+		ret = -ENOMEM;
+		goto err_mdata;
+	}
+	di->dr_iface = dr_iface;
+	dr_dir = &di->dr_kobj;
+	/* add di to dr_iface_list */
+	spin_lock(&dr_comp->dr_lock);
+	list_add_tail(&di->dr_iface_node, &dr_comp->dr_iface_list);
+	spin_unlock(&dr_comp->dr_lock);
+	iface_dir = genz_comp_iface_dir(dr_comp, dr_iface);
+	if (!iface_dir) {
+		pr_debug("dr_iface %u not found\n", dr_iface);
+		ret = -EINVAL;
+		goto err_list;
+	}
+	/* Make the dr directory under interfaceN of the relaying component */
+	ret = kobject_init_and_add(dr_dir, &control_dir_ktype, iface_dir, "dr");
+	if (ret < 0) {
+		pr_debug("unable to create dr directory\n");
+		goto err_list;
+	}
+
+	gcid = genz_gcid(dr_comp->subnet->sid, dr_comp->cid);
+	access = GENZ_MR_READ_REMOTE|GENZ_MR_WRITE_REMOTE|
+		 GENZ_MR_INDIVIDUAL|GENZ_MR_CONTROL;
+	access |= (zbdev->br_info.load_store) ?
+		(GENZ_MR_REQ_CPU|GENZ_MR_KERN_MAP) : 0;
+	rkey = 0;  /* Revisit */
+	rmri = &di->rmr_info;
+	pr_debug("calling genz_rmr_import\n");
+	/* initial mapping is for one 4KiB page covering the core struct */
+	ret = genz_rmr_import(zbdev->control_mdata, mgr_uuid, gcid, 0, 4096,
+			      access, rkey, dr_iface, "control", rmri);
+	if (ret < 0) {
+		pr_debug("genz_rmr_import error ret=%d\n", ret);
+		goto err_kobj;
+	}
+	pr_debug("calling start_core_structure\n");
+	ret = start_core_structure(zbdev, rmri,
+			&di->dr_control_info,
+			&genz_struct_type_to_ptrs[GENZ_CORE_STRUCTURE],
+			dr_dir);
+	if (ret < 0) {
+		pr_debug("start_core_structure error ret=%d\n", ret);
+		goto err_kobj;
+	}
+	return 0;
+
+err_kobj:
+	/* Revisit: error handling */
+err_list:
+	spin_lock(&dr_comp->dr_lock);
+	list_del(&di->dr_iface_node);
+	spin_unlock(&dr_comp->dr_lock);
+	kfree(di);
+err_mdata:
+	kfree(mdata);
 	return ret;
 }
 

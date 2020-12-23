@@ -147,6 +147,14 @@ struct genz_fru_attribute {
 };
 #define to_genz_fru_attr(x) container_of(x, struct genz_fru_attribute, attr)
 
+struct genz_dr_iface {
+	uint16_t                 dr_iface;
+	struct genz_control_info *dr_control_info;
+	struct genz_rmr_info     rmr_info;
+	struct kobject           dr_kobj;       /* the "dr" directory */
+	struct list_head	 dr_iface_node; /* Node in the dr_iface list */
+};
+
 struct genz_component {
 	uint32_t		cid;
 	struct device		dev;  /* /sys/devices/genz<N>/SID/CID */
@@ -155,7 +163,11 @@ struct genz_component {
 	uuid_t			fru_uuid;
 	struct genz_subnet	*subnet;
 	struct list_head	fab_comp_node; /* Node in the per-fabric list */
+	struct list_head        dr_iface_list; /* list of dr_ifaces */
+	spinlock_t              dr_lock;       /* protects dr_iface_list */
 	struct kref		kref;
+	struct genz_control_info *root_control_info;
+	struct kobject		root_kobj;     /* kobj for control space */
 	atomic_t res_count[GENZ_NUM_HARDWARE_TYPES+1]; /* +1 for "unknown" */
 };
 #define dev_to_genz_component(x) container_of(x, struct genz_component, dev)

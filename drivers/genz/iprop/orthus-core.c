@@ -308,14 +308,16 @@ static int orthus_control_read(struct genz_bridge_dev *gzbr, loff_t offset,
 {
 	struct orthus_bridge *obr = orthus_gzbr_to_obr(gzbr);
 	struct device *dev = &gzbr->zdev.dev;
-	int ret = -EOPNOTSUPP; /* Revisit: temporary */
+	void *src;
 
 	if (genz_is_local_bridge(gzbr, rmri)) {
 		return orthus_local_control_read(obr, dev, offset, size, data, flags);
 	}
 
-	/* Revisit: implement this */
-	return ret;
+	src = rmri->cpu_addr + offset;  /* Revisit: CAccess */
+	memcpy(data, src, size);
+	/* Revisit: flush/fence flags */
+	return 0;
 }
 
 static int orthus_local_control_write(struct orthus_bridge *obr,
@@ -420,14 +422,16 @@ static int orthus_control_write(struct genz_bridge_dev *gzbr, loff_t offset,
 {
 	struct orthus_bridge *obr = orthus_gzbr_to_obr(gzbr);
 	struct device *dev = &gzbr->zdev.dev;
-	int ret = -EOPNOTSUPP; /* Revisit: temporary */
+	void *dest;
 
 	if (genz_is_local_bridge(gzbr, rmri)) {
 		return orthus_local_control_write(obr, dev, offset, size, data, flags);
 	}
 
-	/* Revisit: implement this */
-	return ret;
+	dest = rmri->cpu_addr + offset;  /* Revisit: CAccess */
+	memcpy(dest, data, size);
+	/* Revisit: flush/fence flags */
+	return 0;
 }
 
 static int orthus_req_page_grid_write(struct genz_bridge_dev *gzbr, uint pg_index,
