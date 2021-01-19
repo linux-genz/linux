@@ -307,6 +307,8 @@ static ssize_t read_control_structure(struct file *fd,
 	struct genz_control_info *ci = to_genz_control_info(kobj);
 	struct genz_rmr_info *rmri = ci->rmri;
 	struct genz_bridge_dev *zbdev;
+	char gcstr[GCID_STRING_LEN+1];
+	uint32_t gcid;
 	ssize_t ret = 0;
 	int err;
 
@@ -316,8 +318,10 @@ static ssize_t read_control_structure(struct file *fd,
 		/* Revisit: what should it return on error? */
 		return err;
 	}
-	pr_debug("reading %s, offset=0x%llx, size=0x%lx, ci->start=0x%lx, ci->size=0x%lx, rmri=%px\n",
-		 kobject_name(kobj), offset, size, ci->start, ci->size, rmri);
+	gcid = genz_rmri_to_gcid(zbdev, rmri);
+	pr_debug("reading %s %s, offset=0x%llx, size=0x%lx, ci->start=0x%lx, ci->size=0x%lx\n",
+		 genz_gcid_str(gcid, gcstr, sizeof(gcstr)), kobject_name(kobj),
+		 offset, size, ci->start, ci->size);
 
 	ret = genz_control_read(zbdev, ci->start+offset, size, data, rmri, 0);
 	if (ret) {
@@ -337,6 +341,8 @@ static ssize_t write_control_structure(struct file *fd,
 	struct genz_control_info *ci = to_genz_control_info(kobj);
 	struct genz_rmr_info *rmri = ci->rmri;
 	struct genz_bridge_dev *zbdev;
+	char gcstr[GCID_STRING_LEN+1];
+	uint32_t gcid;
 	ssize_t ret = 0;
 	int err;
 
@@ -345,8 +351,10 @@ static ssize_t write_control_structure(struct file *fd,
 		pr_debug("arguments invalid error: %d\n", err);
 		return err;
 	}
-	pr_debug("writing %s, offset=0x%llx, size=0x%lx, ci->start=0x%lx, ci->size=0x%lx, rmri=%px\n",
-		 kobject_name(kobj), offset, size, ci->start, ci->size, rmri);
+	gcid = genz_rmri_to_gcid(zbdev, rmri);
+	pr_debug("writing %s %s, offset=0x%llx, size=0x%lx, ci->start=0x%lx, ci->size=0x%lx\n",
+		 genz_gcid_str(gcid, gcstr, sizeof(gcstr)), kobject_name(kobj),
+		 offset, size, ci->start, ci->size);
 
 	ret = genz_control_write(zbdev, ci->start+offset, size, data, rmri, 0);
 	if (ret) {
