@@ -710,9 +710,9 @@ static int genz_blk_construct_bdev(struct genz_bdev *zbd,
 	blk_queue_logical_block_size(zbd->queue, GENZ_BLOCK_SIZE);
 	blk_queue_max_segments(zbd->queue, GENZ_BLK_MAX_SG);
 	blk_queue_max_hw_sectors(zbd->queue,
-			 bbr->zbdev->br_info.xdm_max_xfer/KERNEL_SECTOR_SIZE);
+			 bbr->zbdev->br_info.block_max_xfer/KERNEL_SECTOR_SIZE);
 	blk_queue_max_segment_size(zbd->queue,
-				   bbr->zbdev->br_info.xdm_max_xfer);
+				   bbr->zbdev->br_info.block_max_xfer);
 	/* Gen-Z does not need bouncing. */
 	blk_queue_bounce_limit(zbd->queue, BLK_BOUNCE_ANY);
 	blk_queue_write_cache(zbd->queue, false, false);
