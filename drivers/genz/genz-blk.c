@@ -863,6 +863,7 @@ static int genz_bdev_probe(struct genz_blk_state *bstate,
 	/* Revisit: use zres to choose RO/RW access & rkey */
 	access = GENZ_MR_WRITE_REMOTE|GENZ_MR_INDIVIDUAL;
 	access |= (br_info->load_store) ? GENZ_MR_REQ_CPU : 0;
+	access |= (br_info->kern_map_data) ? GENZ_MR_KERN_MAP : 0;
 	rkey = zres->rw_rkey;
 	err = genz_rmr_import(mdata, &zdev->instance_uuid, gcid,
 			      zbd->base_zaddr, zbd->size, access,

@@ -143,6 +143,7 @@ struct genz_bridge_info {
 	uint     xdm_cmpl_intr  : 1;
 	uint     rdm_cmpl_intr  : 1;
 	uint     load_store     : 1;
+	uint     kern_map_data  : 1;
 	uint     loopback       : 1;
 	uint     nr_xdm_queues;
 	uint     nr_rdm_queues;
