@@ -473,7 +473,7 @@ static ssize_t serial_br_show(struct kobject *kobj,
 		return(snprintf(buf, PAGE_SIZE, "bad zbdev\n"));
 	}
 	comp = zbdev->zdev.zcomp;
-	return snprintf(buf, PAGE_SIZE, "0x%llx\n", comp->comp.serial);
+	return snprintf(buf, PAGE_SIZE, "0x%016llx\n", comp->comp.serial);
 }
 
 static struct kobj_attribute serial_br_attribute =
@@ -585,7 +585,7 @@ static ssize_t serial_fab_show(struct kobject *kobj,
 		pr_debug("comp is NULL\n");
 		return(snprintf(buf, PAGE_SIZE, "bad comp\n"));
 	}
-	return snprintf(buf, PAGE_SIZE, "0x%llx\n", comp->serial);
+	return snprintf(buf, PAGE_SIZE, "0x%016llx\n", comp->serial);
 }
 
 static struct kobj_attribute serial_fab_attribute =
