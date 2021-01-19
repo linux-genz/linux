@@ -160,7 +160,7 @@ struct genz_bridge_info {
 	uint64_t min_nonvisible_addr;
 	uint64_t max_nonvisible_addr;
 	uint64_t cpuvisible_phys_offset;
-	uint64_t xdm_max_xfer;
+	uint64_t block_max_xfer;
 };
 
 struct genz_page_grid {
