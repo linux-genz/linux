@@ -695,15 +695,82 @@ EXPORT_SYMBOL(genz_generate_uuid);
 int genz_uuid_import(struct genz_mem_data *mdata, uuid_t *uuid,
 		     uint32_t uu_flags, gfp_t alloc_flags)
 {
-	struct genz_bridge_dev *br;
+	struct genz_bridge_dev  *br;
+	struct uuid_tracker     *uu;
+	uint                    type = UUID_TYPE_REMOTE; /* Revisit */
+	struct uuid_node        *md_node, *uu_node;
+	int                     status = 0;
 
 	if (!mdata)
 		return -EINVAL;
 	br = mdata->bridge;
-	if (!br || !br->zbdrv || !br->zbdrv->uuid_import)
+	if (!br || !br->zbdrv)
 		return -EINVAL;
-	/* Revisit: add default implementation */
-	return br->zbdrv->uuid_import(mdata, uuid, uu_flags, alloc_flags);
+	if (br->zbdrv->uuid_import)
+		return br->zbdrv->uuid_import(mdata, uuid, uu_flags, alloc_flags);
+	/* default implementation */
+	uu = genz_uuid_tracker_alloc_and_insert(uuid, type, uu_flags,
+						mdata, alloc_flags, &status);
+	if (status == -EEXIST) {  /* duplicates ok - even expected */
+		status = 0;
+	} else if (status < 0) {
+		goto out;
+	}
+	/* we now hold a reference to uu */
+	/* add uu to mdata->md_remote_uuid_tree */
+	md_node = genz_remote_uuid_alloc_and_insert(uu, &mdata->uuid_lock,
+						    &mdata->md_remote_uuid_tree,
+						    alloc_flags, &status);
+	if (status < 0)
+		goto err_md_node;
+
+	/* add mdata->local_uuid to uu->remote->local_uuid_tree */
+	if (!mdata->local_uuid) {
+		status = -EINVAL;
+		pr_debug("mdata->local_uuid is NULL!\n");
+		goto err_md_node;
+	}
+	kref_get(&mdata->local_uuid->refcount);
+	uu_node = genz_remote_uuid_alloc_and_insert(
+		mdata->local_uuid, &uu->remote->local_uuid_lock,
+		&uu->remote->local_uuid_tree, alloc_flags, &status);
+	if (status < 0)
+		goto err_uu_node;
+
+#ifdef REVISIT
+	/* send msg to retrieve R-keys from remote node - this can sleep a while */
+	if (!(uu_flags & UUID_IS_FAM) && !(uu_flags & UUID_IS_ENIC)) {
+		status = wildcat_msg_send_UUID_IMPORT(
+			br, &mdata->local_uuid->uuid, uuid, &ro_rkey, &rw_rkey);
+		if (status < 0)
+			goto err_msg_send;
+
+		uu->remote->ro_rkey = ro_rkey;
+		uu->remote->rw_rkey = rw_rkey;
+		smp_wmb();
+		uu->remote->rkeys_valid = true;
+	}
+#endif
+
+out:
+	return status;
+
+	/* error cases */
+#ifdef REVIST
+err_msg_send:
+	genz_free_uuid_node(mdata, &uu->remote->local_uuid_lock,
+			    &uu->remote->local_uuid_tree,
+			    &mdata->local_uuid->uuid, false);
+#endif
+err_uu_node:
+	genz_free_uuid_node(mdata, &mdata->uuid_lock,
+			    &mdata->md_remote_uuid_tree, uuid, false);
+	genz_uuid_remove(mdata->local_uuid);
+	goto out;
+
+err_md_node:
+	genz_uuid_remove(uu);
+	goto out;
 }
 EXPORT_SYMBOL(genz_uuid_import);
 
