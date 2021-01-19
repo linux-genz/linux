@@ -733,6 +733,13 @@ static inline bool genz_is_local_bridge(struct genz_bridge_dev *br,
 		 (rmri->dr_iface == GENZ_DR_IFACE_NONE)));
 }
 
+static inline uint32_t genz_rmri_to_gcid(struct genz_bridge_dev *br,
+					 struct genz_rmr_info *rmri)
+{
+	return (genz_is_local_bridge(br, rmri)) ?
+		genz_dev_gcid(&br->zdev, 0) : rmri->gcid;
+}
+
 static inline int genz_uuid_cmp(const uuid_t *u1, const uuid_t *u2)
 {
     return memcmp(u1, u2, sizeof(uuid_t));
