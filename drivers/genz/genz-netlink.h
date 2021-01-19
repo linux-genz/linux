@@ -38,9 +38,8 @@
 /* Gen-Z OS Component Structure */
 enum {
 	GENZ_A_UNSPEC,
-	GENZ_A_FABRIC_NUM,  /* Revisit: unused, delete when LLaMaS ready */
+	GENZ_A_BRIDGE_GCID, /* Revisit: not yet sent/recvd */
 	GENZ_A_GCID,
-	/* Revisit: add GENZ_A_BRIDGE_GCID */
 	GENZ_A_CCLASS,
 	GENZ_A_FRU_UUID,
 	GENZ_A_MGR_UUID,
