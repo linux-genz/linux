@@ -1830,7 +1830,7 @@ int genz_control_read(struct genz_bridge_dev *br, loff_t offset,
 		      struct genz_rmr_info *rmri, uint flags)
 {
 	if (!is_genz_range_mapped(offset, size, rmri))
-		return -ENOSPC;
+		return ENOSPC;
 	if (!br->zbdrv->control_read)  /* control_read is required */
 		return -EINVAL;
 	return br->zbdrv->control_read(br, offset, size, data, rmri, flags);
@@ -1841,7 +1841,7 @@ int genz_control_write(struct genz_bridge_dev *br, loff_t offset,
 		       struct genz_rmr_info *rmri, uint flags)
 {
 	if (!is_genz_range_mapped(offset, size, rmri))
-		return -ENOSPC;
+		return ENOSPC;
 	if (!br->zbdrv->control_write)  /* control_write is required */
 		return -EINVAL;
 	return br->zbdrv->control_write(br, offset, size, data, rmri, flags);
