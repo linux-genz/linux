@@ -50,7 +50,6 @@
 
 /* Netlink Generic Attribute Policy */
 const static struct nla_policy genz_genl_os_comp_policy[GENZ_A_MAX + 1] = {
-	[GENZ_A_FABRIC_NUM] = { .type = NLA_U32 }, /* Revisit: delete */
 	[GENZ_A_GCID] = { .type = NLA_U32 },
 	[GENZ_A_CCLASS] = { .type = NLA_U16 },
 	[GENZ_A_FRU_UUID] = { .len = UUID_LEN },
