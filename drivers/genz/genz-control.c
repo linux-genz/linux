@@ -1067,7 +1067,7 @@ static int read_pointer_at_offset(struct genz_bridge_dev *zbdev,
 		return ret;
 	}
 
-	pr_debug("found the pointer@0x%lx is 0x%lx\n", start+offset, *ptr_offset);
+	pr_debug("found the raw pointer value@0x%lx is 0x%lx\n", start+offset, *ptr_offset);
 	
 	/* It is ok for many pointers to be NULL. Everything is optional. */
 	if (*ptr_offset == 0)
@@ -1094,7 +1094,7 @@ static int read_header_at_offset(struct genz_bridge_dev *zbdev,
 		return ret;
 
 	/* Read a control structure header at that pointer location */
-	pr_debug("reading the header from the pointer offset 0x%lx, size = 0x%lx\n", *hdr_offset, sizeof(struct genz_control_structure_header));
+	pr_debug("reading the header from the pointer byte offset 0x%lx, size = 0x%lx\n", *hdr_offset, sizeof(struct genz_control_structure_header));
 	ret = genz_control_read(zbdev, *hdr_offset,
 		sizeof(struct genz_control_structure_header), hdr, rmri, 0);
 	if (ret) {
@@ -1102,7 +1102,7 @@ static int read_header_at_offset(struct genz_bridge_dev *zbdev,
 			ret);
 		return ret;
 	}
-	pr_debug("hdr->type=%d, hdr->vers=%d, hdr->size=0x%x\n",
+	pr_debug("hdr->type=0x%x, hdr->vers=%d, hdr->size=0x%x\n",
 		 hdr->type, hdr->vers, hdr->size);
 	return ret;
 }
@@ -1914,7 +1914,8 @@ int genz_control_read_serial(struct genz_bridge_dev *zbdev,
 	ret = genz_control_read_structure(zbdev, rmri, serial, 0,
 			offsetof(struct genz_core_structure, serial_number),
 			sizeof(*serial));
-	pr_debug("0x%llx\n", *serial);
+	pr_debug("offset=0x%lx, serial=0x%llx\n",
+		 offsetof(struct genz_core_structure, serial_number), *serial);
 	return ret;
 }
 
