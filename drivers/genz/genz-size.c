@@ -899,6 +899,10 @@ ssize_t genz_lprt_mprt_table_size(struct genz_control_info *ci)
 		pr_debug("unexpected offset does not match LPRT or MPRT 0x%x\n", ci->csp->pointer_offset);
 	}
 	row_size = sw.lprt_mprt_row_size;
+	if (row_size == 0) {  /* Revisit: orthus workaround */
+		pr_debug("lprt_mprt_row_size is 0, guessing it should be 4");
+		row_size = 4;
+	}
 	pr_debug("num_rows=%u, row_size=%u\n", num_rows, row_size);
 	return (num_rows * row_size);
 }
