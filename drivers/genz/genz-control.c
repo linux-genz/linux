@@ -367,19 +367,23 @@ static struct kobj_type control_info_ktype = {
 
 static void genz_dir_release(struct kobject *kobj)
 {
-	struct device          *bdev;
+	struct genz_bridge_dev *zbdev;
 
-	/* Revisit: Is this just a debug function? It doesn't do anything */
+	/* the genzN dir is embedded in zbdev which is free'd separately,
+	 * so nothing to do here but print debug messages
+	 */
 	if (kobj == NULL) {
 		pr_debug("NULL kobj\n");
 		return;
 	}
-	bdev = kobj_to_dev(kobj->parent);
-	if (bdev == NULL) {
-		pr_debug("failed to find bdev from kobject parent\n");
+	zbdev = kobj_to_zbdev(kobj);
+	if (zbdev == NULL) {
+		pr_debug("failed to find zbdev from kobject\n");
 		return;
 	}
-	dev_dbg(bdev, "kobj %s\n", kobject_name(kobj));
+	dev_dbg(zbdev->bridge_dev, "kobj %s\n", kobject_name(kobj));
+	/* Revisit: kobject_cleanup() should be doing this */
+	kobj->state_initialized = 0;
 }
 
 static struct kobj_type genz_dir_ktype = {
