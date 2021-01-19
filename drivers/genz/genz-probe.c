@@ -660,26 +660,14 @@ struct genz_comp *genz_alloc_comp(void)
 	struct genz_comp *zcomp;
 
 	zcomp = kzalloc(sizeof(*zcomp), GFP_KERNEL);
-	if (!zcomp)
-		return NULL;
-
-	spin_lock_init(&zcomp->dr_lock);
-	INIT_LIST_HEAD(&zcomp->dr_iface_list);
 	return zcomp;
 }
 
 struct genz_os_comp *genz_alloc_os_comp(void)
 {
 	struct genz_os_comp *ocomp;
-	struct genz_comp    *zcomp;
 
 	ocomp = kzalloc(sizeof(*ocomp), GFP_KERNEL);
-	if (!ocomp)
-		return NULL;
-
-	zcomp = &ocomp->comp;
-	spin_lock_init(&zcomp->dr_lock);
-	INIT_LIST_HEAD(&zcomp->dr_iface_list);
 	return ocomp;
 }
 
