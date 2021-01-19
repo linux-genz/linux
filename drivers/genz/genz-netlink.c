@@ -785,6 +785,7 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 		/* Revisit: can we use kobject_move instead? */
 		/* copy over values from old zbdev */
 		fci.ocomp->comp.cclass = zbdev->zdev.zcomp->comp.cclass;
+		fci.ocomp->comp.serial = zbdev->zdev.zcomp->comp.serial;
 		fci.ocomp->comp.c_uuid = zbdev->zdev.zcomp->comp.c_uuid;
 		fci.ocomp->comp.fru_uuid = zbdev->zdev.zcomp->comp.fru_uuid;
 		/* remove old zbdev stuff */
