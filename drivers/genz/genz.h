@@ -165,8 +165,6 @@ struct genz_comp {
 	struct genz_subnet	*subnet;
 	struct list_head	fab_comp_node; /* Node in the per-fabric list */
 	struct genz_rmr_info    ctl_rmr_info;  /* Revisit: replace */
-	struct list_head        dr_iface_list; /* list of dr_ifaces */
-	spinlock_t              dr_lock;       /* protects dr_iface_list */
 	struct genz_control_info *root_control_info;
 	struct kobject		kobj;          /* kobj for component */
 	struct kobject		ctl_kobj;      /* kobj for control space */
