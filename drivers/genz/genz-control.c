@@ -2364,6 +2364,7 @@ static void remove_all_ci(struct kset *kset)
 int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev)
 {
 	char                   bridgeN[MAX_GENZ_NAME];
+	struct genz_dev        *zdev = &zbdev->zdev;
 	struct kobject         *dir;
 
 	dev_dbg(zbdev->bridge_dev, "entered\n");
@@ -2376,6 +2377,9 @@ int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev)
 #endif
 	/* remove the genzN/{gcid,cclass,serial,fru_uuid,c_uuid} files */
 	genz_remove_bridge_files(&zbdev->genzN_dir);
+	/* remove the control directory */
+	kobject_del(&zdev->zcomp->comp.ctl_kobj);
+	kobject_put(&zdev->zcomp->comp.ctl_kobj);
 	/* remove the symlink associated with this genzN directory */
 	dir = &zbdev->zdev.zcomp->comp.subnet->fabric->dev.kobj;
 	snprintf(bridgeN, MAX_GENZ_NAME, "bridge%d", zbdev->bridge_num);
