@@ -660,9 +660,11 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		gd->disk_name, zbd->size/KERNEL_SECTOR_SIZE);
 	if (blk_queue_dax(zbd->queue)) {
 		dev = disk_to_dev(zbd->gd);
+		dev_dbg(dev, "Enable DAX\n");
 		dax_dev = alloc_dax(zbd, gd->disk_name,
 				    &genz_blk_dax_ops, dax_flags);
 		if (!dax_dev) {
+			dev_dbg(dev, "alloc_dax failed\n");
 			ret = -ENOMEM;
 			goto put_disk;
 		}
@@ -676,11 +678,12 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		addr = devm_memremap_pages(dev, &zbd->pgmap);
 		/* Revisit: error handling */
 		zbd->rmr_info.cpu_addr = addr;
-		dev_dbg(&zdev->dev, "cpu_addr=%px\n", addr);
+		dev_dbg(dev, "cpu_addr=%px\n", addr);
 	}
 	device_add_disk(&zdev->dev, gd, NULL);
 
  out:
+	dev_dbg(&zdev->dev, "ret=%d\n", ret);
 	return ret;
 
 put_disk:
@@ -933,18 +936,27 @@ static int genz_blk_probe(struct genz_dev *zdev,
 	bbr = find_bbr(zbdev);  /* gets bbr kref */
 	if (IS_ERR(bbr)) {
 		ret = PTR_ERR(bbr);
+		dev_dbg(&zdev->dev, "find_bbr failed, ret=%d\n", ret);
 		goto out;  /* Revisit: other cleanup */
 	}
 	bstate->bbr = bbr;
 	dev_dbg(&zdev->dev, "instance_uuid=%pUb\n", &zdev->instance_uuid);
 	ret = genz_uuid_import(&bbr->mem_data, &zdev->instance_uuid,
 			       0, GFP_KERNEL);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_dbg(&zdev->dev, "genz_uuid_import failed, ret=%d\n", ret);
 		goto out; /* Revisit: undo bstate */
+	}
 	genz_for_each_resource(zres, zdev) {
+		dev_dbg(&zdev->dev, "resource %s\n", zres->res.name);
 		if (genz_is_data_resource(zres)) {
 			ret = genz_bdev_probe(bstate, zres);
-			/* Revisit: error handling */
+			if (ret < 0) {
+				/* Revisit: error handling */
+				dev_dbg(&zdev->dev,
+					"genz_bdev_probe of zres %s failed, ret=%d\n",
+					zres->res.name, ret);
+			}
 		} else {
 			/* Revisit: print control resource name */
 			dev_warn(&zdev->dev, "unexpected control resource\n");
@@ -952,6 +964,7 @@ static int genz_blk_probe(struct genz_dev *zdev,
 	}
 
 out:
+	dev_dbg(&zdev->dev, "ret=%d\n", ret);
 	return ret;
 }
 
