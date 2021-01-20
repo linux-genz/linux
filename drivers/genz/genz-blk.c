@@ -439,22 +439,23 @@ static int genz_blk_init_hctx(struct blk_mq_hw_ctx *hctx, void *data,
 	kref_init(&bctx->kref);
 	kref_get(&bbr->kref);
 	bctx->bbr = bbr;
-	/* Revisit: add non-XDM mode */
-	bctx->xdmi.cmdq_ent = bbr->tag_set->queue_depth * genz_blk_qfactor;
-	bctx->xdmi.cmplq_ent = bctx->xdmi.cmdq_ent;
-	bctx->xdmi.traffic_class = GENZ_TC_0;
-	bctx->xdmi.priority = 0;
-	bctx->xdmi.driver_data = hctx;
-	if (!br_info->xdm_cmpl_intr && br_info->loopback &&
-	    br_info->rdm && br_info->rdm_cmpl_intr) {
-		/* use loopback to RDM as source of cmpl interrupts */
-		rdmi = &bctx->rdmi;
-		rdmi->cmplq_ent = bctx->xdmi.cmplq_ent;
-		rdmi->driver_data = hctx;
-		bctx->have_rdmi = true;
+	if (br_info->xdm) {
+		bctx->xdmi.cmdq_ent = bbr->tag_set->queue_depth * genz_blk_qfactor;
+		bctx->xdmi.cmplq_ent = bctx->xdmi.cmdq_ent;
+		bctx->xdmi.traffic_class = GENZ_TC_0;
+		bctx->xdmi.priority = 0;
+		bctx->xdmi.driver_data = hctx;
+		if (!br_info->xdm_cmpl_intr && br_info->loopback &&
+		    br_info->rdm && br_info->rdm_cmpl_intr) {
+			/* use loopback to RDM as source of cmpl interrupts */
+			rdmi = &bctx->rdmi;
+			rdmi->cmplq_ent = bctx->xdmi.cmplq_ent;
+			rdmi->driver_data = hctx;
+			bctx->have_rdmi = true;
+		}
+		/* allocate XDM (and maybe RDM) queue */
+		ret = genz_alloc_queues(bbr->zbdev, &bctx->xdmi, rdmi);
 	}
-	/* allocate XDM (and maybe RDM) queue */
-	ret = genz_alloc_queues(bbr->zbdev, &bctx->xdmi, rdmi);
 
 unlock:
 	mutex_unlock(&bctx->lock);
@@ -479,13 +480,17 @@ static void genz_blk_free_queues(struct kref *ref)
 {
 	struct genz_blk_ctx *bctx = container_of(
 		ref, struct genz_blk_ctx, kref);
+	struct genz_blk_bridge *bbr = bctx->bbr;
+	struct genz_bridge_info *br_info = &bbr->zbdev->br_info;
 	struct genz_rdm_info *rdmi = (bctx->have_rdmi) ? &bctx->rdmi : NULL;
 
 	pr_debug("bctx=%px, rdmi=%px, bbr->kref=%u\n", bctx, rdmi,
-		 kref_read(&bctx->bbr->kref));
-	/* free XDM (and maybe RDM) queue */
-	(void)genz_free_queues(&bctx->xdmi, rdmi);
-	kref_put(&bctx->bbr->kref, free_bbr);
+		 kref_read(&bbr->kref));
+	if (br_info->xdm) {
+		/* free XDM (and maybe RDM) queue */
+		(void)genz_free_queues(&bctx->xdmi, rdmi);
+	}
+	kref_put(&bbr->kref, free_bbr);
 	bctx->bbr = NULL;
 }
 
