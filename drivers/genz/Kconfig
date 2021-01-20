@@ -22,6 +22,7 @@ menuconfig GENZ
 menuconfig GENZ_BLK
 	tristate "Gen-Z block driver"
 	depends on GENZ
+	select DAX_DRIVER
 	---help---
 	  This option enables the Gen-Z block driver.
 
