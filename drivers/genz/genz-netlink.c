@@ -981,7 +981,6 @@ static struct genl_ops genz_gnl_ops[] = {
 	{
 	.cmd = GENZ_C_ADD_FABRIC_COMPONENT,
 	.doit = genz_add_fabric_component,
-	.policy = genz_genl_fab_comp_policy,
 	},
 	{
 	.cmd = GENZ_C_REMOVE_FABRIC_COMPONENT,
