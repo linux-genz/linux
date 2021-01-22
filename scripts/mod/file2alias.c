@@ -1355,7 +1355,6 @@ static int do_genz_entry(const char *filename, void *symval, char *alias)
 	}
 	return 1;
 }
-ADD_TO_DEVTABLE("genz", genz_device_id, do_genz_entry);
 
 /* Does namelen bytes of name exactly match the symbol? */
 static bool sym_is(const char *name, unsigned namelen, const char *symbol)
@@ -1429,6 +1428,7 @@ static const struct devtable devtable[] = {
 	{"typec", SIZE_typec_device_id, do_typec_entry},
 	{"tee", SIZE_tee_client_device_id, do_tee_entry},
 	{"wmi", SIZE_wmi_device_id, do_wmi_entry},
+	{"genz", SIZE_genz_device_id, do_genz_entry},
 };
 
 /* Create MODULE_ALIAS() statements.
