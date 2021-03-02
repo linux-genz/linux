@@ -686,7 +686,13 @@ static void rmr_free(struct kref *ref)
 	struct genz_rmr *rmr = container_of(ref, struct genz_rmr, refcount);
 	struct genz_pte_info *info = rmr->pte_info;
 	struct genz_mem_data *mdata = rmr->mdata;
+	uint64_t access;
+	bool cpu_visible;
 
+	access = info->access;
+	cpu_visible = !!(access & GENZ_MR_REQ_CPU);
+	if (cpu_visible)
+		remove_resource(&rmr->zres->res);
 	pte_info_remove(info);
 	if (rmr->fd_erase)
 		rb_erase(&rmr->md_node, &mdata->md_rmr_tree);
@@ -927,8 +933,9 @@ int genz_rmr_import(
 	struct genz_rmr         *rmr;
 	bool                    remote, cpu_visible, writable, individual, kmap;
 	bool                    control, dr;
-	ulong                   mflags;
+	ulong                   mflags, mmap_pfn;
 	uint64_t cpuvisible_offset = br_info->cpuvisible_phys_offset;
+	resource_size_t         start;
 	char                    gcstr[GCID_STRING_LEN+1];
 
 	rmri->rsp_zaddr = rsp_zaddr;
@@ -949,11 +956,11 @@ int genz_rmr_import(
 	dr = control && (dr_iface != GENZ_DR_IFACE_NONE);
 	mflags = (control) ? MEMREMAP_WC : MEMREMAP_WB;
 
-	pr_debug("uuid=%pUb, gcid=%s, rsp_zaddr=0x%016llx, "
+	pr_debug("rmr_name=%s, uuid=%pUb, gcid=%s, rsp_zaddr=0x%016llx, "
 		 "len=0x%llx, access=0x%llx, rkey=0x%x, dr_iface=%u, "
 		 "remote=%u, writable=%u, cpu_visible=%u, individual=%u, "
 		 "kmap=%u, control=%u, dr=%u\n",
-		 uuid, genz_gcid_str(dgcid, gcstr, sizeof(gcstr)),
+		 rmr_name, uuid, genz_gcid_str(dgcid, gcstr, sizeof(gcstr)),
 		 rsp_zaddr, len, access, rkey, dr_iface, remote, writable,
 		 cpu_visible, individual, kmap, control, dr);
 
@@ -979,17 +986,19 @@ int genz_rmr_import(
 	}
 
 	rmr->req_addr = rmri->req_addr;
-	rmr->mmap_pfn = PHYS_PFN(rmr->req_addr + cpuvisible_offset);
 
 	if (cpu_visible) {
+		start = rmr->req_addr + cpuvisible_offset;
+		mmap_pfn = PHYS_PFN(start);
 		if (kmap)
-			rmri->cpu_addr = memremap(PFN_PHYS(rmr->mmap_pfn),
+			rmri->cpu_addr = memremap(PFN_PHYS(mmap_pfn),
 						  len, mflags);
-		rmri->zres.res.start = PFN_PHYS(rmr->mmap_pfn);
-		rmri->zres.res.end = rmri->zres.res.start + rmri->len - 1;
+		rmri->zres.res.start = start;
+		rmri->zres.res.end = start + rmri->len - 1;
 		rmri->zres.res.flags = IORESOURCE_MEM;
 		rmri->zres.res.name = rmr_name;
-		insert_resource(&rmr->pte_info->pg->res, &rmri->zres.res);
+		rmr->zres = &rmri->zres;
+		insert_resource(&rmr->pte_info->pg->res, &rmr->zres->res);
 	}
 
  out:
@@ -1077,13 +1086,13 @@ int genz_rmr_resize(
 		return 0;
 
 	prev = *rmri;
+	status = genz_rmr_free(mdata, rmri);
+	if (status < 0)
+		return status;
 	status = genz_rmr_import(mdata, uuid, prev.gcid, prev.rsp_zaddr,
 				 new_len, prev.access, prev.zres.rw_rkey,
 				 prev.dr_iface,
 				 prev.zres.res.name, rmri);
-	if (status < 0)
-		return status;
-	status = genz_rmr_free(mdata, &prev);
 	return status;
 }
 EXPORT_SYMBOL(genz_rmr_resize);
