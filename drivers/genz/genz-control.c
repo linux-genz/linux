@@ -364,6 +364,76 @@ static ssize_t write_control_structure(struct file *fd,
 	return size;
 }
 
+static const struct vm_operations_struct genz_phys_vm_ops = {
+#ifdef CONFIG_HAVE_IOREMAP_PROT
+	.access = generic_access_phys,
+#endif
+};
+
+int genz_mmap_resource_range(ulong gz_pgoff, struct vm_area_struct *vma,
+			     bool write_combine)
+{
+	if (write_combine)
+		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+	else
+		vma->vm_page_prot = pgprot_device(vma->vm_page_prot);
+
+	vma->vm_pgoff += gz_pgoff;
+	vma->vm_ops = &genz_phys_vm_ops;
+	pr_debug("vm_start=0x%lx, vm_pgoff=0x%lx, vm_size=0x%lx\n",
+		 vma->vm_start, vma->vm_pgoff,
+		 vma->vm_end - vma->vm_start);
+	return io_remap_pfn_range(vma, vma->vm_start, vma->vm_pgoff,
+				  vma->vm_end - vma->vm_start,
+				  vma->vm_page_prot);
+}
+
+static bool genz_ci_mmap_fits(struct genz_control_info *ci,
+			      struct vm_area_struct *vma)
+{
+	ulong pages, start, size;
+
+	if (ci->size == 0)
+		return false;
+	pages = vma_pages(vma);
+	start = vma->vm_pgoff;
+	size = PHYS_PFN(ci->size - 1) + 1;
+	return (start < size && start + pages <= size);
+}
+
+static int mmap_control_structure(struct file *fd,
+		struct kobject *kobj,
+		struct bin_attribute *battr,
+		struct vm_area_struct *vma)
+{
+	struct genz_control_info *ci = to_genz_control_info(kobj);
+	struct genz_rmr_info *rmri = ci->rmri;
+	struct genz_bridge_dev *br = ci->zbdev;
+	ulong cs_pgoff;
+	bool wc;
+	int ret = 0;
+
+	/* Revisit: add security_locked_down check (like PCI) */
+	if (!genz_ci_mmap_fits(ci, vma))
+		return -EINVAL;
+	if (genz_is_local_bridge(br, rmri)) {
+		if (!br->zbdrv->control_mmap)
+			return -EINVAL;
+		ret = br->zbdrv->control_mmap(br, ci->start, ci->size,
+					      &cs_pgoff, &wc);
+		if (ret < 0)
+			return ret;
+	} else {  /* fabric */
+		if (!is_genz_range_mapped(ci->start, ci->size, rmri))
+			return -ENOSPC;
+		cs_pgoff = PHYS_PFN(rmri->zres.res.start);
+		wc = true;
+	}
+
+	/* Revisit: PCI has iomem_is_exclusive check */
+	return genz_mmap_resource_range(cs_pgoff, vma, wc);
+}
+
 static const struct sysfs_ops control_info_sysfs_ops = {
 	.show = control_info_attr_show,
 	.store = control_info_attr_store,
@@ -1246,6 +1316,31 @@ static struct genz_mem_data *alloc_mdata(struct genz_bridge_dev *zbdev)
 	return mdata;
 }
 
+static int genz_control_create_bin_file(struct genz_control_info *ci,
+					const char *name)
+{
+	int ret;
+
+	pr_debug("creating file %s\n", ci->battr.attr.name);
+	/* initialize the binary attribute file */
+	sysfs_bin_attr_init(&ci->battr);
+	ci->battr.attr.name = name;
+	ci->battr.attr.mode = 0600;
+	ci->battr.size = ci->size;
+	ci->battr.read = read_control_structure;
+	ci->battr.write = write_control_structure;
+	//ci->battr.mmap = mmap_control_structure; /* Revisit: not quite ready */
+	ci->battr.private = ci; /* Used to indicate valid battr */
+
+	ret = sysfs_create_bin_file(&ci->kobj, &ci->battr);
+	if (ret) {
+		pr_debug("sysfs_create_bin_file failed with %d for file %s\n",
+				ret, ci->battr.attr.name);
+	}
+
+	return ret;
+}
+
 static int traverse_table(struct genz_bridge_dev *zbdev,
 			  struct genz_rmr_info *rmri,
 			  struct genz_control_info *parent,
@@ -1287,19 +1382,10 @@ static int traverse_table(struct genz_bridge_dev *zbdev,
 		return ret;
 	}
 
-	/* Now initialize the binary attribute file. */
-	sysfs_bin_attr_init(&ci->battr);
-	ci->battr.attr.name = table_name;
-	ci->battr.attr.mode = 0600;
-	ci->battr.size = ci->size;
-	ci->battr.read =  read_control_structure;
-	ci->battr.write = write_control_structure;
-	ci->battr.private = ci; /* Used to indicate valid battr */
-
-	ret = sysfs_create_bin_file(&ci->kobj, &ci->battr);
+	ret = genz_control_create_bin_file(ci, table_name);
 	if (ret) {
 		/* Revisit: handle error */
-		pr_debug("sysfs_create_bin_file failed with %d for file %s\n",
+		pr_debug("genz_control_create_bin_file failed with %d for file %s\n",
 				ret, ci->battr.attr.name);
 		return ret;
 	}
@@ -1523,16 +1609,9 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 			return ret;
 		}
 
-		/* Now initialize the binary attribute file. */
-		sysfs_bin_attr_init(&ci->battr);
-		ci->battr.attr.name = name;
-		ci->battr.attr.mode = 0600;
-		ci->battr.size = ci->size;
-		ci->battr.read =  read_control_structure;
-		ci->battr.write = write_control_structure;
-		ci->battr.private = ci; /* Revisit: is this used/needed? */
+		ret = genz_control_create_bin_file(ci, name);
+		/* Revisit: handle error */
 
-		ret = sysfs_create_bin_file(&ci->kobj, &ci->battr);
 		/*
 		 * Now traverse all of the pointers in the structure. The
 		 * chain pointer will be skipped there and handled here in
@@ -1633,19 +1712,10 @@ static int start_core_structure(struct genz_bridge_dev *zbdev,
 	}
 	*root = ci;
 
-	/* Now initialize the binary attribute file. */
-	sysfs_bin_attr_init(&ci->battr);
-	ci->battr.attr.name = genz_structure_name(core.type);
-	ci->battr.attr.mode = 0600;
-	ci->battr.size = ci->size;
-	ci->battr.read =  read_control_structure;
-	ci->battr.write = write_control_structure;
-	ci->battr.private = ci; /* Revisit: is this used/needed? */
-
-	ret = sysfs_create_bin_file(&ci->kobj, &ci->battr);
+	ret = genz_control_create_bin_file(ci, genz_structure_name(core.type));
 	if (ret) {
 		/* Revisit: handle error */
-		pr_debug("sysfs_create_bin_file failed with %d for file %s\n",
+		pr_debug("genz_control_create_bin_file failed with %d for file %s\n",
 			 ret, ci->battr.attr.name);
 		return ret;
 	}
@@ -1713,20 +1783,10 @@ static int traverse_structure(struct genz_bridge_dev *zbdev,
 		return ret;
 	}
 
-	/* Now initialize the binary attribute file. */
-	sysfs_bin_attr_init(&ci->battr);
-	ci->battr.attr.name = genz_structure_name(hdr.type);
-	ci->battr.attr.mode = 0600;
-	ci->battr.size = ci->size;
-	ci->battr.read =  read_control_structure;
-	ci->battr.write = write_control_structure;
-	ci->battr.private = ci; /* Revisit: is this used/needed? */
-
-	pr_debug("calling sysfs_create_bin_file %s\n", ci->battr.attr.name);
-	ret = sysfs_create_bin_file(&ci->kobj, &ci->battr);
+	ret = genz_control_create_bin_file(ci, genz_structure_name(hdr.type));
 	if (ret) {
 		/* Revisit: handle error */
-		pr_debug("sysfs_create_bin_file failed with %d for file %s\n",
+		pr_debug("genz_control_create_bin_file failed with %d for file %s\n",
 				ret, ci->battr.attr.name);
 		return ret;
 	}
