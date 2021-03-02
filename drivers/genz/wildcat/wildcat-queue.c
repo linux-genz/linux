@@ -1280,17 +1280,17 @@ int wildcat_sgl_request(struct genz_dev *zdev, struct genz_sgl_info *sgli)
 
 	zaddr = sgli->rmri->req_addr + sgli->offset;
 
-	for_each_sg(sgli->sg, sg, sgli->nr_sg, i) {
+	for_each_sg(sgli->sgl, sg, sgli->nr_sg, i) {
 		/* fill in cmd */
 		dma_len = sg_dma_len(sg);
 		wc_cmd.dma.len = dma_len;
 		wc_cmd.dma.driver_data = sgli;
-		if (sgli->cmd == GENZ_XDM_WRITE) {
+		if (sgli->data_dir == WRITE) {
 			cmd_name = "PUT";
 			wc_cmd.hdr.opcode = WILDCAT_HW_OPCODE_PUT;
 			wc_cmd.dma.rd_addr = sg_dma_address(sg);
 			wc_cmd.dma.wr_addr = zaddr;
-		} else {  /* GENZ_XDM_READ */
+		} else {  /* READ */
 			cmd_name = "GET";
 			wc_cmd.hdr.opcode = WILDCAT_HW_OPCODE_GET;
 			wc_cmd.dma.rd_addr = zaddr;
