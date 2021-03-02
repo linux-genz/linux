@@ -1515,7 +1515,7 @@ int wildcat_rdma_user_req_RMR_IMPORT(struct io_entry *entry)
 	}
 
 	rmr->req_addr = rmri.req_addr;
-	rmr->mmap_pfn = (rmr->req_addr + cpuvisible_offset) >> PAGE_SHIFT;
+	rmr->zres->res.start = rmr->req_addr + cpuvisible_offset;
 
 	if (cpu_visible) {
 		zmap = rmr_zmap_alloc(entry->fdata, rmr);
@@ -1897,7 +1897,7 @@ static int wildcat_rdma_mmap(struct file *file, struct vm_area_struct *vma)
 	struct zmap         *zmap;
 	union zpages        *zpages;
 	struct genz_rmr     *rmr;
-	ulong               vaddr, offset, length, i, pgoff;
+	ulong               vaddr, offset, length, i, pgoff, mmap_pfn;
 	uint32_t            cache_flags;
 
 	vma->vm_flags |= VM_MIXEDMAP | VM_DONTCOPY;
@@ -1994,6 +1994,7 @@ static int wildcat_rdma_mmap(struct file *file, struct vm_area_struct *vma)
 		break;
 	case RMR_PAGE:
 		rmr = zpages->rmrz.rmr;
+		mmap_pfn = PHYS_PFN(rmr->zres->res.start);
 		cache_flags = rmr->pte_info->access & WILDCAT_MR_REQ_CPU_CACHE;
 		switch (cache_flags) {
 			/* WILDCAT_MR_REQ_CPU_WB is the default, so nothing to do */
@@ -2012,10 +2013,8 @@ static int wildcat_rdma_mmap(struct file *file, struct vm_area_struct *vma)
 			vma_set_page_prot(vma);
 		}
 		pr_debug("RMR mmap_pfn=0x%lx, vm_page_prot=0x%lx\n",
-			 zpages->rmrz.rmr->mmap_pfn,
-			 pgprot_val(vma->vm_page_prot));
-		ret = io_remap_pfn_range(vma, vma->vm_start,
-					 zpages->rmrz.rmr->mmap_pfn,
+			 mmap_pfn, pgprot_val(vma->vm_page_prot));
+		ret = io_remap_pfn_range(vma, vma->vm_start, mmap_pfn,
 					 length, vma->vm_page_prot);
 		if (ret) {
 			pr_err("%s:%s,%u:RMR io_remap_pfn_range returned %d\n",
