@@ -2,10 +2,11 @@
  * file : genz-blk.c
  * desc : linux block device driver for Gen-Z
  *
- * Author:  Jim Hull <jim.hull@hpe.com>
+ * Author:  Jim Hull <jmhull@intelliprop.com>
  *          Betty Dall <betty.dall@hpe.com>
  *
  * Copyright:
+ *     © Copyright 2020-2021 IntelliProp Inc.
  *     © Copyright 2016-2020 Hewlett Packard Enterprise Development LP
  *
  * This program is free software; you can redistribute it and/or
@@ -111,7 +112,6 @@ struct genz_bdev {  /* one per genz_resource == genz_bdev_probe */
 
 struct genz_blk_cmd {  /* one per request */
 	struct scatterlist sg[GENZ_BLK_MAX_SG];
-	int nents;
 	blk_status_t error;
 	struct genz_sgl_info sgli;
 };
@@ -150,8 +150,12 @@ static void genz_bdev_release(struct gendisk *bgen, fmode_t fm)
 static int genz_bdev_ioctl(struct block_device *bdev, fmode_t fm,
 			   unsigned ioctl, unsigned long data)
 {
-	pr_debug("ioctl=%u\n", ioctl);
-	return 0;
+	pr_debug("unknown ioctl=%u\n", ioctl);
+	/* Revisit: implement at least BLKROSET (by switching to the RO-RKey)
+	 * and BLKFLSBUF. Consider using sharing list and driver-to-driver
+	 * messages to inform others about partition changes via BLKRRPART.
+	 */
+	return -ENOTTY;
 }
 
 static int genz_bdev_revalidate_disk(struct gendisk *bgen)
@@ -290,8 +294,8 @@ static void genz_blk_sgl_cmpl(struct genz_dev *zdev,
 	struct genz_blk_cmd *cmd = to_genz_blk_cmd(sgli);
 	struct request *req = blk_mq_rq_from_pdu(cmd);
 
-	dma_unmap_sg(sgli->xdmi->dma_dev, cmd->sg, cmd->nents,
-		     rq_dma_dir(req));
+	if (sgli->xdmi)
+		dma_unmap_sg(sgli->xdmi->dma_dev, cmd->sg, sgli->nents, rq_dma_dir(req));
 	cmd->error = errno_to_blk_status(sgli->status);
 	/* Revisit: debug */
 	dev_dbg_ratelimited(&zdev->dev, "tag=0x%x, req=%px, cpu=%d, status=%d, error=%d\n",
@@ -309,6 +313,8 @@ static blk_status_t genz_blk_queue_rq(struct blk_mq_hw_ctx *hctx,
 	struct genz_rmr_info *rmri = &zbd->rmr_info;
 	struct device *dev = disk_to_dev(zbd->gd);
 	struct genz_blk_ctx *bctx = hctx->driver_data;
+	struct genz_blk_bridge *bbr = bctx->bbr;
+	struct genz_bridge_info *br_info = &bbr->zbdev->br_info;
 	struct genz_dev *zdev = zbd->bstate->zdev;
 	const u32 tag = blk_mq_unique_tag(req);
 	struct genz_blk_cmd *const cmd = blk_mq_rq_to_pdu(req);
@@ -323,24 +329,24 @@ static blk_status_t genz_blk_queue_rq(struct blk_mq_hw_ctx *hctx,
 	/* setup cmd */
 	cmd->sgli.nr_sg = 0;
 	cmd->sgli.rmri = rmri;
-	cmd->sgli.xdmi = &bctx->xdmi;
-	cmd->sgli.cmd = (data_dir == WRITE) ? GENZ_XDM_WRITE : GENZ_XDM_READ;
+	cmd->sgli.xdmi = br_info->xdm ? &bctx->xdmi : NULL;
+	cmd->sgli.data_dir = data_dir;
 	cmd->sgli.tag = tag;
 	cmd->sgli.offset = (loff_t)lba * KERNEL_SECTOR_SIZE;
-	cmd->sgli.sg = cmd->sg;
+	cmd->sgli.len = (size_t)count * KERNEL_SECTOR_SIZE;
+	cmd->sgli.sgl = cmd->sg;
 	atomic_set(&cmd->sgli.nr_cmpls, 0);
 	cmd->sgli.cmpl_fn = genz_blk_sgl_cmpl;
 	/* map data */
-	/* Revisit: add non-XDM version */
-	cmd->nents = blk_rq_map_sg(q, req, cmd->sg);
-	if (!cmd->nents) {
+	cmd->sgli.nents = blk_rq_map_sg(q, req, cmd->sg);
+	if (!cmd->sgli.nents) {
 		dev_dbg(dev, "nents is 0: tag=0x%x, req=%px\n", tag, req);
 		ret = BLK_STS_RESOURCE;
 		goto out;
 	}
-	if (cmd->nents > 0) {
+	if (cmd->sgli.nents > 0 && cmd->sgli.xdmi) {
 		nr_mapped = dma_map_sg_attrs(bctx->xdmi.dma_dev,
-					     cmd->sg, cmd->nents,
+					     cmd->sg, cmd->sgli.nents,
 					     rq_dma_dir(req), DMA_ATTR_NO_WARN);
 		if (!nr_mapped) {
 			dev_dbg(dev, "nr_sg is 0: tag=0x%x, req=%px\n",
@@ -351,16 +357,16 @@ static blk_status_t genz_blk_queue_rq(struct blk_mq_hw_ctx *hctx,
 		cmd->sgli.nr_sg = nr_mapped;
 	}
 	/* Revisit: debug */
-	dev_dbg_ratelimited(dev, "cmd=%s, tag=0x%x, req=%px, lba=%u, count=%u, nr_sg=%d, offset=%llu, cpu=%d\n",
-			    (cmd->sgli.cmd == GENZ_XDM_WRITE) ? "WR" : "RD",
-			    tag, req, lba, count, cmd->sgli.nr_sg,
+	dev_dbg_ratelimited(dev, "cmd=%s, tag=0x%x, req=%px, lba=%u, count=%u, nents=%d, nr_sg=%d, offset=0x%llx, cpu=%d\n",
+			    (cmd->sgli.data_dir == WRITE) ? "WR" : "RD",
+			    tag, req, lba, count, cmd->sgli.nents, cmd->sgli.nr_sg,
 			    cmd->sgli.offset, smp_processor_id());
 	blk_mq_start_request(req);
 	/* submit cmd */
 	err = genz_sgl_request(zdev, &cmd->sgli);
 	if (err < 0) {
 		dev_dbg(dev, "cmd=%s, tag=0x%x, err=%d\n",
-			(cmd->sgli.cmd == GENZ_XDM_WRITE) ? "WR" : "RD",
+			(cmd->sgli.data_dir == WRITE) ? "WR" : "RD",
 			tag, err);
 		if (err == -EBUSY || err == -EXFULL)
 			ret = BLK_STS_DEV_RESOURCE;
@@ -368,9 +374,9 @@ static blk_status_t genz_blk_queue_rq(struct blk_mq_hw_ctx *hctx,
 			ret = errno_to_blk_status(err);
 	}
 
-	if (ret != BLK_STS_OK) {
+	if (ret != BLK_STS_OK && cmd->sgli.xdmi) {
 		/* unmap data */
-		dma_unmap_sg(bctx->xdmi.dma_dev, cmd->sg, cmd->nents,
+		dma_unmap_sg(bctx->xdmi.dma_dev, cmd->sg, cmd->sgli.nents,
 			     rq_dma_dir(req));
 	}
 out:
@@ -433,6 +439,8 @@ static int genz_blk_init_hctx(struct blk_mq_hw_ctx *hctx, void *data,
 	hctx->driver_data = bctx;
 	if (bctx->bbr) {
 		kref_get(&bctx->kref);
+		pr_debug("bctx->bbr already set, bctx->kref=%u\n",
+			 kref_read(&bctx->kref));
 		goto unlock;
 	}
 	/* fill in genz_blk_ctx */
@@ -459,6 +467,7 @@ static int genz_blk_init_hctx(struct blk_mq_hw_ctx *hctx, void *data,
 
 unlock:
 	mutex_unlock(&bctx->lock);
+	pr_debug("ret=%d\n", ret);
 	return ret;
 }
 
@@ -642,6 +651,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	struct device *dev;
 	int ret = 0;
 
+	dev_dbg(&zdev->dev, "entered\n");
 	zbd->gd = gd = alloc_disk(GENZ_BDEV_MINORS);
 	if (!gd) {
 		ret = -ENOMEM;
@@ -660,7 +670,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		gd->disk_name, zbd->size/KERNEL_SECTOR_SIZE);
 	if (blk_queue_dax(zbd->queue)) {
 		dev = disk_to_dev(zbd->gd);
-		dev_dbg(dev, "Enable DAX\n");
+		dev_dbg(&zdev->dev, "Enable DAX\n");
 		dax_dev = alloc_dax(zbd, gd->disk_name,
 				    &genz_blk_dax_ops, dax_flags);
 		if (!dax_dev) {
@@ -678,7 +688,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		addr = devm_memremap_pages(dev, &zbd->pgmap);
 		/* Revisit: error handling */
 		zbd->rmr_info.cpu_addr = addr;
-		dev_dbg(dev, "cpu_addr=%px\n", addr);
+		dev_dbg(&zdev->dev, "cpu_addr=%px\n", addr);
 	}
 	device_add_disk(&zdev->dev, gd, NULL);
 
@@ -701,9 +711,11 @@ static int genz_blk_construct_bdev(struct genz_bdev *zbd,
 	struct genz_bridge_info *br_info = &zbdev->br_info;
 	int err = 0;
 
+	dev_dbg(&zdev->dev, "entered\n");
 	zbd->queue = blk_mq_init_queue(bbr->tag_set);
 	if (IS_ERR(zbd->queue)) {
 		err = PTR_ERR(zbd->queue);
+		dev_dbg(&zdev->dev, "blk_mq_init_queue failed, ret=%d\n", err);
 		return err;
 	}
 	zbd->queue->queuedata = zbd;
