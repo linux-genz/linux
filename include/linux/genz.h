@@ -202,10 +202,12 @@ typedef void (*sgl_cmpl_fn)(struct genz_dev *zdev, struct genz_sgl_info *sgli);
 struct genz_sgl_info {
 	struct genz_rmr_info *rmri;
 	struct genz_xdm_info *xdmi;
-	uint cmd;
+	uint data_dir;
 	uint tag;
 	loff_t offset;
-	struct scatterlist *sg;
+	size_t len;
+	struct scatterlist *sgl;
+	int nents;
 	int nr_sg;
 	int status;
 	atomic_t nr_cmpls;
@@ -223,9 +225,13 @@ struct genz_bridge_driver {
 	/** bridge_info: Fill in @info about the bridge @br. Required. */
 	int (*bridge_info)(struct genz_bridge_dev *br,
 			   struct genz_bridge_info *info);
-	/** control_mmap: Optional. Currently unused. */
-	int (*control_mmap)(struct genz_bridge_dev *br,
-			    struct genz_rmr_info *rmri); /* Revisit: flags? */
+	/** control_mmap: Return page offset of local bridge control structure
+	 * from @offset/@size. If mapping can be write_combine, set @wc true,
+	 * otherwise it will be uncachable. Returns 0 on success, -error on failure,
+	 * e.g., the offset/offset+size is out of range.
+	 */
+	int (*control_mmap)(struct genz_bridge_dev *br, off_t offset, size_t size,
+			    ulong *pgoff, bool *wc);
 	/**
 	 * control_read: Read control space via bridge @br from @offset/@size
 	 * into kernel buffer @data using mapping @rmri. One @flags
@@ -557,11 +563,6 @@ enum genz_control_flag {
 	GENZ_CONTROL_MSG_IV         = 0x80
 };
 
-enum genz_xdm_cmd {
-	GENZ_XDM_READ      = 0x1,
-	GENZ_XDM_WRITE     = 0x2
-};
-
 enum uuid_type {
 	UUID_TYPE_LOCAL    = 0x1,
 	UUID_TYPE_REMOTE   = 0x2,
@@ -677,7 +678,7 @@ struct genz_rmr {
 	struct zmap           *zmap;
 	uint64_t              rsp_zaddr;
 	uint64_t              req_addr;
-	ulong                 mmap_pfn;
+	struct genz_resource  *zres;
 	bool                  writable;
 	bool                  fd_erase;
 	bool                  un_erase;
