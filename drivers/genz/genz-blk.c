@@ -909,7 +909,6 @@ static int genz_bdev_remove(struct genz_bdev *zbd)
 {
 	struct genz_blk_state  *bstate = zbd->bstate;
 	struct genz_blk_bridge *bbr    = bstate->bbr;
-	struct genz_mem_data   *mdata  = &bbr->mem_data;
 	int err;
 
 	dev_dbg(&bstate->zdev->dev, "entered\n");
@@ -917,7 +916,7 @@ static int genz_bdev_remove(struct genz_bdev *zbd)
 	list_del(&zbd->bdev_node);
 	mutex_unlock(&bstate->lock);
 	genz_blk_destroy_bdev(zbd);
-	err = genz_rmr_free(mdata, &zbd->rmr_info);
+	err = genz_rmr_free(&zbd->rmr_info);
 	kfree(zbd);
 	return err;
 }
