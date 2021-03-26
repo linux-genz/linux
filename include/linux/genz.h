@@ -72,13 +72,14 @@ struct genz_dev {
 	uuid_t 			class_uuid;   /* component/service/virtual UUID */
 	uuid_t 			instance_uuid;
 	uint16_t		class;
+	uint16_t 		resource_count[2]; /* control 0; data 1 */
+	uint64_t                driver_flags; /* from netlink */
 	struct list_head	zres_list;  /* head of zres list */
 	struct list_head	uu_node;    /* list of zdevs with same UUID */
 	struct genz_driver	*zdrv;
 	struct genz_bridge_dev	*zbdev;     /* bridge used to reach this dev */
 	struct genz_os_comp	*zcomp;     /* component containing this dev */
 	struct device		dev;	    /* Generic device interface */
-	uint16_t 		resource_count[2]; /* control 0; data 1 */
 };
 #define to_genz_dev(n) container_of(n, struct genz_dev, dev)
 #define kobj_to_genz_dev(n) to_genz_dev(kobj_to_dev(n))
@@ -660,6 +661,7 @@ struct genz_rmr_info {
 	uint32_t             pg_ps;
 	uint32_t             gcid;
 	uint16_t             dr_iface;  /* directed-relay interface */
+	struct genz_mem_data *mdata;  /* Revisit: duplicate of rmr->mdata */
 	struct genz_resource zres;
 };
 
@@ -682,6 +684,12 @@ struct genz_rmr {
 	bool                  writable;
 	bool                  fd_erase;
 	bool                  un_erase;
+};
+
+struct genz_uuid_info {
+	struct genz_mem_data *mdata;
+	uuid_t *uuid;
+	uint32_t uu_flags;
 };
 
 /*
@@ -886,12 +894,14 @@ int genz_rmr_import(
 	struct genz_mem_data *mdata, uuid_t *uuid, uint32_t dgcid,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint32_t rkey,
 	uint16_t dr_iface, const char *rmr_name, struct genz_rmr_info *rmri);
-int genz_rmr_free(struct genz_mem_data *mdata, struct genz_rmr_info *rmri);
-int genz_rmr_update(struct genz_mem_data *mdata, uint32_t rkey,
-		    uint16_t dr_iface, struct genz_rmr_info *rmri);
-int genz_rmr_resize(
-	struct genz_mem_data *mdata, uuid_t *uuid,
-	uint64_t new_len, struct genz_rmr_info *rmri);
+int genz_rmr_free(struct genz_rmr_info *rmri);
+int genz_rmr_update(uint32_t rkey, uint16_t dr_iface, struct genz_rmr_info *rmri);
+int genz_rmr_resize(uuid_t *uuid, uint64_t new_len, struct genz_rmr_info *rmri);
+struct genz_rmr_info *devm_genz_rmr_import(struct genz_dev *zdev,
+	struct genz_uuid_info *uui, uint32_t dgcid,
+	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint32_t rkey,
+	uint16_t dr_iface, const char *rmr_name);
+void devm_genz_rmr_free(struct genz_dev *zdev, struct genz_rmr_info *rmri);
 bool genz_gcid_is_local(struct genz_bridge_dev *br, uint32_t gcid);
 int genz_alloc_queues(struct genz_bridge_dev *br,
 		      struct genz_xdm_info *xdmi, struct genz_rdm_info *rdmi);
@@ -902,6 +912,9 @@ int genz_uuid_import(struct genz_mem_data *mdata, uuid_t *uuid,
 		     uint32_t uu_flags, gfp_t alloc_flags);
 int genz_uuid_free(struct genz_mem_data *mdata, uuid_t *uuid,
 		   uint32_t *uu_flags, bool *local);
+struct genz_uuid_info *devm_genz_uuid_import(
+	struct genz_dev *zdev, uuid_t *uuid,
+	uint32_t uu_flags, gfp_t alloc_flags);
 bool genz_validate_structure_type(int type);
 bool genz_validate_structure_size(struct genz_control_structure_header *hdr);
 int genz_control_read(struct genz_bridge_dev *br, loff_t offset,

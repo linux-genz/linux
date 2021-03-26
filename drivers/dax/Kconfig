@@ -79,4 +79,15 @@ config DEV_DAX_PMEM_COMPAT
 	  device-dax instances under /sys/class/dax. If libdaxctl in
 	  your distribution is older than v58 say M, otherwise say N.
 
+config DEV_DAX_GENZ
+	tristate "Gen-Z DAX: direct access to Gen-Z memory"
+	depends on GENZ && DEV_DAX
+	default DEV_DAX
+	help
+	  Support raw access to Gen-Z memory.  Note that this
+	  driver consumes Gen-Z memory regions associated with the
+	  UUID f147276b-c2c1-431e-91af-3031d0039768.
+
+	  Say M if unsure.
+
 endif

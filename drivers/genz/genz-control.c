@@ -1722,8 +1722,7 @@ static int start_core_structure(struct genz_bridge_dev *zbdev,
 	/* Revisit: temporary hack to workaround incorrect mamba value */
 	max_ctl = max((uint64_t)core.max_ctl, 0xd0000ull);
 	/* Resize the requester ZMMU mapping to cover all of control space */
-	ret = genz_rmr_resize(zbdev->control_mdata, &zbdev->fabric->mgr_uuid,
-			      max_ctl, rmri);
+	ret = genz_rmr_resize(&zbdev->fabric->mgr_uuid, max_ctl, rmri);
 	if (ret < 0) {
 		/* Revisit: handle error */
 		pr_debug("genz_rmr_resize for %s failed with %d\n",
@@ -2282,7 +2281,7 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 			return ret;
 		}
 		/* update rmr with GENZ_DR_IFACE_NONE */
-		ret = genz_rmr_update(mdata, rmri->zres.rw_rkey,
+		ret = genz_rmr_update(rmri->zres.rw_rkey,
 				      GENZ_DR_IFACE_NONE, rmri);
 		if (ret < 0) {
 			/* Revisit: error handling */
@@ -2356,7 +2355,7 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 err_fab_files:
 	genz_remove_fab_files(&f_comp->kobj);
 err_rmr:
-	genz_rmr_free(mdata, rmri);
+	genz_rmr_free(rmri);
 err_md_node:
 	genz_free_uuid_node(mdata, &mdata->uuid_lock,
 			    &mdata->md_remote_uuid_tree, mgr_uuid, false);

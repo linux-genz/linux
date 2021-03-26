@@ -897,6 +897,7 @@ static int orthus_probe(struct platform_device *pdev)
 	bdata->block_probe(pdev, obr);
 	/* Revisit: finish this */
 	bcnt = atomic_inc_return(&obr->block_cnt);
+	dev_dbg(dev, "bcnt is %d of %d\n", bcnt, IPROP_BLOCK_CNT);
 	if (bcnt == IPROP_BLOCK_CNT) {
 		obr->obr_dev = dev;
 		orthus_genz_req_zmmu_setup(obr);
