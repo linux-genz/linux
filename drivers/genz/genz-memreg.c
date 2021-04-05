@@ -1086,7 +1086,7 @@ int genz_rmr_resize(uuid_t *uuid, uint64_t new_len, struct genz_rmr_info *rmri)
 {
 	int                     status = 0;
 	struct genz_rmr_info    prev;
-	struct genz_mem_data    *mdata = rmri->mdata;
+	struct genz_mem_data    *mdata = rmri ? rmri->mdata : 0;
 
 	pr_debug("mdata=%px, uuid=%pUb, new_len=0x%llx, rmri=%px\n",
 		 mdata, uuid, new_len, rmri);
