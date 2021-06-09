@@ -97,7 +97,6 @@ struct genz_bdev {  /* one per genz_resource == genz_bdev_probe */
 	size_t                 size;  /* block device size (bytes) */
 	uint32_t               gcid;  /* Revisit: move elsewhere? */
 	uint                   bindex;
-	uint                   bdev_start_minor;
 	uint64_t               base_zaddr;
 	struct genz_rmr_info   rmr_info;
 	struct request_queue   *queue;
@@ -124,11 +123,7 @@ DEFINE_MUTEX(genz_blk_lock);  /* used only during initialization */
  *                    THE BDEV FILE OPS
  * ============================================================ */
 
-static int genz_bdev_major = 0;
-static uint genz_bdev_start_minor = 0;
-
 #define GENZ_BLOCK_SIZE	512
-#define GENZ_BDEV_MINORS 16
 
 /*
  * We can tweak our hardware sector size, but the kernel block layer
@@ -652,16 +647,15 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	int ret = 0;
 
 	dev_dbg(&zdev->dev, "entered\n");
-	zbd->gd = gd = alloc_disk(GENZ_BDEV_MINORS);
+	zbd->gd = gd = alloc_disk(0); // Revisit: use alloc_disk_node
 	if (!gd) {
 		ret = -ENOMEM;
 		goto out;
 	}
-	gd->major = genz_bdev_major;
-	gd->first_minor = zbd->bdev_start_minor;
 	gd->fops = &genz_bdev_ops;
 	gd->queue = zbd->queue;
 	gd->private_data = zbd;
+	gd->flags = GENHD_FL_EXT_DEVT;
 	scnprintf(gd->disk_name, 32, GENZ_BDEV_NAME "%u", zbd->bindex);
 	pr_info("%s: first_minor=%d, base_zaddr=0x%llx\n",
 		gd->disk_name, gd->first_minor, zbd->base_zaddr);
@@ -855,10 +849,9 @@ static int genz_bdev_probe(struct genz_blk_state *bstate,
 		goto fail;
 	}
 
+	/* Revisit: convert to atomic_t */
 	mutex_lock(&genz_blk_lock);
 	zbd->bindex = genz_blk_index++;
-	zbd->bdev_start_minor = genz_bdev_start_minor;
-	genz_bdev_start_minor += GENZ_BDEV_MINORS;
 	mutex_unlock(&genz_blk_lock);
 
 	spin_lock_init(&zbd->lock);
@@ -908,7 +901,6 @@ fail:
 static int genz_bdev_remove(struct genz_bdev *zbd)
 {
 	struct genz_blk_state  *bstate = zbd->bstate;
-	struct genz_blk_bridge *bbr    = bstate->bbr;
 	int err;
 
 	dev_dbg(&bstate->zdev->dev, "entered\n");
@@ -1012,32 +1004,17 @@ static int __init genz_blk_init(void)
 {
 	int ret;
 
-	genz_bdev_major = register_blkdev(0, GENZ_BDEV_NAME);
-	if (genz_bdev_major < 0) {
-		ret = genz_bdev_major;
-		pr_err("register_blkdev: unable to get major number %d\n",
-		       ret);
-		goto out;
-	}
 	ret = genz_register_driver(&genz_blk_driver);
 	if (ret < 0) {
 		pr_warn("%s:%s:genz_register_driver returned %d\n",
 			GENZ_BLK_DRV_NAME, __func__, ret);
-		goto unregister_blkdev;
 	}
-
-out:
 	return ret;
-
-unregister_blkdev:
-	unregister_blkdev(genz_bdev_major, GENZ_BDEV_NAME);
-	goto out;
 }
 
 static void __exit genz_blk_exit(void)
 {
 	genz_unregister_driver(&genz_blk_driver);
-	unregister_blkdev(genz_bdev_major, GENZ_BDEV_NAME);
 }
 
 module_init(genz_blk_init);
