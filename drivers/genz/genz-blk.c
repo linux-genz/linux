@@ -758,6 +758,7 @@ static int genz_blk_init_tag_set(struct genz_blk_bridge *bbr)
 	bbr->tag_set->queue_depth = genz_blk_queue_depth;
 	bbr->tag_set->cmd_size = sizeof(struct genz_blk_cmd);
 	bbr->tag_set->numa_node = NUMA_NO_NODE;
+	/* Revisit: nvme sets tag_set->timeout */
 	bbr->tag_set->flags = BLK_MQ_F_SHOULD_MERGE |
 		BLK_ALLOC_POLICY_TO_MQ_FLAG(BLK_TAG_ALLOC_FIFO);
 	bbr->tag_set->driver_data = bbr;
@@ -867,7 +868,7 @@ static int genz_bdev_probe(struct genz_blk_state *bstate,
 #endif
 	err = genz_blk_bdev_start_size(zres, &bdev_start, &bdev_size);
 	if (err < 0)
-		goto fail;  /* Revisit: other cleanup */
+		goto zbd_free;
 	zbd->base_zaddr = bdev_start;
 	zbd->size = bdev_size;
 	zbd->gcid = gcid;
@@ -883,10 +884,10 @@ static int genz_bdev_probe(struct genz_blk_state *bstate,
 			      rkey, GENZ_DR_IFACE_NONE,
 			      zres->res.name, &zbd->rmr_info);
 	if (err < 0)
-		goto fail;  /* Revisit: other cleanup */
+		goto zbd_free;
 	err = genz_blk_construct_bdev(zbd, bbr);
 	if (err < 0)
-		goto fail;  /* Revisit: other cleanup */
+		goto rmr_free;
 
 	mutex_lock(&bstate->lock);
 	list_add_tail(&zbd->bdev_node, &bstate->bdev_list);
@@ -894,6 +895,10 @@ static int genz_bdev_probe(struct genz_blk_state *bstate,
 
 	return 0;
 
+rmr_free:
+	genz_rmr_free(&zbd->rmr_info);
+zbd_free:
+	kfree(zbd);
 fail:
 	return err;
 }
