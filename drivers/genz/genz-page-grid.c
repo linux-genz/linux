@@ -870,7 +870,7 @@ int genz_zmmu_req_pte_alloc(struct genz_pte_info *ptei,
 
 	ret = zmmu_find_pte_range(ptei, gz_pg);
 	if (ret < 0)
-		goto unlock;
+		goto err_pte;
 
 	rmri->req_addr = genz_zmmu_pte_addr(ptei, ptei->addr);
 	rmri->pg_ps = gz_pg->page_grid.page_size;
@@ -890,6 +890,8 @@ out:
 	pr_debug("ret=%d, addr=0x%llx\n", ret, ptei->addr);
 	return ret;
 
+err_pte:
+	ptei->zmmu_pages = 0;
 unlock:
 	spin_unlock_irqrestore(&br->zmmu_lock, flags);
 	goto out;
@@ -903,6 +905,8 @@ void genz_zmmu_req_pte_free(struct genz_pte_info *ptei)
 
 	pr_debug("pte_index=%u, zmmu_pages=%u\n",
 		 ptei->pte_index, ptei->zmmu_pages);
+	if (ptei->zmmu_pages == 0)
+		return;
 	ptei->pte.req.v = 0;
 	if (br->zbdrv->req_pte_write) { /* call bridge driver to clear HW PTE */
 		br->zbdrv->req_pte_write(br, ptei);
@@ -968,6 +972,8 @@ void genz_zmmu_rsp_pte_free(struct genz_pte_info *ptei)
 
 	pr_debug("pte_index=%u, zmmu_pages=%u\n",
 		 ptei->pte_index, ptei->zmmu_pages);
+	if (ptei->zmmu_pages == 0)
+		return;
 	ptei->pte.rsp.v = 0;
 	if (br->zbdrv->rsp_pte_write) { /* call bridge driver to clear HW PTE */
 		br->zbdrv->rsp_pte_write(br, ptei);
