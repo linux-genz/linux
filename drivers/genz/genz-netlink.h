@@ -110,8 +110,8 @@ enum {
 };
 #define GENZ_A_FC_MAX (__GENZ_A_FC_MAX - 1)
 
-#define GENZ_CONTROL_STR_LEN	21  /* 0000:000 controlNNNN */
-#define GENZ_DATA_STR_LEN	18  /* 0000:000 dataNNNN */
+#define GENZ_CONTROL_STR_LEN	13  /* controlNNNN */
+#define GENZ_DATA_STR_LEN	10  /* dataNNNN */
 
 /* Netlink Generic Commands */
 enum {
