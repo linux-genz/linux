@@ -140,7 +140,6 @@ int genz_setup_zres(struct genz_zres *zres,
 		const char *fmt)
 {
 	int ret = 0;
-	char gcstr[GCID_STRING_LEN+1];
 	char *name;
 
 	zres->zres.res.flags = iores_flags;
@@ -152,7 +151,7 @@ int genz_setup_zres(struct genz_zres *zres,
 		goto error;
 	}
 	snprintf(name, str_len, fmt,
-		 genz_gcid_str(genz_dev_gcid(zdev, 0), gcstr, sizeof(gcstr)),
+		 genz_name(zdev),
 		 zdev->resource_count[cdtype]++);  /* Revisit: atomic_t */
 	zres->zres.res.name = name;
 error:
@@ -220,12 +219,12 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 		if (mem_type == GENZ_CONTROL) {
 			res_flags = zres->zres.res.flags |
 				IORESOURCE_GENZ_CONTROL;
-			str_len = GENZ_CONTROL_STR_LEN;
+			str_len = strlen(genz_name(zdev)) + GENZ_CONTROL_STR_LEN;
 			fmt = "%s control%d";
 		} else {  /* GENZ_DATA */
 			res_flags = zres->zres.res.flags &
 				~IORESOURCE_GENZ_CONTROL;
-			str_len = GENZ_DATA_STR_LEN;
+			str_len = strlen(genz_name(zdev)) + GENZ_DATA_STR_LEN;
 			fmt = "%s data%d";
 		}
 		ret = genz_setup_zres(zres, zdev, mem_type, res_flags,
