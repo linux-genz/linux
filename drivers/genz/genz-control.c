@@ -2224,6 +2224,7 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 	rkey = 0;  /* Revisit */
 	pr_debug("calling genz_rmr_import\n");
 	/* initial mapping is for one 4KiB page covering the core struct */
+	/* Revisit: change fixed "control" rmr_name to something with GCID */
 	ret = genz_rmr_import(mdata, mgr_uuid, gcid, 0, 4096,
 			      access, rkey, dr_iface, "control", dr_rmri);
 	if (ret < 0) {
@@ -2340,6 +2341,7 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 	rkey = 0;  /* Revisit */
 	pr_debug("calling genz_rmr_import\n");
 	/* initial mapping is for one 4KiB page covering the core struct */
+	/* Revisit: change fixed "control" rmr_name to something with GCID */
 	ret = genz_rmr_import(mdata, mgr_uuid, gcid, 0, 4096,
 			      access, rkey, dr_iface, "control", rmri);
 	if (ret < 0) {
