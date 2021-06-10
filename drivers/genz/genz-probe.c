@@ -766,7 +766,8 @@ struct genz_comp *genz_lookup_comp(struct genz_subnet *s, uint32_t cid)
 	list_for_each_entry(c, &s->fabric->components, fab_comp_node) {
 		if (c->cid == cid && s->sid == c->subnet->sid) {
 			found = c;
-			kobject_get(&c->kobj);
+			if (c->add_kobj)
+				kobject_get(&c->kobj);
 			break;
 		}
 	}
@@ -798,6 +799,7 @@ struct genz_comp *genz_add_comp(struct genz_subnet *s,
 	int ret = 0;
 	unsigned long flags;
 
+	pr_debug("cid=%u, add_kobj=%u\n", cid, add_kobj);
 	found = genz_lookup_comp(s, cid);
 	if (!found) {
 		pr_debug("cid %d is not in the components list yet\n", cid);
@@ -810,6 +812,7 @@ struct genz_comp *genz_add_comp(struct genz_subnet *s,
 		ret = genz_init_comp(found, s, cid, add_kobj);
 		if (ret) {
 			pr_debug("genz_init_comp failed, ret=%d\n", ret);
+			kfree(found);
 			return NULL;
 		}
 		/* Revisit: make sure this has not already been added. */
@@ -818,6 +821,7 @@ struct genz_comp *genz_add_comp(struct genz_subnet *s,
 		spin_unlock_irqrestore(&s->fabric->components_lock, flags);
 		pr_debug("added component %px to the component list\n", found);
 	} else {
+		pr_debug("cid %d found in the components list, %px\n", cid, found);
 		if (add_kobj && !found->add_kobj) {
 			ret = genz_init_comp(found, s, cid, add_kobj);
 			if (ret) {
