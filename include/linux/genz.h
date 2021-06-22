@@ -713,6 +713,12 @@ enum {
 	GENZ_TC_15 = 15
 };
 
+enum genz_pfn_mode {
+	PFN_MODE_NONE,
+	PFN_MODE_RAM,
+	PFN_MODE_FAM,
+};
+
 uint32_t genz_dev_gcid(struct genz_dev *zdev, uint index);
 
 /* SID is 16 bits starting at bit 13 of a GCID */
