@@ -421,6 +421,7 @@ int dev_dax_probe(struct device *dev)
 	void *addr;
 	int rc;
 
+	dev_dbg(dev, "entered\n");
 	/* 1:1 map region resource range to device-dax instance range */
 	if (!devm_request_mem_region(dev, res->start, resource_size(res),
 				dev_name(dev))) {
@@ -446,11 +447,13 @@ int dev_dax_probe(struct device *dev)
 	if (rc)
 		return rc;
 
+	dev_dbg(dev, "cdev_add() success\n");
 	rc = devm_add_action_or_reset(dev, dev_dax_cdev_del, cdev);
 	if (rc)
 		return rc;
 
 	run_dax(dax_dev);
+	dev_dbg(dev, "after run_dax()\n");
 	return devm_add_action_or_reset(dev, dev_dax_kill, dev_dax);
 }
 EXPORT_SYMBOL_GPL(dev_dax_probe);

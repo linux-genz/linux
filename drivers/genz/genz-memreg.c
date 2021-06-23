@@ -539,7 +539,7 @@ void genz_umem_free_all(struct genz_mem_data *mdata,
 EXPORT_SYMBOL(genz_umem_free_all);
 
 static inline int rmr_cmp(uint32_t dgcid, uint64_t rsp_zaddr,
-			  uint64_t length, uint64_t access,
+			  uint64_t length, uint16_t dr_iface, uint64_t access,
 			  const struct genz_rmr *r)
 {
 	int cmp;
@@ -554,11 +554,14 @@ static inline int rmr_cmp(uint32_t dgcid, uint64_t rsp_zaddr,
 	cmp = arithcmp(length, info->length);
 	if (cmp)
 		return cmp;
+	cmp = arithcmp(dr_iface, info->dr_iface);
+	if (cmp)
+		return cmp;
 	return arithcmp(USER_ACCESS(access), USER_ACCESS(info->access));
 }
 
-static inline int rmr_uu_cmp(uint64_t rsp_zaddr,
-			     uint64_t length, uint64_t access,
+static inline int rmr_uu_cmp(uint64_t rsp_zaddr, uint64_t length,
+			     uint16_t dr_iface, uint64_t access,
 			     struct uuid_tracker *local_uuid,
 			     const struct genz_rmr *r)
 {
@@ -571,6 +574,9 @@ static inline int rmr_uu_cmp(uint64_t rsp_zaddr,
 	cmp = arithcmp(length, info->length);
 	if (cmp)
 		return cmp;
+	cmp = arithcmp(dr_iface, info->dr_iface);
+	if (cmp)
+		return cmp;
 	cmp = arithcmp(USER_ACCESS(access), USER_ACCESS(info->access));
 	if (cmp)
 		return cmp;
@@ -580,7 +586,7 @@ static inline int rmr_uu_cmp(uint64_t rsp_zaddr,
 
 struct genz_rmr *genz_rmr_search(
 	struct genz_mem_data *mdata, uint32_t dgcid, uint64_t rsp_zaddr,
-	uint64_t length, uint64_t access, uint64_t req_addr)
+	uint64_t length, uint16_t dr_iface, uint64_t access, uint64_t req_addr)
 {
 	struct genz_rmr *rmr;
 	struct rb_node *rnode;
@@ -593,7 +599,7 @@ struct genz_rmr *genz_rmr_search(
 		int64_t result;
 
 		rmr = container_of(rnode, struct genz_rmr, md_node);
-		result = rmr_cmp(dgcid, rsp_zaddr, length, access, rmr);
+		result = rmr_cmp(dgcid, rsp_zaddr, length, dr_iface, access, rmr);
 		if (result < 0) {
 			rnode = rnode->rb_left;
 		} else if (result > 0) {
@@ -631,7 +637,7 @@ static struct genz_rmr *rmr_insert(struct genz_rmr *rmr)
 		struct genz_rmr *this =
 			container_of(*new, struct genz_rmr, md_node);
 		int64_t result = rmr_cmp(info->pte.req.dgcid, rmr->rsp_zaddr,
-					 info->length, info->access, this);
+					 info->length, info->dr_iface, info->access, this);
 
 		parent = *new;
 		if (result < 0) {
@@ -659,7 +665,8 @@ static struct genz_rmr *rmr_insert(struct genz_rmr *rmr)
 		struct genz_rmr *this =
 			container_of(*new, struct genz_rmr, un_node);
 		int result = rmr_uu_cmp(rmr->rsp_zaddr, info->length,
-					info->access, mdata->local_uuid, this);
+					info->dr_iface, info->access,
+					mdata->local_uuid, this);
 
 		parent = *new;
 		if (result < 0) {
@@ -686,12 +693,35 @@ static void rmr_free(struct kref *ref)
 	struct genz_rmr *rmr = container_of(ref, struct genz_rmr, refcount);
 	struct genz_pte_info *info = rmr->pte_info;
 	struct genz_mem_data *mdata = rmr->mdata;
-	uint64_t access;
-	bool cpu_visible;
+	const char *rmr_name;
+	uint64_t rsp_zaddr = rmr->rsp_zaddr;
+	uint64_t req_addr = rmr->req_addr;
+	uint32_t dgcid = info->pte.req.dgcid;
+	uint32_t rkey = info->pte.req.rkey;
+	uint16_t dr_iface = info->dr_iface;
+	uint64_t access = info->access;
+	uint64_t len = info->length;
+	bool remote, writable, cpu_visible, individual, kmap, control, dr;
+	char gcstr[GCID_STRING_LEN+1];
 
-	access = info->access;
+	remote = !!(access & (GENZ_MR_GET_REMOTE|GENZ_MR_PUT_REMOTE));
+	writable = !!(access & GENZ_MR_PUT_REMOTE);
 	cpu_visible = !!(access & GENZ_MR_REQ_CPU);
-	if (cpu_visible)
+	individual = !!(access & GENZ_MR_INDIVIDUAL);
+	kmap = !!(access & GENZ_MR_KERN_MAP);
+	control = !!(access & GENZ_MR_CONTROL);
+	dr = control && (dr_iface != GENZ_DR_IFACE_NONE);
+	rmr_name = (cpu_visible && rmr->zres) ?
+		rmr->zres->res.name : "unknown";
+	pr_debug("rmr_name=%s, gcid=%s, rsp_zaddr=0x%016llx, "
+		 "req_addr=0x%016llx, "
+		 "len=0x%llx, access=0x%llx, rkey=0x%x, dr_iface=%u, "
+		 "remote=%u, writable=%u, cpu_visible=%u, individual=%u, "
+		 "kmap=%u, control=%u, dr=%u\n",
+		 rmr_name, genz_gcid_str(dgcid, gcstr, sizeof(gcstr)),
+		 rsp_zaddr, req_addr, len, access, rkey, dr_iface, remote,
+		 writable, cpu_visible, individual, kmap, control, dr);
+	if (cpu_visible && rmr->zres)
 		remove_resource(&rmr->zres->res);
 	pte_info_remove(info);
 	if (rmr->fd_erase)
@@ -826,6 +856,7 @@ struct genz_rmr *genz_rmr_get(
 	info->addr          = rsp_zaddr;
 	info->access        = USER_ACCESS(access) | GENZ_MR_REQ;
 	info->length        = len;
+	info->dr_iface      = dr_iface;
 	info->pte.req.st    = (control) ? GENZ_CONTROL : GENZ_DATA;
 	if (control) {
 		info->pte.req.pec = 1;
@@ -850,6 +881,8 @@ struct genz_rmr *genz_rmr_get(
 
 	found = rmr_insert(rmr);
 	if (found != rmr) {
+		pr_debug("rmr_insert returned found (%px) != rmr (%px)\n",
+			 found, rmr);
 		genz_rmr_remove(rmr, true);
 		ret = -EEXIST;
 		rmri->req_addr = found->req_addr;
@@ -1023,7 +1056,7 @@ int genz_rmr_free(struct genz_rmr_info *rmri)
 	mdata = rmri->mdata;
 	spin_lock_irqsave(&mdata->md_lock, flags);
 	rmr = genz_rmr_search(mdata, rmri->gcid, rmri->rsp_zaddr, rmri->len,
-			      rmri->access, rmri->req_addr);
+			      rmri->dr_iface, rmri->access, rmri->req_addr);
 	if (!rmr) {
 		status = -EINVAL;
 		goto unlock;
@@ -1039,48 +1072,65 @@ unlock:
 }
 EXPORT_SYMBOL(genz_rmr_free);
 
-int genz_rmr_update(uint32_t rkey, uint16_t dr_iface, struct genz_rmr_info *rmri)
+int genz_rmr_update(uint32_t rkey, struct genz_rmr_info *rmri)
 {
 	struct genz_pte_info    *ptei;
 	int                     status = 0;
 	struct genz_rmr         *rmr;
 	struct genz_mem_data    *mdata;
 	ulong                   flags;
-	bool                    control, dr;
 
 	if (!rmri || !rmri->mdata)
 		return -EINVAL;
 	mdata = rmri->mdata;
 	spin_lock_irqsave(&mdata->md_lock, flags);
 	rmr = genz_rmr_search(mdata, rmri->gcid, rmri->rsp_zaddr, rmri->len,
-			      rmri->access, rmri->req_addr);
+			      rmri->dr_iface, rmri->access, rmri->req_addr);
 	if (!rmr) {
 		status = -EINVAL;
 		goto unlock;
 	}
 
 	spin_unlock_irqrestore(&mdata->md_lock, flags);
-	control = !!(rmri->access & GENZ_MR_CONTROL);
-	dr = control && (dr_iface != GENZ_DR_IFACE_NONE);
 	ptei = rmr->pte_info;
 	rmri->zres.ro_rkey = rmri->zres.rw_rkey = rkey;
 	ptei->pte.req.rkey = rkey;
-	if (control) {
-		ptei->pte.req.drc = dr;
-		ptei->pte.req.control.dr_iface = (dr) ? dr_iface : 0;
-	}
 	status = genz_zmmu_req_pte_update(ptei);
 	goto out;
 
 unlock:
 	spin_unlock_irqrestore(&mdata->md_lock, flags);
 out:
-	pr_debug("ret=%d, rsp_zaddr=0x%016llx, "
-		 "rkey=0x%x, dr_iface=%u\n",
-		 status, rmri->rsp_zaddr, rkey, dr_iface);
+	pr_debug("ret=%d, rsp_zaddr=0x%016llx, rkey=0x%x\n",
+		 status, rmri->rsp_zaddr, rkey);
 	return status;
 }
 EXPORT_SYMBOL(genz_rmr_update);
+
+int genz_rmr_change_dr(uuid_t *uuid, uint32_t new_gcid, uint16_t new_dr_iface,
+		       struct genz_rmr_info *rmri)
+{
+	int                     status = 0;
+	struct genz_rmr_info    prev;
+	struct genz_mem_data    *mdata = rmri ? rmri->mdata : 0;
+
+	pr_debug("mdata=%px, uuid=%pUb, new_dr_iface=%hu, rmri=%px\n",
+		 mdata, uuid, new_dr_iface, rmri);
+	if (!mdata || genz_is_local_bridge(mdata->bridge, rmri) ||
+	    (new_dr_iface == rmri->dr_iface))  /* nothing to do */
+		return 0;
+
+	prev = *rmri;
+	status = genz_rmr_free(rmri);
+	if (status < 0)
+		return status;
+	status = genz_rmr_import(mdata, uuid, new_gcid, prev.rsp_zaddr,
+				 prev.len, prev.access, prev.zres.rw_rkey,
+				 new_dr_iface,
+				 prev.zres.res.name, rmri);
+	return status;
+}
+EXPORT_SYMBOL(genz_rmr_change_dr);
 
 int genz_rmr_resize(uuid_t *uuid, uint64_t new_len, struct genz_rmr_info *rmri)
 {

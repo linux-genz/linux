@@ -171,8 +171,6 @@ int wildcat_req_pte_write(struct genz_bridge_dev *gzbr,
 			  struct genz_pte_info *info);
 int wildcat_rsp_pte_write(struct genz_bridge_dev *gzbr,
 			  struct genz_pte_info *info);
-void wildcat_req_pte_clear(struct zhpe_pte_info *info);
-void wildcat_rsp_pte_clear(struct zhpe_pte_info *info);
 int wildcat_humongous_zmmu_rsp_pte_alloc(
 	struct genz_pte_info **infop,
 	struct genz_pte_info **humongous_zmmu_rsp_pte,

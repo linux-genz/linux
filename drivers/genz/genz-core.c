@@ -64,6 +64,8 @@ uint req_write_mode = GENZ_WM_LATE_ACK;
 module_param(req_write_mode, uint, 0444);
 MODULE_PARM_DESC(req_write_mode, "requester PTE write mode");
 
+/* Revisit: add module param to enable/disable FM operations */
+
 struct genz_fabric *genz_temp_fabric = NULL;
 
 /**
