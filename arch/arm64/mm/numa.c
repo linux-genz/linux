@@ -18,7 +18,7 @@
 
 struct pglist_data *node_data[MAX_NUMNODES] __read_mostly;
 EXPORT_SYMBOL(node_data);
-nodemask_t numa_nodes_parsed __initdata;
+nodemask_t numa_nodes_parsed;
 static int cpu_to_node_map[NR_CPUS] = { [0 ... NR_CPUS-1] = NUMA_NO_NODE };
 
 static int numa_distance_cnt;
@@ -201,7 +201,7 @@ void __init setup_per_cpu_areas(void)
  * RETURNS:
  * 0 on success, -errno on failure.
  */
-int __init numa_add_memblk(int nid, u64 start, u64 end)
+int numa_add_memblk(int nid, u64 start, u64 end)
 {
 	int ret;
 
@@ -215,6 +215,7 @@ int __init numa_add_memblk(int nid, u64 start, u64 end)
 	node_set(nid, numa_nodes_parsed);
 	return ret;
 }
+EXPORT_SYMBOL(numa_add_memblk);
 
 /*
  * Initialize NODE_DATA for a node on the local memory

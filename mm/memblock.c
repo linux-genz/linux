@@ -1239,8 +1239,8 @@ void __init_memblock __next_mem_pfn_range(int *idx, int nid,
  * Return:
  * 0 on success, -errno on failure.
  */
-int __init_memblock memblock_set_node(phys_addr_t base, phys_addr_t size,
-				      struct memblock_type *type, int nid)
+int memblock_set_node(phys_addr_t base, phys_addr_t size,
+		      struct memblock_type *type, int nid)
 {
 #ifdef CONFIG_NEED_MULTIPLE_NODES
 	int start_rgn, end_rgn;

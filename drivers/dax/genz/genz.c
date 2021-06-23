@@ -4,10 +4,14 @@
 #include <linux/memremap.h>
 #include <linux/module.h>
 #include <linux/pfn_t.h>
+#include <asm/numa.h>
 #include <linux/genz.h>
 #include "../bus.h"
 
 #define DAX_GENZ_DRV_NAME "dax-genz"
+
+/* Revisit: why does the numa.h include not work? */
+int numa_add_memblk(int nid, u64 start, u64 end);
 
 static struct genz_device_id dax_genz_id_table[] = {
 	{ .uuid_str = "f147276b-c2c1-431e-91af-3031d0039768" },
@@ -123,6 +127,8 @@ struct dev_dax *__dax_genz_probe(struct genz_dev *zdev,
 		return ERR_PTR(ret);
 	}
 	__dax_genz_pfn_size(zdev, &rmri->zres, &align, &end_trunc, &offset, &npfns);
+	dev_dbg(dev, "align=0x%lx, end_trunc=%u, offset=0x%llx, npfns=%lu\n",
+		align, end_trunc, offset, npfns);
 	ret = __dax_genz_setup_pfn(zdev, &rmri->zres, align, end_trunc, offset,
 				   npfns, &pgmap);
 	if (ret < 0)
@@ -142,6 +148,10 @@ struct dev_dax *__dax_genz_probe(struct genz_dev *zdev,
 				      target_node, align, PFN_DEV|PFN_MAP);
 	if (!dax_region)
 		return ERR_PTR(-ENOMEM);
+	/* Revisit: does this work? */
+	ret = numa_add_memblk(target_node, pgmap.res.start, pgmap.res.end+1);
+	if (ret < 0)
+		return ERR_PTR(ret);
 
 	dev_dax = __devm_create_dev_dax(dax_region, id, &pgmap, subsys);
 
@@ -164,6 +174,7 @@ static int dax_genz_probe(struct genz_dev *zdev,
 		dev_err(&zdev->dev, "device DAX requires load/store-capable bridge\n");
 		return -EOPNOTSUPP;
 	}
+	dev_dbg(&zdev->dev, "entered\n");
 	genz_for_each_resource(zres, zdev) {
 		dev_dbg(&zdev->dev, "resource %s\n", zres->res.name);
 		if (first) {
