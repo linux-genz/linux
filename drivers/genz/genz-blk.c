@@ -557,7 +557,7 @@ static bool genz_blk_dax_supported(struct dax_device *dax_dev,
 
 /*
  * Use the 'no check' versions of copy_from_iter_flushcache() and
- * copy_to_iter_mcsafe() to bypass HARDENED_USERCOPY overhead. Bounds
+ * copy_mc_to_iter() to bypass HARDENED_USERCOPY overhead. Bounds
  * checking, both file offset and device offset, is handled by
  * dax_iomap_actor()
  */
@@ -570,7 +570,7 @@ static size_t genz_blk_copy_from_iter(struct dax_device *dax_dev, pgoff_t pgoff,
 static size_t genz_blk_copy_to_iter(struct dax_device *dax_dev, pgoff_t pgoff,
 		void *addr, size_t bytes, struct iov_iter *i)
 {
-	return _copy_to_iter_mcsafe(addr, bytes, i);
+	return _copy_mc_to_iter(addr, bytes, i);
 }
 
 static const struct dax_operations genz_blk_dax_ops = {
@@ -676,7 +676,8 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		/* fsdax setup */
 		zbd->pgmap.ref = &zbd->queue->q_usage_counter;
 		zbd->pgmap.type = MEMORY_DEVICE_FS_DAX;
-		zbd->pgmap.res = zbd->rmr_info.zres.res;
+		zbd->pgmap.range.start = zbd->rmr_info.zres.res.start;
+		zbd->pgmap.range.end = zbd->rmr_info.zres.res.end;
 		zbd->pgmap.ops = &genz_blk_fsdax_pagemap_ops;
 		/* Revisit: support struct pages on device with pgmap->altmap */
 		addr = devm_memremap_pages(dev, &zbd->pgmap);
@@ -819,7 +820,7 @@ out:
 	return bbr;
 
 free:
-	kzfree(bbr);
+	kfree(bbr);
 	if (err < 0)
 		bbr = ERR_PTR(err);
 unlock:
