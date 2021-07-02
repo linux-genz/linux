@@ -1463,9 +1463,6 @@ static const struct devtable devtable[] = {
 	{"tee", SIZE_tee_client_device_id, do_tee_entry},
 	{"wmi", SIZE_wmi_device_id, do_wmi_entry},
 	{"mhi", SIZE_mhi_device_id, do_mhi_entry},
-	{"auxiliary", SIZE_auxiliary_device_id, do_auxiliary_entry},
-	{"ssam", SIZE_ssam_device_id, do_ssam_entry},
-	{"dfl", SIZE_dfl_device_id, do_dfl_entry},
 	{"genz", SIZE_genz_device_id, do_genz_entry},
 };
 
