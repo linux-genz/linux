@@ -66,7 +66,7 @@ static int __dax_genz_setup_pfn(struct genz_dev *zdev, struct genz_resource *zre
 				phys_addr_t offset, unsigned long npfns,
 				struct dev_pagemap *pgmap)
 {
-	struct resource *res = &pgmap->res;
+	struct range *rng = &pgmap->range;
 	struct vmem_altmap *altmap = &pgmap->altmap;
 	resource_size_t base = zres->res.start;
 	resource_size_t end = zres->res.end - end_trunc;
@@ -77,8 +77,8 @@ static int __dax_genz_setup_pfn(struct genz_dev *zdev, struct genz_resource *zre
 	};
 
 	/* Revisit: add support for PFN_MODEs */
-	memcpy(res, &zres->res, sizeof(*res));
-	res->end -= end_trunc;
+	rng->start = base;
+	rng->end = end;
 	memcpy(altmap, &__altmap, sizeof(*altmap));
 	altmap->free = PHYS_PFN(offset);
 	altmap->alloc = 0;
@@ -90,11 +90,12 @@ struct dev_dax *__dax_genz_probe(struct genz_dev *zdev,
 				 struct genz_resource *zres,
 				 enum dev_dax_subsys subsys)
 {
-	struct resource res;
+	struct range range;
 	int ret, id, region_id, target_node;
 	resource_size_t offset;
 	unsigned long align, npfns;
 	struct dev_dax *dev_dax;
+	struct dev_dax_data dax_data;
 	struct dax_region *dax_region;
 	struct dev_pagemap pgmap = { };
 	struct genz_rmr_info *rmri;
@@ -141,19 +142,26 @@ struct dev_dax *__dax_genz_probe(struct genz_dev *zdev,
 		return ERR_PTR(-EBUSY);
 	}
 #endif
-	/* adjust the dax_region resource to the start of data */
-	memcpy(&res, &pgmap.res, sizeof(res));
-	res.start += offset;
-	dax_region = alloc_dax_region(dev, region_id, &res,
+	/* adjust the dax_region range to the start of data */
+	range = pgmap.range;
+	range.start += offset;
+	dax_region = alloc_dax_region(dev, region_id, &range,
 				      target_node, align, PFN_DEV|PFN_MAP);
 	if (!dax_region)
 		return ERR_PTR(-ENOMEM);
 	/* Revisit: does this work? */
-	ret = numa_add_memblk(target_node, pgmap.res.start, pgmap.res.end+1);
+	ret = numa_add_memblk(target_node, pgmap.range.start, pgmap.range.end+1);
 	if (ret < 0)
 		return ERR_PTR(ret);
 
-	dev_dax = __devm_create_dev_dax(dax_region, id, &pgmap, subsys);
+	dax_data = (struct dev_dax_data) {
+		.dax_region = dax_region,
+		.id = id,
+		.pgmap = &pgmap,
+		.subsys = subsys,
+		.size = range_len(&range),
+	};
+	dev_dax = devm_create_dev_dax(&dax_data);
 
 	/* child dev_dax instances now own the lifetime of the dax_region */
 	dax_region_put(dax_region);
