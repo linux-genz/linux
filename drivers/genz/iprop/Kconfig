@@ -6,7 +6,7 @@
 menuconfig GENZ_ORTHUS
 	tristate "Gen-Z IntelliProp Orthus Bridge support"
 	depends on GENZ
-	---help---
+	help
 	  This option enables the Gen-Z IntelliProp Orthus bridge driver.
 
 	  Say Y here to enable support for this driver.
