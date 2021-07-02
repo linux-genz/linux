@@ -316,7 +316,7 @@ static int genz_umem_pin(struct genz_umem *umem)
 
 	vaddr = umem->vaddr;
 	npages = genz_umem_num_pages(umem);
-	down_write(&current->mm->mmap_sem);
+	mmap_write_lock(current->mm);
 	locked     = atomic64_add_return(npages, &current->mm->pinned_vm);
 	lock_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
 
@@ -385,7 +385,7 @@ static int genz_umem_pin(struct genz_umem *umem)
 	ret = 0;
 
  out:
-	up_write(&current->mm->mmap_sem);
+	mmap_write_unlock(current->mm);
 	if (vma_list)
 		free_page((unsigned long)vma_list);
 	free_page((unsigned long)page_list);
