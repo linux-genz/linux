@@ -580,12 +580,12 @@ static const struct dax_operations genz_blk_dax_ops = {
 	.copy_to_iter   = genz_blk_copy_to_iter,
 };
 
-/* Revisit: these pagemap funcs were copied from pmem - are they right? */
+#ifdef REVISIT
+/* Revisit: these pagemap funcs were mostly copied from pmem - are they right? */
 static void genz_blk_pagemap_cleanup(struct dev_pagemap *pgmap)
 {
-	struct request_queue *q =
-		container_of(pgmap->ref, struct request_queue, q_usage_counter);
-	struct genz_bdev *const zbd = q->queuedata;
+	struct genz_bdev *const zbd = container_of(pgmap, struct genz_bdev, pgmap);
+	struct request_queue *q = zbd->queue;
 	struct device *dev = disk_to_dev(zbd->gd);
 
 	dev_dbg(dev, "q=%px\n", q);
@@ -594,14 +594,14 @@ static void genz_blk_pagemap_cleanup(struct dev_pagemap *pgmap)
 
 static void genz_blk_pagemap_kill(struct dev_pagemap *pgmap)
 {
-	struct request_queue *q =
-		container_of(pgmap->ref, struct request_queue, q_usage_counter);
-	struct genz_bdev *const zbd = q->queuedata;
+	struct genz_bdev *const zbd = container_of(pgmap, struct genz_bdev, pgmap);
+	struct request_queue *q = zbd->queue;
 	struct device *dev = disk_to_dev(zbd->gd);
 
 	dev_dbg(dev, "q=%px\n", q);
 	blk_freeze_queue_start(q);
 }
+#endif /* REVISIT */
 
 static void genz_blk_pagemap_page_free(struct page *page)
 {
@@ -610,8 +610,10 @@ static void genz_blk_pagemap_page_free(struct page *page)
 
 static const struct dev_pagemap_ops genz_blk_fsdax_pagemap_ops = {
 	.page_free		= genz_blk_pagemap_page_free,
+#ifdef REVISIT
 	.kill			= genz_blk_pagemap_kill,
 	.cleanup		= genz_blk_pagemap_cleanup,
+#endif /* REVISIT */
 };
 
 static int genz_blk_bdev_start_size(struct genz_resource *zres,
@@ -664,7 +666,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		gd->disk_name, zbd->size/KERNEL_SECTOR_SIZE);
 	if (blk_queue_dax(zbd->queue)) {
 		dev = disk_to_dev(zbd->gd);
-		dev_dbg(&zdev->dev, "Enable DAX\n");
+		dev_dbg(&zdev->dev, "Enable DAX on %s\n", gd->disk_name);
 		dax_dev = alloc_dax(zbd, gd->disk_name,
 				    &genz_blk_dax_ops, dax_flags);
 		if (!dax_dev) {
@@ -674,7 +676,8 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		}
 		zbd->dax_dev = dax_dev;
 		/* fsdax setup */
-		zbd->pgmap.ref = &zbd->queue->q_usage_counter;
+		// Revisit: this causes multi-genz-blk hang
+		//zbd->pgmap.ref = &zbd->queue->q_usage_counter;
 		zbd->pgmap.type = MEMORY_DEVICE_FS_DAX;
 		zbd->pgmap.range.start = zbd->rmr_info.zres.res.start;
 		zbd->pgmap.range.end = zbd->rmr_info.zres.res.end;
@@ -714,6 +717,7 @@ static int genz_blk_construct_bdev(struct genz_bdev *zbd,
 		return err;
 	}
 	zbd->queue->queuedata = zbd;
+	blk_queue_physical_block_size(zbd->queue, PAGE_SIZE);
 	blk_queue_logical_block_size(zbd->queue, GENZ_BLOCK_SIZE);
 	blk_queue_max_segments(zbd->queue, GENZ_BLK_MAX_SG);
 	blk_queue_max_hw_sectors(zbd->queue,
