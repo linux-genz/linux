@@ -82,6 +82,7 @@ static int __dax_genz_setup_pfn(struct genz_dev *zdev, struct genz_resource *zre
 	memcpy(altmap, &__altmap, sizeof(*altmap));
 	altmap->free = PHYS_PFN(offset);
 	altmap->alloc = 0;
+	pgmap->nr_range = 1;
 	pgmap->flags |= PGMAP_ALTMAP_VALID;
 	return 0;
 }
@@ -145,8 +146,8 @@ struct dev_dax *__dax_genz_probe(struct genz_dev *zdev,
 	/* adjust the dax_region range to the start of data */
 	range = pgmap.range;
 	range.start += offset;
-	dax_region = alloc_dax_region(dev, region_id, &range,
-				      target_node, align, PFN_DEV|PFN_MAP);
+	dax_region = alloc_dax_region(dev, region_id, &range, target_node,
+				      align, IORESOURCE_DAX_STATIC);
 	if (!dax_region)
 		return ERR_PTR(-ENOMEM);
 	/* Revisit: does this work? */

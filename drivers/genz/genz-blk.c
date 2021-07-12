@@ -573,11 +573,44 @@ static size_t genz_blk_copy_to_iter(struct dax_device *dax_dev, pgoff_t pgoff,
 	return _copy_mc_to_iter(addr, bytes, i);
 }
 
+static int genz_blk_zero_page_range(struct dax_device *dax_dev, pgoff_t pgoff,
+                                    size_t nr_pages)
+{
+	struct genz_bdev        *zbd = dax_get_private(dax_dev);
+	struct genz_rmr_info    *rmri = &zbd->rmr_info;
+	/* Revisit: simplify this long chain of pointers somehow */
+	struct genz_blk_state   *bstate = zbd->bstate;
+	struct genz_dev         *zdev = bstate->zdev;
+	struct genz_bridge_dev  *zbdev = zdev->zbdev;
+	void                    *zero_page;
+	loff_t                  offset = PFN_PHYS(pgoff);
+	int                     ret = 0;
+
+	/* Revisit: use media component SE Fast Zero Range Media, if avail */
+	if (zbdev->br_info.load_store && nr_pages == 1) {
+		memset(rmri->cpu_addr + offset, 0, nr_pages << PAGE_SHIFT);
+		dax_flush(dax_dev, rmri->cpu_addr + offset,
+			  nr_pages << PAGE_SHIFT);
+	} else {
+		zero_page = page_address(ZERO_PAGE(0));
+		while (nr_pages--) {
+			ret = genz_data_write(zbdev, offset, PAGE_SIZE,
+					      zero_page, rmri, GENZ_DATA_FLUSH);
+			/* Revisit: handle poison & other errors */
+			if (ret < 0)
+				break;
+			offset += PAGE_SIZE;
+		}
+	}
+        return ret;
+}
+
 static const struct dax_operations genz_blk_dax_ops = {
-	.direct_access  = genz_blk_dax_direct_access,
-	.dax_supported  = genz_blk_dax_supported,
-	.copy_from_iter = genz_blk_copy_from_iter,
-	.copy_to_iter   = genz_blk_copy_to_iter,
+	.direct_access   = genz_blk_dax_direct_access,
+	.dax_supported   = genz_blk_dax_supported,
+	.copy_from_iter  = genz_blk_copy_from_iter,
+	.copy_to_iter    = genz_blk_copy_to_iter,
+	.zero_page_range = genz_blk_zero_page_range,
 };
 
 #ifdef REVISIT
@@ -603,13 +636,7 @@ static void genz_blk_pagemap_kill(struct dev_pagemap *pgmap)
 }
 #endif /* REVISIT */
 
-static void genz_blk_pagemap_page_free(struct page *page)
-{
-	wake_up_var(&page->_refcount);
-}
-
 static const struct dev_pagemap_ops genz_blk_fsdax_pagemap_ops = {
-	.page_free		= genz_blk_pagemap_page_free,
 #ifdef REVISIT
 	.kill			= genz_blk_pagemap_kill,
 	.cleanup		= genz_blk_pagemap_cleanup,
@@ -681,6 +708,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		zbd->pgmap.type = MEMORY_DEVICE_FS_DAX;
 		zbd->pgmap.range.start = zbd->rmr_info.zres.res.start;
 		zbd->pgmap.range.end = zbd->rmr_info.zres.res.end;
+		zbd->pgmap.nr_range = 1;
 		zbd->pgmap.ops = &genz_blk_fsdax_pagemap_ops;
 		/* Revisit: support struct pages on device with pgmap->altmap */
 		addr = devm_memremap_pages(dev, &zbd->pgmap);
