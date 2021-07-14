@@ -101,45 +101,6 @@ int genz_create_mgr_uuid_file(struct device *dev)
 	return ret;
 }
 
-/*
- * is_head_of_chain - determines if a GENZ_CONTROL_POINTER_STRUCTURE
- * or GENZ_CONTROL_POINTER_TABLE points to a type that has a chain.
- * If this is the case, then
- * there is a sysfs directory created with that structure name and in
- * that directory, a set of directories for each element of the
- * chain starting at 0.
- */
-static int is_head_of_chain(const struct genz_control_structure_ptr *csp)
-{
-	enum genz_control_structure_type target_type;
-	bool is_table;
-
-	/*
-	 * If we are in the midst of following a chain, the ptr_type
-	 * will be GENZ_CONTROL_POINTER_CHAINED. Only the potental
-	 * head of a chain has GENZ_CONTROL_POINTER_STRUCTURE or
-	 * GENZ_CONTROL_POINTER_TABLE.
-	 */
-	if (csp->ptr_type == GENZ_CONTROL_POINTER_STRUCTURE)
-		is_table = false;
-	else if (csp->ptr_type == GENZ_CONTROL_POINTER_TABLE)
-		is_table = true;
-	else
-		return 0;
-
-	/* Get the structure type that we need to see if chained. */
-	target_type = (is_table) ? csp->struct_type-GENZ_TABLE_ENUM_START :
-		csp->struct_type;
-
-	/*
-	 * The table indicates if this type is chained in the static
-	 * genz_control_ptr_info structure. If it is marked chained then
-	 * this must be the head of the chain.
-	 */
-	return (is_table) ? genz_table_type_to_ptrs[target_type].chained :
-		genz_struct_type_to_ptrs[target_type].chained;
-}
-
 static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 	struct genz_rmr_info *rmri,
 	struct genz_control_info *parent,
@@ -1246,6 +1207,58 @@ static int read_and_validate_header(struct genz_bridge_dev *zbdev,
 	return 0;
 }
 
+/*
+ * is_head_of_chain - determines if a GENZ_CONTROL_POINTER_STRUCTURE
+ * or GENZ_CONTROL_POINTER_TABLE points to a type that has a chain.
+ * If this is the case, then
+ * there is a sysfs directory created with that structure name and in
+ * that directory, a set of directories for each element of the
+ * chain starting at 0.
+ */
+static int is_head_of_chain(struct genz_bridge_dev *zbdev, struct genz_rmr_info *rmri,
+			    off_t start, const struct genz_control_structure_ptr *csp)
+{
+	enum genz_control_structure_type target_type;
+	struct genz_control_structure_header hdr;
+	off_t hdr_offset;
+	bool is_table;
+	int ret;
+
+	/*
+	 * If we are in the midst of following a chain, the ptr_type
+	 * will be GENZ_CONTROL_POINTER_CHAINED. Only the potental
+	 * head of a chain has GENZ_CONTROL_POINTER_STRUCTURE or
+	 * GENZ_CONTROL_POINTER_TABLE.
+	 */
+	if (csp->ptr_type == GENZ_CONTROL_POINTER_STRUCTURE)
+		is_table = false;
+	else if (csp->ptr_type == GENZ_CONTROL_POINTER_TABLE)
+		is_table = true;
+	else
+		return 0;
+
+	/* Get the structure type that we need to see if chained. */
+	if (csp->struct_type == GENZ_GENERIC_STRUCTURE) {
+		/* must follow pointer to get type from structure header */
+		ret = read_and_validate_header(zbdev, rmri, start, csp,
+					       &hdr, &hdr_offset);
+		if (ret)
+			return 0;
+		target_type = hdr.type;
+	} else {
+		target_type = (is_table) ? csp->struct_type-GENZ_TABLE_ENUM_START :
+			csp->struct_type;
+	}
+
+	/*
+	 * The table indicates if this type is chained in the static
+	 * genz_control_ptr_info structure. If it is marked chained then
+	 * this must be the head of the chain.
+	 */
+	return (is_table) ? genz_table_type_to_ptrs[target_type].chained :
+		genz_struct_type_to_ptrs[target_type].chained;
+}
+
 static struct genz_control_info *alloc_control_info(
 	struct genz_bridge_dev *zbdev,
 	struct genz_control_structure_header *hdr,
@@ -1878,7 +1891,7 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 				 csp_entry->ptr_name);
 			break;
 		case GENZ_CONTROL_POINTER_STRUCTURE:
-			is_chain = is_head_of_chain(csp_entry);
+			is_chain = is_head_of_chain(zbdev, rmri, parent->start, csp_entry);
 			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_STRUCTURE, is_chain=%d\n",
 				 csp_entry->ptr_name, is_chain);
 			if (is_chain)
@@ -1902,7 +1915,7 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 		case GENZ_CONTROL_POINTER_TABLE:
 			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_TABLE\n",
 				 csp_entry->ptr_name);
-			if (is_head_of_chain(csp_entry)) {
+			if (is_head_of_chain(zbdev, rmri, parent->start, csp_entry)) {
 				pr_debug("is_head_of_chain is true\n");
 				ret = traverse_chained_control_pointers(
 					zbdev, rmri, parent, &sibling, dir,
