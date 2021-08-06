@@ -39,14 +39,14 @@
  *
  * XML file meta from which this file was generated:
  *     Version   : N/A
- *     Date      : 2020-03-09 15:27:23.558578
+ *     Date      : 2021-07-29 11:05:03.950507
  *     ctl_file  : gen-z-spec-control.vsdx
  *     pkt_file  : gen-z-spec-protocol.vsdx
- *     word_file : gen-z-core-specification-v1.1.docx
+ *     word_file : gen-z-core-specification-v1.1b.docx
  *
  * Generator Script Meta:
- *     Version      : v0.8
- *     Generated On : 2020-05-13 13:10:39.213746
+ *     Version      : v0.9
+ *     Generated On : 2021-08-03 16:42:58.445504
  *
  * **************************************************************
  *
@@ -207,22 +207,24 @@ struct genz_control_structure_ptr{
 union genz_c_status {
     uint64_t val;
     struct {
+        uint64_t c_state                                    : 3;
         uint64_t unsolicited_event_ue_packet_status         : 1;
         uint64_t non_fatal_internal_error_detected          : 1;
         uint64_t fatal_internal_error_detected              : 1;
         uint64_t non_transient_protocol_error_detected      : 1;
         uint64_t bist_failure_detected                      : 1;
+        uint64_t component_thermal_status                   : 2;
         uint64_t component_containment_detected             : 1;
         uint64_t emergency_power_reduction_detected         : 1;
         uint64_t power_off_transition_completed             : 1;
         uint64_t component_thermal_throttled                : 1;
         uint64_t component_thermal_throttled_restoration    : 1;
         uint64_t cannot_execute_persistent_flush            : 1;
+        uint64_t hwinit_valid                               : 1;
         uint64_t refresh_component_configuration_completed  : 1;
         uint64_t operational_error_detected                 : 1;
         uint64_t maximum_outstanding_control_no_op_detected : 1;
-        uint64_t rsvdz                                      : 44;
-        uint64_t padding                                    : 6;
+        uint64_t rsvdz0                                     : 44;
     };
 };
 
@@ -230,15 +232,24 @@ union genz_c_status {
 union genz_c_control {
     uint64_t val;
     struct {
-        uint64_t component_enable                                  : 1;
-        uint64_t upper_thermal_limit_performance_throttle_enable   : 1;
-        uint64_t caution_thermal_limit_performance_throttle_enable : 1;
-        uint64_t transmit_subnet_local_control_no_op               : 1;
-        uint64_t transmit_global_subnet_control_no_op              : 1;
-        uint64_t transmit_subnet_local_control_aead                : 1;
-        uint64_t transmit_global_subnet_control_aead               : 1;
-        uint64_t rsvdp                                             : 45;
-        uint64_t padding                                           : 12;
+        uint64_t component_enable                                           : 1;
+        uint64_t initiate_component_reset                                   : 3;
+        uint64_t halt_uert : 1; //FIXME: name too long.
+        uint64_t transition_c_up                                            : 1;
+        uint64_t transition_c_lp                                            : 1;
+        uint64_t transition_c_dlp                                           : 1;
+        uint64_t trigger_emergency_power_reduction                          : 1;
+        uint64_t exit_emergency_power_reduction                             : 1;
+        uint64_t transition_component_power_off                             : 1;
+        uint64_t upper_thermal_limit_performance_throttle_enable            : 1;
+        uint64_t caution_thermal_limit_performance_throttle_enable          : 1;
+        uint64_t lpd_responder_zmmu_bypass_control                          : 1;
+        uint64_t refresh_component_configuration_control                    : 1;
+        uint64_t transmit_subnet_local_control_no_op                        : 1;
+        uint64_t transmit_global_subnet_control_no_op                       : 1;
+        uint64_t transmit_subnet_local_control_aead                         : 1;
+        uint64_t transmit_global_subnet_control_aead                        : 1;
+        uint64_t rsvdp0                                                     : 45;
     };
 };
 
@@ -251,7 +262,7 @@ union genz_c_state_transition_latency {
         uint32_t time_from_c_lp_to_c_up  : 4;
         uint32_t time_from_c_dlp_to_c_up : 4;
         uint32_t time_from_c_lp_to_c_dlp : 4;
-        uint32_t rsvdz                   : 12;
+        uint32_t rsvdz0                  : 12;
     };
 };
 
@@ -261,7 +272,7 @@ union genz_c_idle_times {
     struct {
         uint16_t idle_time_before_transitioning_from_c_up_to_c_lp  : 4;
         uint16_t idle_time_before_transitioning_from_c_lp_to_c_dlp : 4;
-        uint16_t rsvdz                                             : 8;
+        uint16_t rsvdz0                                            : 8;
     };
 };
 
@@ -273,7 +284,7 @@ union genz_cv {
         uint8_t determines_if_cid_1_is_configured       : 1;
         uint8_t determines_if_cid_2_is_configured       : 1;
         uint8_t determines_if_cid_3_is_configured       : 1;
-        uint8_t rsvdp                                   : 3;
+        uint8_t rsvdp0                                  : 3;
         uint8_t determines_if_sid_0_has_been_configured : 1;
     };
 };
@@ -282,42 +293,54 @@ union genz_cv {
 union genz_component_cap_1 {
     uint64_t val;
     struct {
-        uint64_t no_snoop_support                                                             : 1;
-        uint64_t content_component_reset_support_see_component_reset                          : 1; //FIXME: name too long.
-        uint64_t built_in_self_test_bist_support                                              : 1;
-        uint64_t component_containment_support_see_component_error_and_signal_event_structure : 1; //FIXME: name too long.
-        uint64_t next_header_support                                                          : 1;
-        uint64_t rsvdz                                                                        : 1;
-        uint64_t precision_time_support                                                       : 1;
-        uint64_t in_band_management_support                                                   : 1;
-        uint64_t out_of_band_management_support                                               : 1;
-        uint64_t primary_manager_support                                                      : 1;
-        uint64_t fabric_manager_support                                                       : 1;
-        uint64_t power_manager_support                                                        : 1;
-        uint64_t automatic_c_state_support                                                    : 1;
-        uint64_t vendor_defined_power_management_support                                      : 1;
-        uint64_t emergency_power_reduction_support                                            : 1;
-        uint64_t emergency_power_reduction_relay_support                                      : 1;
-        uint64_t power_disable_support                                                        : 1;
-        uint64_t mctp_over_gen_z_support                                                      : 1;
-        uint64_t multi_subnet_support                                                         : 1;
-        uint64_t reserved                                                                     : 2;
-        uint64_t nirt_support                                                                 : 1;
-        uint64_t emergency_power_reduction_signal_support                                     : 1;
-        uint64_t power_disable_signal_support                                                 : 1;
-        uint64_t responder_zmmu_interrupt_translation_support                                 : 1;
-        uint64_t shared_emergency_signal_support                                              : 1;
-        uint64_t management_directed_c_lp_support                                             : 1;
-        uint64_t management_directed_c_dlp_support                                            : 1;
-        uint64_t fps_support                                                                  : 1;
-        uint64_t pco_fps_support                                                              : 1;
-        uint64_t component_authentication_support                                             : 1;
-        uint64_t management_services_support                                                  : 1;
-        uint64_t p2p_next_header_support                                                      : 1;
-        uint64_t p2p_aead_support                                                             : 1;
-        uint64_t explicit_aead_support                                                        : 1;
-        uint64_t component_loopback_support                                                   : 1;
-        uint64_t padding                                                                      : 28;
+        uint64_t max_packet_payload                               : 3;
+        uint64_t no_snoop_support                                 : 1;
+        uint64_t content_component_reset_support                  : 1;
+        uint64_t built_in_self_test_bist_support                  : 1;
+        uint64_t component_containment_support                    : 1;
+        uint64_t address_field_interpretation                     : 1;
+        uint64_t next_header_support                              : 1;
+        uint64_t rsvdz0                                           : 1;
+        uint64_t precision_time_support                           : 1;
+        uint64_t addressable_resource_classification              : 3;
+        uint64_t cached_component_control_space_structure_support : 1;
+        uint64_t in_band_management_support                       : 1;
+        uint64_t out_of_band_management_support                   : 1;
+        uint64_t primary_manager_support                          : 1;
+        uint64_t fabric_manager_support                           : 1;
+        uint64_t power_manager_support                            : 1;
+        uint64_t automatic_c_state_support                        : 1;
+        uint64_t vendor_defined_power_management_support          : 1;
+        uint64_t emergency_power_reduction_support                : 1;
+        uint64_t configuration_post_emergency_power_reduction     : 1;
+        uint64_t emergency_power_reduction_relay_support          : 1;
+        uint64_t c_state_power_control_support                    : 1;
+        uint64_t power_disable_support                            : 1;
+        uint64_t power_scale_pwrs                                 : 3;
+        uint64_t auxiliary_power_scale_apwrs                      : 3;
+        uint64_t mctp_over_gen_z_support                          : 1;
+        uint64_t core_latency_scale                               : 2;
+        uint64_t multi_subnet_support                             : 1;
+        uint64_t reserved1                                        : 2;
+        uint64_t nirt_support                                     : 1;
+        uint64_t reserved2                                        : 1;
+        uint64_t emergency_power_reduction_signal_support         : 1;
+        uint64_t control_timer_unit                               : 2;
+        uint64_t timer_unit                                       : 4;
+        uint64_t power_disable_signal_support                     : 1;
+        uint64_t responder_zmmu_interrupt_translation_support     : 1;
+        uint64_t shared_emergency_signal_support                  : 1;
+        uint64_t management_directed_c_lp_support                 : 1;
+        uint64_t management_directed_c_dlp_support                : 1;
+        uint64_t fps_support                                      : 1;
+        uint64_t pco_fps_support                                  : 1;
+        uint64_t component_authentication_support                 : 1;
+        uint64_t management_services_support                      : 1;
+        uint64_t max_cid                                          : 3;
+        uint64_t p2p_next_header_support                          : 1;
+        uint64_t p2p_aead_support                                 : 1;
+        uint64_t explicit_aead_support                            : 1;
+        uint64_t component_loopback_support                       : 1;
     };
 };
 
@@ -325,28 +348,47 @@ union genz_component_cap_1 {
 union genz_component_cap_1_control {
     uint64_t val;
     struct {
-        uint64_t primary_manager_transition_enable      : 1;
-        uint64_t fabric_manager_transition_enable       : 1;
-        uint64_t next_header_enable                     : 1;
-        uint64_t rsvdp                                  : 1;
-        uint64_t next_header_precision_time_enable      : 1;
-        uint64_t automatic_c_state_enable               : 1;
-        uint64_t vendor_defined_power_management_enable : 1;
-        uint64_t emergency_power_reduction_enable       : 1;
-        uint64_t notify_peer_c_state_change_enable      : 1;
-        uint64_t mctp_over_gen_z_enable                 : 1;
-        uint64_t meta_read_write_header_enable          : 1;
-        uint64_t mgr_uuid_enable                        : 1;
-        uint64_t component_loopback_enable              : 1;
-        uint64_t software_defined_management_bit_0      : 1;
-        uint64_t software_defined_management_bit_1      : 1;
-        uint64_t software_defined_management_bit_2      : 1;
-        uint64_t software_defined_management_bit_3      : 1;
-        uint64_t software_defined_management_bit_4      : 1;
-        uint64_t software_defined_management_bit_5      : 1;
-        uint64_t software_defined_management_bit_6      : 1;
-        uint64_t software_defined_management_bit_7      : 1;
-        uint64_t padding                                : 43;
+        uint64_t max_packet_payload                         : 3;
+        uint64_t no_snoop_control                           : 1;
+        uint64_t built_in_self_test_bist_control            : 1;
+        uint64_t manager_type                               : 1;
+        uint64_t primary_manager_role                       : 1;
+        uint64_t primary_fabric_manager_role                : 1;
+        uint64_t secondary_fabric_manager_role              : 1;
+        uint64_t power_manager_enable                       : 2;
+        uint64_t primary_manager_transition_enable          : 1;
+        uint64_t fabric_manager_transition_enable           : 1;
+        uint64_t next_header_enable                         : 1;
+        uint64_t rsvdp0                                     : 1;
+        uint64_t next_header_precision_time_enable          : 1;
+        uint64_t in_band_management_disable                 : 1;
+        uint64_t out_of_band_management_disable             : 1;
+        uint64_t automatic_c_state_enable                   : 1;
+        uint64_t vendor_defined_power_management_enable     : 1;
+        uint64_t max_power_control                          : 3;
+        uint64_t emergency_power_reduction_enable           : 1;
+        uint64_t notify_peer_c_state_change_enable          : 1;
+        uint64_t rsvdp1                                     : 1;
+        uint64_t c_state_power_control_enable               : 1;
+        uint64_t lowest_automatic_c_state_level             : 3;
+        uint64_t initiate_all_statistics_snapshot           : 1;
+        uint64_t initiate_all_interface_statistics_snapshot : 1;
+        uint64_t rsvdp2                                     : 1;
+        uint64_t rsvdp3                                     : 1;
+        uint64_t mctp_over_gen_z_enable                     : 1;
+        uint64_t meta_read_write_header_enable              : 1;
+        uint64_t host_manager_mgr_uuid_enable               : 2;
+        uint64_t mgr_uuid_enable                            : 1;
+        uint64_t component_loopback_enable                  : 1;
+        uint64_t rsvdp4                                     : 16;
+        uint64_t software_defined_management_bit_0          : 1;
+        uint64_t software_defined_management_bit_1          : 1;
+        uint64_t software_defined_management_bit_2          : 1;
+        uint64_t software_defined_management_bit_3          : 1;
+        uint64_t software_defined_management_bit_4          : 1;
+        uint64_t software_defined_management_bit_5          : 1;
+        uint64_t software_defined_management_bit_6          : 1;
+        uint64_t software_defined_management_bit_7          : 1;
     };
 };
 
@@ -354,28 +396,33 @@ union genz_component_cap_1_control {
 union genz_component_cap_2 {
     uint64_t val;
     struct {
+        uint64_t r_key_support                                        : 2;
         uint64_t responder_memory_interleave_support                  : 1;
         uint64_t requester_memory_interleave_support                  : 1;
-        uint64_t sod_support                                          : 1;
+        uint64_t reserved0                                            : 1;
         uint64_t write_msg_embedded_read_support                      : 1;
+        uint64_t poison_granularity_support                           : 4;
         uint64_t host_lpd_field_type_1_and_type_2_support             : 1;
         uint64_t host_lpd_field_type_0_support                        : 1;
+        uint64_t performance_marker_support                           : 3;
         uint64_t max_perf_records                                     : 5;
+        uint64_t meta_read_write_support                              : 3;
         uint64_t host_lpd_field_type_3_support                        : 1;
         uint64_t host_lpd_field_type_4_support                        : 1;
         uint64_t t10_dif_support                                      : 1;
         uint64_t t10_pi_support                                       : 1;
         uint64_t di_pi_block_size_support                             : 8;
-        uint64_t reserved                                             : 1;
+        uint64_t reserved1                                            : 1;
         uint64_t write_msg_receive_tag_filter_support                 : 1;
         uint64_t write_msg_receive_tag_posting_support                : 1;
         uint64_t write_msg_and_enqueue_dequeue_shared_queue_supported : 1; //FIXME: name too long.
+        uint64_t reserved2                                            : 2;
         uint64_t persistent_flush_page_support                        : 1;
         uint64_t rsp_lpd_field_type_5_support                         : 1;
         uint64_t req_lpd_field_type_5_support                         : 1;
         uint64_t enqueue_embedded_read_support                        : 1;
         uint64_t no_op_core_initiation_support                        : 1;
-        uint64_t padding                                              : 32;
+        uint64_t reserved3                                            : 18;
     };
 };
 
@@ -383,7 +430,7 @@ union genz_component_cap_2 {
 union genz_component_cap_2_control {
     uint64_t val;
     struct {
-        uint64_t rsvdp                                   : 1;
+        uint64_t rsvdp0                                  : 1;
         uint64_t pmcid_valid                             : 1;
         uint64_t pfmcid_valid                            : 1;
         uint64_t sfmcid_valid                            : 1;
@@ -396,11 +443,14 @@ union genz_component_cap_2_control {
         uint64_t host_lpd_field_type_3_enable            : 1;
         uint64_t host_lpd_field_type_0_enable            : 1;
         uint64_t host_lpd_field_type_4_enable            : 1;
+        uint64_t rsvdp1                                  : 2;
+        uint64_t di_pi_block_size                        : 3;
         uint64_t bufreq_t10_dif_pi_enable                : 1;
+        uint64_t rsvdp2                                  : 3;
         uint64_t rsp_lpd_field_type_5_enable             : 1;
         uint64_t req_lpd_field_type_5_enable             : 1;
         uint64_t enqueue_embedded_read_enable            : 1;
-        uint64_t padding                                 : 47;
+        uint64_t rsvdp3                                  : 39;
     };
 };
 
@@ -408,13 +458,13 @@ union genz_component_cap_2_control {
 union genz_component_cap_3 {
     uint64_t val;
     struct {
-        uint64_t reserved                     : 11;
+        uint64_t reserved0                    : 11;
         uint64_t max_supported_home_agents    : 4;
         uint64_t max_supported_caching_agents : 4;
         uint64_t dequeue_16_byte_size_support : 1;
         uint64_t dequeue_32_byte_size_support : 1;
         uint64_t dequeue_64_byte_size_support : 1;
-        uint64_t padding                      : 42;
+        uint64_t reserved1                    : 42;
     };
 };
 
@@ -422,10 +472,11 @@ union genz_component_cap_3 {
 union genz_component_cap_3_control {
     uint64_t val;
     struct {
-        uint64_t rsvdp                : 4;
+        uint64_t rsvdp0               : 4;
         uint64_t home_agent_enable    : 1;
         uint64_t caching_agent_enable : 1;
-        uint64_t padding              : 58;
+        uint64_t dequeue_size         : 3;
+        uint64_t rsvdp1               : 55;
     };
 };
 
@@ -433,7 +484,7 @@ union genz_component_cap_3_control {
 union genz_component_cap_4 {
     uint64_t val;
     struct {
-        uint64_t reserved;
+        uint64_t reserved0;
     };
 };
 
@@ -441,7 +492,7 @@ union genz_component_cap_4 {
 union genz_component_cap_4_control {
     uint64_t val;
     struct {
-        uint64_t rsvdp;
+        uint64_t rsvdp0;
     };
 };
 
@@ -460,8 +511,9 @@ union genz_thermal_attributes {
 union genz_opcode_set_cap_1_control {
     uint32_t val;
     struct {
-        uint32_t rsvdp   : 27;
-        uint32_t padding : 5;
+        uint32_t enabled_cache_line_size            : 3;
+        uint32_t interface_uniform_opclass_selected : 2;
+        uint32_t rsvdp0                             : 27;
     };
 };
 
@@ -469,19 +521,23 @@ union genz_opcode_set_cap_1_control {
 union genz_opcode_set_cap_1 {
     uint64_t val;
     struct {
-        uint64_t p2p_vendor_defined_support         : 1;
-        uint64_t vdo_opclass_1_support              : 1;
-        uint64_t vdo_opclass_2_support              : 1;
-        uint64_t vdo_opclass_3_support              : 1;
-        uint64_t vdo_opclass_4_support              : 1;
-        uint64_t vdo_opclass_5_support              : 1;
-        uint64_t vdo_opclass_6_support              : 1;
-        uint64_t vdo_opclass_7_support              : 1;
-        uint64_t vdo_opclass_8_support              : 1;
-        uint64_t per_destination_opcode_set_support : 1;
-        uint64_t ldm_1_read_response_meta_support   : 1;
-        uint64_t reserved                           : 43;
-        uint64_t padding                            : 10;
+        uint64_t p2p_vendor_defined_support                       : 1;
+        uint64_t vdo_opclass_1_support                            : 1;
+        uint64_t vdo_opclass_2_support                            : 1;
+        uint64_t vdo_opclass_3_support                            : 1;
+        uint64_t vdo_opclass_4_support                            : 1;
+        uint64_t vdo_opclass_5_support                            : 1;
+        uint64_t vdo_opclass_6_support                            : 1;
+        uint64_t vdo_opclass_7_support                            : 1;
+        uint64_t vdo_opclass_8_support                            : 1;
+        uint64_t atomic_data_endian_type                          : 2;
+        uint64_t protocol_version_associated_with_this_opcode_set : 4;
+        uint64_t interrupt_role_if_interrupts_are_supported       : 2;
+        uint64_t multi_opcode_set_support                         : 1;
+        uint64_t per_destination_opcode_set_support               : 1;
+        uint64_t ldm_1_read_response_meta_support                 : 1;
+        uint64_t uniform_opclass_support                          : 1;
+        uint64_t reserved0                                        : 43;
     };
 };
 
@@ -505,7 +561,7 @@ union genz_write_poison_sizes {
         uint8_t bytes_128  : 1;
         uint8_t bytes_256  : 1;
         uint8_t bytes_4096 : 1;
-        uint8_t reserved   : 3;
+        uint8_t reserved0  : 3;
     };
 };
 
@@ -520,7 +576,7 @@ union genz_arithmetic_atomic_sizes {
         uint8_t _128_bit_atomics : 1;
         uint8_t _256_bit_atomics : 1;
         uint8_t _512_bit_atomics : 1;
-        uint8_t reserved         : 1;
+        uint8_t reserved0        : 1;
     };
 };
 
@@ -535,7 +591,7 @@ union genz_logical_fetch_atomic_sizes {
         uint8_t _128_bit_atomics : 1;
         uint8_t _256_bit_atomics : 1;
         uint8_t _512_bit_atomics : 1;
-        uint8_t reserved         : 1;
+        uint8_t reserved0        : 1;
     };
 };
 
@@ -550,7 +606,7 @@ union genz_floating_atomic_sizes {
         uint8_t _128_bit_atomics : 1;
         uint8_t _256_bit_atomics : 1;
         uint8_t _512_bit_atomics : 1;
-        uint8_t reserved         : 1;
+        uint8_t reserved0        : 1;
     };
 };
 
@@ -565,7 +621,7 @@ union genz_swap_compare_atomic_sizes {
         uint8_t _128_bit_atomics : 1;
         uint8_t _256_bit_atomics : 1;
         uint8_t _512_bit_atomics : 1;
-        uint8_t reserved         : 1;
+        uint8_t reserved0        : 1;
     };
 };
 
@@ -576,7 +632,7 @@ union genz_supported_un {
         uint16_t core_64_write         : 1;
         uint16_t core_64_write_partial : 1;
         uint16_t core_64_interrupt     : 1;
-        uint16_t reserved              : 13;
+        uint16_t reserved0             : 13;
     };
 };
 
@@ -589,7 +645,7 @@ union genz_supported_fl {
         uint8_t vector_sum : 1;
         uint8_t load_min   : 1;
         uint8_t load_max   : 1;
-        uint8_t reserved   : 3;
+        uint8_t reserved0  : 3;
     };
 };
 
@@ -612,6 +668,7 @@ union genz_phy_power_enable {
 union genz_i_status {
     uint32_t val;
     struct {
+        uint32_t interface_state                          : 3;
         uint32_t full_interface_reset                     : 1;
         uint32_t warm_interface_reset                     : 1;
         uint32_t link_rfc_status                          : 1;
@@ -620,11 +677,13 @@ union genz_i_status {
         uint32_t exceeded_transient_error_threshold       : 1;
         uint32_t l_up_to_l_lp_transition_failed           : 1;
         uint32_t link_ctl_completed                       : 1;
+        uint32_t link_ctl_completion_status               : 5;
         uint32_t interface_containment_detected           : 1;
         uint32_t interface_component_containment_detected : 1;
         uint32_t peer_interface_incompatibility_detected  : 1;
-        uint32_t rsvdz                                    : 11;
-        uint32_t padding                                  : 10;
+        uint32_t peer_nonce_detected                      : 1;
+        uint32_t link_level_reliability_llr_status        : 1;
+        uint32_t rsvdz0                                   : 11;
     };
 };
 
@@ -632,16 +691,28 @@ union genz_i_status {
 union genz_i_control {
     uint32_t val;
     struct {
-        uint32_t interface_enable                       : 1;
-        uint32_t link_rfc_packet_disable                : 1;
-        uint32_t interface_access_key_validation_enable : 1;
-        uint32_t initiate_l_up_transition               : 1;
-        uint32_t p2p_next_header_enable                 : 1;
-        uint32_t initiate_peer_nonce_request            : 1;
-        uint32_t p2p_aead_enable                        : 1;
-        uint32_t p2p_aead_e_key_update_enable           : 1;
-        uint32_t rsvdp                                  : 7;
-        uint32_t padding                                : 17;
+        uint32_t interface_enable                            : 1;
+        uint32_t initiate_full_interface_reset               : 1;
+        uint32_t initiate_warm_interface_reset               : 1;
+        uint32_t link_rfc_packet_disable                     : 1;
+        uint32_t initiate_peer_c_reset                       : 1;
+        uint32_t initiate_peer_c_up_transition               : 1;
+        uint32_t initiate_peer_attribute_1_request           : 1;
+        uint32_t interface_access_key_validation_enable      : 1;
+        uint32_t initiate_l_up_transition                    : 1;
+        uint32_t auto_stop                                   : 1;
+        uint32_t initiate_path_time_request                  : 1;
+        uint32_t force_physical_layer_abstraction_retraining : 1;
+        uint32_t initiate_l_lp_transition                    : 3;
+        uint32_t initiate_l_up_lp_transition                 : 3;
+        uint32_t initiate_peer_set_attribute_request         : 1;
+        uint32_t ingress_dr_enable                           : 1;
+        uint32_t p2p_next_header_enable                      : 1;
+        uint32_t initiate_interface_containment              : 1;
+        uint32_t initiate_peer_nonce_request                 : 1;
+        uint32_t p2p_aead_enable                             : 1;
+        uint32_t p2p_aead_e_key_update_enable                : 1;
+        uint32_t rsvdp0                                      : 7;
     };
 };
 
@@ -649,30 +720,38 @@ union genz_i_control {
 union genz_i_cap_1 {
     uint32_t val;
     struct {
-        uint32_t interface_containment_support           : 1;
-        uint32_t interface_error_fields_support          : 1;
-        uint32_t interface_error_logging_support         : 1;
-        uint32_t transient_error_threshold_support       : 1;
-        uint32_t i_error_fault_injection_support         : 1;
-        uint32_t lprt_wildcard_packet_relay_support      : 1;
-        uint32_t mprt_wildcard_packet_relay_support      : 1;
-        uint32_t interface_loopback_support              : 1;
-        uint32_t rsvdz                                   : 1;
-        uint32_t p2p_64_support                          : 1;
-        uint32_t p2p_vendor_defined_support              : 1;
-        uint32_t explicit_opclass_support                : 1;
-        uint32_t dr_opclass_support                      : 1;
-        uint32_t interface_access_key_validation_support : 1;
-        uint32_t link_level_reliability_llr_support      : 1;
-        uint32_t tr_interface_support                    : 1;
-        uint32_t source_cid_packet_validation_support    : 1;
-        uint32_t source_sid_packet_validation_support    : 1;
-        uint32_t adaptive_fc_credit_support              : 1;
-        uint32_t pco_communications_support              : 1;
-        uint32_t peer_nonce_validation_support           : 1;
-        uint32_t interface_group_support                 : 1;
-        uint32_t point_to_point_backup_support           : 1;
-        uint32_t padding                                 : 9;
+        uint32_t interface_containment_support             : 1;
+        uint32_t interface_error_fields_support            : 1;
+        uint32_t interface_error_logging_support           : 1;
+        uint32_t transient_error_threshold_support         : 1;
+        uint32_t i_error_fault_injection_support           : 1;
+        uint32_t lprt_wildcard_packet_relay_support        : 1;
+        uint32_t mprt_wildcard_packet_relay_support        : 1;
+        uint32_t interface_loopback_support                : 1;
+        uint32_t implicit_flow_control_support             : 1;
+        uint32_t explicit_flow_control_support             : 1;
+        uint32_t rsvdz0                                    : 1;
+        uint32_t p2p_64_support                            : 1;
+        uint32_t p2p_vendor_defined_support                : 1;
+        uint32_t rsvdz1                                    : 1;
+        uint32_t explicit_opclass_support                  : 1;
+        uint32_t dr_opclass_support                        : 1;
+        uint32_t packet_relay_access_key_field_provisioned : 1;
+        uint32_t interface_access_key_validation_support   : 1;
+        uint32_t link_level_reliability_llr_support        : 1;
+        uint32_t tr_interface_support                      : 1;
+        uint32_t source_cid_packet_validation_support      : 1;
+        uint32_t source_sid_packet_validation_support      : 1;
+        uint32_t adaptive_fc_credit_support                : 1;
+        uint32_t pco_communications_support                : 1;
+        uint32_t rsvdz2                                    : 1;
+        uint32_t aggregated_interface_support              : 1;
+        uint32_t aggregated_interface_role                 : 1;
+        uint32_t peer_nonce_validation_support             : 1;
+        uint32_t p2p_standalone_acknowledgment_required    : 1;
+        uint32_t interface_group_support                   : 1;
+        uint32_t requires_interface_group_single_opclass   : 1;
+        uint32_t point_to_point_backup_support             : 1;
     };
 };
 
@@ -680,25 +759,33 @@ union genz_i_cap_1 {
 union genz_i_cap_1_control {
     uint32_t val;
     struct {
-        uint32_t rsvdp                                                : 1;
+        uint32_t rsvdp0                                               : 1;
         uint32_t transient_error_threshold_enable                     : 1;
         uint32_t i_error_fault_injection_enable                       : 1;
         uint32_t wildcard_packet_relay_enable                         : 1;
         uint32_t interface_loopback_enable                            : 1;
+        uint32_t flow_control_type                                    : 1;
+        uint32_t opclass_select                                       : 3;
         uint32_t control_opclass_packet_filtering_enable              : 1;
         uint32_t unreliable_control_write_msg_packet_filtering_enable : 1; //FIXME: name too long.
         uint32_t lprt_enable                                          : 1;
         uint32_t mprt_enable                                          : 1;
+        uint32_t rsvdp1                                               : 1;
+        uint32_t link_level_reliability_llr_crc_trigger               : 1;
         uint32_t source_cid_packet_validation_enable                  : 1;
         uint32_t source_sid_packet_validation_enable                  : 1;
+        uint32_t peer_cid_configured                                  : 1;
+        uint32_t peer_sid_configured                                  : 1;
         uint32_t adaptive_fc_credit_enable                            : 1;
+        uint32_t omit_p2p_standalone_acknowledgment                   : 1;
         uint32_t interface_component_containment_enable               : 1;
         uint32_t peer_nonce_validation_enable                         : 1;
         uint32_t pcie_compatible_ordering_pco_communications_enable   : 1;
         uint32_t link_level_reliability_llr_enable                    : 1;
+        uint32_t aggregated_interface_control                         : 2;
         uint32_t tr_cid_valid                                         : 1;
         uint32_t precision_time_enable                                : 1;
-        uint32_t padding                                              : 14;
+        uint32_t rsvdp2                                               : 3;
     };
 };
 
@@ -706,8 +793,8 @@ union genz_i_cap_1_control {
 union genz_i_cap_2 {
     uint32_t val;
     struct {
-        uint32_t reserved : 29;
-        uint32_t padding  : 3;
+        uint32_t transient_error_history_size : 3;
+        uint32_t reserved0                    : 29;
     };
 };
 
@@ -717,7 +804,7 @@ union genz_i_cap_2_control {
     struct {
         uint32_t software_defined_i_bit_0 : 1;
         uint32_t software_defined_i_bit_1 : 1;
-        uint32_t rsvdp                    : 30;
+        uint32_t rsvdp0                   : 30;
     };
 };
 
@@ -734,7 +821,7 @@ union genz_i_error_status {
         uint16_t p2p_sece_recorded                                   : 1;
         uint16_t interface_ae_recorded                               : 1;
         uint16_t switch_packet_relay_failure_recorded                : 1;
-        uint16_t rsvdz                                               : 7;
+        uint16_t rsvdz0                                              : 7;
     };
 };
 
@@ -751,7 +838,7 @@ union genz_i_error_detect {
         uint16_t p2p_sece_detect                                   : 1;
         uint16_t interface_ae_detect                               : 1;
         uint16_t switch_packet_relay_failure_detect                : 1;
-        uint16_t rsvdp                                             : 7;
+        uint16_t rsvdp0                                            : 7;
     };
 };
 
@@ -768,7 +855,7 @@ union genz_i_error_fault_injection {
         uint16_t test_p2p_sece                                         : 1;
         uint16_t test_interface_ae                                     : 1;
         uint16_t test_switch_packet_relay_failure                      : 1;
-        uint16_t rsvdz                                                 : 7;
+        uint16_t rsvdz0                                                : 7;
     };
 };
 
@@ -785,7 +872,7 @@ union genz_i_error_trigger {
         uint16_t p2p_sece_trigger                                   : 1;
         uint16_t interface_ae_trigger                               : 1;
         uint16_t switch_packet_relay_failure_trigger                : 1;
-        uint16_t rsvdp                                              : 7;
+        uint16_t rsvdp0                                             : 7;
     };
 };
 
@@ -793,22 +880,29 @@ union genz_i_error_trigger {
 union genz_peer_state {
     uint32_t val;
     struct {
+        uint32_t peer_component_c_state                            : 3;
+        uint32_t peer_component_manager_type                       : 1;
         uint32_t peer_cid_valid                                    : 1;
         uint32_t peer_sid_valid                                    : 1;
         uint32_t peer_interface_id_valid                           : 1;
-        uint32_t rsvdp                                             : 1;
+        uint32_t rsvdp0                                            : 1;
         uint32_t peer_interface_p2p_64_opclass_support             : 1;
         uint32_t peer_interface_p2p_vendor_defined_opclass_support : 1;
         uint32_t peer_interface_explicit_opclass_support           : 1;
+        uint32_t peer_component_multiple_cid_configuration         : 1;
+        uint32_t peer_out_of_band_management_disabled              : 1;
         uint32_t peer_component_home_agent_support                 : 1;
         uint32_t peer_component_caching_agent_support              : 1;
+        uint32_t peer_interface_flow_control_support               : 2;
         uint32_t peer_base_c_class_valid                           : 1;
+        uint32_t peer_in_band_management_disabled                  : 1;
         uint32_t peer_uniform_opclass_support                      : 1;
         uint32_t peer_link_level_reliability_llr_support           : 1;
+        uint32_t peer_uniform_opclass_selected                     : 2;
         uint32_t peer_p2p_aead_support                             : 1;
         uint32_t peer_p2p_next_header_support                      : 1;
         uint32_t peer_dr_opclass_support                           : 1;
-        uint32_t padding                                           : 17;
+        uint32_t rsvdp1                                            : 6;
     };
 };
 
@@ -832,7 +926,8 @@ union genz_c_lp_ctl {
     uint8_t val;
     struct {
         uint8_t link_state_transition_enable : 1;
-        uint8_t padding                      : 3;
+        uint8_t lp_state                     : 1;
+        uint8_t sub_state                    : 2;
     };
 };
 
@@ -841,7 +936,8 @@ union genz_c_dlp_ctl {
     uint8_t val;
     struct {
         uint8_t link_state_transition_enable : 1;
-        uint8_t padding                      : 3;
+        uint8_t lp_state                     : 1;
+        uint8_t sub_state                    : 2;
     };
 };
 
@@ -849,7 +945,8 @@ union genz_c_dlp_ctl {
 union genz_link_ctl_control {
     uint32_t val;
     struct {
-        uint32_t rsvdp                            : 1;
+        uint32_t rsvdp0                           : 1;
+        uint32_t rsvdp1                           : 1;
         uint32_t transmit_peer_c_up_enable        : 1;
         uint32_t receive_peer_c_up_enable         : 1;
         uint32_t transmit_peer_c_reset_enable     : 1;
@@ -860,7 +957,7 @@ union genz_link_ctl_control {
         uint32_t receive_enter_link_lp_enable     : 1;
         uint32_t transmit_link_reset_event_enable : 1;
         uint32_t receive_link_reset_event_enable  : 1;
-        uint32_t padding                          : 21;
+        uint32_t rsvdp2                           : 20;
     };
 };
 
@@ -868,8 +965,15 @@ union genz_link_ctl_control {
 union genz_phy_status {
     uint32_t val;
     struct {
-        uint32_t rsvdz   : 16;
-        uint32_t padding : 16;
+        uint32_t physical_layer_operational_status          : 4;
+        uint32_t previous_physical_layer_operational_status : 4;
+        uint32_t physical_layer_training_status             : 2;
+        uint32_t physical_layer_retraining_status           : 2;
+        uint32_t phy_tx_link_width_reduced                  : 1;
+        uint32_t phy_rx_link_width_reduced                  : 1;
+        uint32_t phy_tx_error_detected                      : 1;
+        uint32_t phy_rx_error_detected                      : 1;
+        uint32_t rsvdz0                                     : 16;
     };
 };
 
@@ -877,8 +981,14 @@ union genz_phy_status {
 union genz_phy_control {
     uint32_t val;
     struct {
-        uint32_t rsvdp   : 24;
-        uint32_t padding : 8;
+        uint32_t enable_physical_layer                  : 1;
+        uint32_t disable_physical_layer                 : 1;
+        uint32_t disable_physical_layer_auto_retraining : 1;
+        uint32_t exit_low_power_state                   : 1;
+        uint32_t clear_phy_events                       : 1;
+        uint32_t physical_layer_retraining_level        : 2;
+        uint32_t force_physical_layer_retraining        : 1;
+        uint32_t rsvdp0                                 : 24;
     };
 };
 
@@ -886,6 +996,7 @@ union genz_phy_control {
 union genz_phy_cap_1 {
     uint32_t val;
     struct {
+        uint32_t default_phy             : 1;
         uint32_t auto_train_support      : 1;
         uint32_t level_1_retrain_support : 1;
         uint32_t level_2_retrain_support : 1;
@@ -895,8 +1006,7 @@ union genz_phy_cap_1 {
         uint32_t retrain_level_2         : 4;
         uint32_t retrain_level_3         : 4;
         uint32_t retrain_level_4         : 4;
-        uint32_t reserved                : 10;
-        uint32_t padding                 : 1;
+        uint32_t reserved0               : 10;
     };
 };
 
@@ -904,9 +1014,10 @@ union genz_phy_cap_1 {
 union genz_phy_cap_1_control {
     uint32_t val;
     struct {
-        uint32_t extended_feature_enable : 1;
-        uint32_t rsvdp                   : 26;
-        uint32_t padding                 : 5;
+        uint32_t phit_encoding_enable       : 1;
+        uint32_t extended_feature_enable    : 1;
+        uint32_t interface_aggregation_type : 4;
+        uint32_t rsvdp0                     : 26;
     };
 };
 
@@ -923,10 +1034,14 @@ union genz_phy_events {
 union genz_phy_lane_status {
     uint32_t val;
     struct {
-        uint32_t rsvdz        : 2;
-        uint32_t tx_num_lanes : 12;
-        uint32_t rx_num_lanes : 12;
-        uint32_t padding      : 6;
+        uint32_t phy_tx_link_width_reduced : 1;
+        uint32_t phy_rx_link_width_reduced : 1;
+        uint32_t asymmetric_lane_status    : 2;
+        uint32_t tx_reversal_status        : 1;
+        uint32_t rx_reversal_status        : 1;
+        uint32_t rsvdz0                    : 2;
+        uint32_t tx_num_lanes              : 12;
+        uint32_t rx_num_lanes              : 12;
     };
 };
 
@@ -934,10 +1049,12 @@ union genz_phy_lane_status {
 union genz_phy_lane_control {
     uint32_t val;
     struct {
-        uint32_t rsvdp          : 2;
-        uint32_t tx_lane_enable : 12;
-        uint32_t rx_lane_enable : 12;
-        uint32_t padding        : 6;
+        uint32_t enable_lane_asymmetry : 2;
+        uint32_t enable_tx_reversal    : 2;
+        uint32_t enable_rx_reversal    : 2;
+        uint32_t rsvdp0                : 2;
+        uint32_t tx_lane_enable        : 12;
+        uint32_t rx_lane_enable        : 12;
     };
 };
 
@@ -945,11 +1062,12 @@ union genz_phy_lane_control {
 union genz_phy_lane_cap {
     uint32_t val;
     struct {
+        uint32_t asymmetric_lane_support               : 2;
+        uint32_t reversal_support                      : 3;
         uint32_t asymmetric_lane_with_reversal_support : 1;
-        uint32_t rsvdp                                 : 2;
+        uint32_t rsvdp0                                : 2;
         uint32_t tx_lane_support                       : 12;
         uint32_t rx_lane_support                       : 12;
-        uint32_t padding                               : 5;
     };
 };
 
@@ -957,11 +1075,12 @@ union genz_phy_lane_cap {
 union genz_phy_remote_lane_cap {
     uint32_t val;
     struct {
+        uint32_t remote_asymmetric_lane_support               : 2;
+        uint32_t remote_reversal_support                      : 3;
         uint32_t remote_asymmetric_lane_with_reversal_support : 1;
-        uint32_t rsvdp                                        : 2;
+        uint32_t rsvdp0                                       : 2;
         uint32_t remote_tx_lane_enable                        : 12;
         uint32_t remote_rx_lane_enable                        : 12;
-        uint32_t padding                                      : 5;
     };
 };
 
@@ -973,7 +1092,7 @@ union genz_phy_lp_cap {
         uint32_t phy_lp_2_support : 1;
         uint32_t phy_lp_3_support : 1;
         uint32_t phy_lp_4_support : 1;
-        uint32_t rsvdp            : 28;
+        uint32_t rsvdp0           : 28;
     };
 };
 
@@ -1000,7 +1119,7 @@ union genz_phy_up_lp_cap {
         uint32_t phy_up_lp_2_support : 1;
         uint32_t phy_up_lp_3_support : 1;
         uint32_t phy_up_lp_4_support : 1;
-        uint32_t rsvdp               : 28;
+        uint32_t rsvdp0              : 28;
     };
 };
 
@@ -1023,8 +1142,9 @@ union genz_phy_up_lp_timing_cap {
 union genz_i_stat_cap_1 {
     uint16_t val;
     struct {
-        uint16_t rsvdz   : 12;
-        uint16_t padding : 4;
+        uint16_t provisioned_statistics_fields : 2;
+        uint16_t maximum_snapshot_time         : 2;
+        uint16_t rsvdz0                        : 12;
     };
 };
 
@@ -1032,9 +1152,10 @@ union genz_i_stat_cap_1 {
 union genz_i_stat_control {
     uint8_t val;
     struct {
-        uint8_t statistics_gathering_enable : 1;
-        uint8_t rsvdp                       : 5;
-        uint8_t padding                     : 2;
+        uint8_t statistics_gathering_enable            : 1;
+        uint8_t reset_all_statistics                   : 1;
+        uint8_t initiate_interface_statistics_snapshot : 1;
+        uint8_t rsvdp0                                 : 5;
     };
 };
 
@@ -1042,8 +1163,9 @@ union genz_i_stat_control {
 union genz_i_stat_status {
     uint8_t val;
     struct {
-        uint8_t rsvdz   : 6;
-        uint8_t padding : 2;
+        uint8_t interface_statistics_reset_status : 1;
+        uint8_t snapshot_status                   : 1;
+        uint8_t rsvdz0                            : 6;
     };
 };
 
@@ -1051,10 +1173,14 @@ union genz_i_stat_status {
 union genz_e_control {
     uint16_t val;
     struct {
-        uint16_t rsvdp                         : 3;
+        uint16_t rsvdp0                        : 3;
         uint16_t trigger_component_containment : 1;
+        uint16_t error_logging_level           : 3;
+        uint16_t uep_error_target              : 2;
+        uint16_t event_uep_target              : 2;
+        uint16_t mech_uep_target               : 2;
+        uint16_t media_uep_target              : 2;
         uint16_t error_fault_injection_enable  : 1;
-        uint16_t padding                       : 11;
     };
 };
 
@@ -1064,7 +1190,7 @@ union genz_e_status {
     struct {
         uint16_t logging_failed             : 1;
         uint16_t critical_log_entry_consume : 1;
-        uint16_t rsvdz                      : 14;
+        uint16_t rsvdz0                     : 14;
     };
 };
 
@@ -1078,8 +1204,8 @@ union genz_error_signal_cap_1 {
         uint16_t c_event_injection_support          : 1;
         uint16_t i_event_detect_support             : 1;
         uint16_t i_event_injection_support          : 1;
-        uint16_t rsvdz                              : 8;
-        uint16_t padding                            : 2;
+        uint16_t vendor_defined_error_log_uuid      : 2;
+        uint16_t rsvdz0                             : 8;
     };
 };
 
@@ -1091,7 +1217,7 @@ union genz_error_signal_cap_1_control {
         uint16_t signal_interrupt_1_enable : 1;
         uint16_t c_event_injection_enable  : 1;
         uint16_t i_event_injection_enable  : 1;
-        uint16_t rsvdp                     : 12;
+        uint16_t rsvdp0                    : 12;
     };
 };
 
@@ -1129,7 +1255,7 @@ union genz_c_error_status {
         uint64_t buffer_aead_failure_recorded                                       : 1;
         uint64_t secured_session_failure_recorded                                   : 1;
         uint64_t security_encryption_key_update_failure_recorded                    : 1;
-        uint64_t rsvdz                                                              : 26;
+        uint64_t rsvdz0                                                             : 26;
         uint64_t vendor_defined_error_status_bits                                   : 8;
     };
 };
@@ -1168,7 +1294,7 @@ union genz_c_error_detect {
         uint64_t buffer_aead_failure_detect                                       : 1;
         uint64_t security_session_failure_detect                                  : 1;
         uint64_t security_encryption_key_update_failure_detect                    : 1;
-        uint64_t rsvdz                                                            : 26;
+        uint64_t rsvdz0                                                           : 26;
         uint64_t vendor_defined_error_detect_bits                                 : 8;
     };
 };
@@ -1207,7 +1333,7 @@ union genz_c_error_trigger {
         uint64_t buffer_aead_failure_trigger                                       : 1;
         uint64_t security_session_failure_trigger                                  : 1;
         uint64_t security_encryption_key_update_failure_trigger                    : 1;
-        uint64_t rsvdp                                                             : 26;
+        uint64_t rsvdp0                                                            : 26;
         uint64_t vendor_defined_error_trigger_bits                                 : 8;
     };
 };
@@ -1228,7 +1354,7 @@ union genz_c_error_fault_injection {
         uint64_t test_ae_invalid_access_permission_error                              : 1;
         uint64_t test_end_to_end_unicast_packet_execution_error_exe_abort             : 1; //FIXME: name too long.
         uint64_t test_maximum_request_packet_retransmission_exceeded_error            : 1; //FIXME: name too long.
-        uint64_t rsvdz                                                                : 1;
+        uint64_t rsvdz0                                                               : 1;
         uint64_t security_error_sece                                                  : 1;
         uint64_t test_end_to_end_multicast_ur_error                                   : 1;
         uint64_t test_end_to_end_multicast_mp_error                                   : 1;
@@ -1246,8 +1372,8 @@ union genz_c_error_fault_injection {
         uint64_t test_buffer_aead_failure_error                                       : 1;
         uint64_t test_security_session_failure_error                                  : 1;
         uint64_t test_security_encryption_key_update_failure_error                    : 1;
+        uint64_t rsvdz1                                                               : 26;
         uint64_t test_vendor_defined_error                                            : 8;
-        uint64_t padding                                                              : 26;
     };
 };
 
@@ -1268,7 +1394,7 @@ union genz_c_event_detect {
         uint64_t c_dlp_exit_event_detect                                           : 1;
         uint64_t peer_component_c_dlp_entry_event_detect                           : 1;
         uint64_t emergency_power_reduction_triggered_event_detect                  : 1;
-        uint64_t rsvdp                                                             : 1;
+        uint64_t rsvdp0                                                            : 1;
         uint64_t component_power_off_transition_completed_event_detect             : 1; //FIXME: name too long.
         uint64_t component_power_restoration_event_detect                          : 1;
         uint64_t primary_media_maintenance_required_event_detect                   : 1;
@@ -1280,8 +1406,8 @@ union genz_c_event_detect {
         uint64_t p2p                                                               : 1;
         uint64_t peer_component_c_lp_entry_event_detect                            : 1;
         uint64_t peer_component_c_lp_exit_event_detect                             : 1;
+        uint64_t rsvdp1                                                            : 35;
         uint64_t vendor_defined_event_detect                                       : 4;
-        uint64_t padding                                                           : 35;
     };
 };
 
@@ -1292,11 +1418,11 @@ union genz_i_event_detect {
         uint64_t full_interface_reset_event_detect                                                                                          : 1;
         uint64_t warm_interface_reset_event_detect                                                                                          : 1;
         uint64_t new_peer_component_detected_event_detect_link_rfc_os_15_0_0x0_packet_received_out_of_band_signal_or_event_notification_etc : 1; //FIXME: name too long.
-        uint64_t exceeded_transient_error_threshold_event_detect_see_interface_structure                                                    : 1; //FIXME: name too long.
-        uint64_t rsvdp                                                                                                                      : 1;
+        uint64_t exceeded_transient_error_threshold_event_detect                                                                            : 1;
+        uint64_t rsvdp0                                                                                                                     : 1;
         uint64_t interface_performance_degradation_event_detect                                                                             : 1;
+        uint64_t rsvdp1                                                                                                                     : 54;
         uint64_t vendor_defined_i_event_detect                                                                                              : 4;
-        uint64_t padding                                                                                                                    : 54;
     };
 };
 
@@ -1308,14 +1434,15 @@ union genz_i_event_injection {
         uint64_t inject_warm_interface_reset_event                        : 1;
         uint64_t inject_new_peer_component_detected_event                 : 1;
         uint64_t inject_exceeded_transient_error_threshold_event          : 1;
-        uint64_t rsvdz                                                    : 1;
+        uint64_t rsvdz0                                                   : 1;
         uint64_t inject_interface_performance_degradation_event           : 1;
+        uint64_t rsvdz1                                                   : 2;
         uint64_t inject_vendor_defined_i_event                            : 1;
+        uint64_t rsvdz2                                                   : 51;
         uint64_t inject_the_vendor_defined_i_event_associated_with_bit_60 : 1; //FIXME: name too long.
         uint64_t inject_the_vendor_defined_i_event_associated_with_bit_61 : 1; //FIXME: name too long.
         uint64_t inject_the_vendor_defined_i_event_associated_with_bit_62 : 1; //FIXME: name too long.
         uint64_t inject_the_vendor_defined_i_event_associated_with_bit_63 : 1; //FIXME: name too long.
-        uint64_t padding                                                  : 53;
     };
 };
 
@@ -1323,8 +1450,8 @@ union genz_i_event_injection {
 union genz_e_control_2 {
     uint32_t val;
     struct {
-        uint32_t rsvdp   : 30;
-        uint32_t padding : 2;
+        uint32_t pwr_uep_target : 2;
+        uint32_t rsvdp0         : 30;
     };
 };
 
@@ -1345,7 +1472,7 @@ union genz_c_event_status {
         uint64_t c_dlp_exit_event_recorded                                           : 1;
         uint64_t peer_component_c_dlp_entry_event_recorded                           : 1;
         uint64_t emergency_power_reduction_triggered_event_recorded                  : 1;
-        uint64_t rsvdz                                                               : 1;
+        uint64_t rsvdz0                                                              : 1;
         uint64_t component_power_off_transition_completed_event_recorded             : 1; //FIXME: name too long.
         uint64_t component_power_restoration_event_recorded                          : 1;
         uint64_t primary_media_maintenance_required_event_recorded                   : 1;
@@ -1357,8 +1484,8 @@ union genz_c_event_status {
         uint64_t p2p                                                                 : 1;
         uint64_t peer_component_c_lp_entry_event_recorded                            : 1;
         uint64_t peer_component_c_lp_exit_event_recorded                             : 1;
+        uint64_t rsvdz1                                                              : 35;
         uint64_t vendor_defined_event_recorded                                       : 4;
-        uint64_t padding                                                             : 35;
     };
 };
 
@@ -1370,10 +1497,10 @@ union genz_i_event_status {
         uint64_t warm_interface_reset_event_recorded               : 1;
         uint64_t new_peer_component_detected_event_recorded        : 1;
         uint64_t exceeded_transient_error_threshold_event_recorded : 1;
-        uint64_t rsvdz                                             : 1;
+        uint64_t rsvdz0                                            : 1;
         uint64_t interface_performance_degradation_event_recorded  : 1;
+        uint64_t rsvdz1                                            : 54;
         uint64_t vendor_defined_i_event_recorded                   : 4;
-        uint64_t padding                                           : 54;
     };
 };
 
@@ -1381,9 +1508,16 @@ union genz_i_event_status {
 union genz_component_media_control {
     uint32_t val;
     struct {
-        uint32_t media_fault_injection_enable : 1;
-        uint32_t rsvdp                        : 17;
-        uint32_t padding                      : 14;
+        uint32_t terminate_primary_media_se_operation   : 1;
+        uint32_t primary_media_maintenance_disable      : 1;
+        uint32_t secondary_media_maintenance_disable    : 1;
+        uint32_t initiate_primary_media_maintenance     : 1;
+        uint32_t initiate_secondary_media_maintenance   : 1;
+        uint32_t media_fault_injection_enable           : 1;
+        uint32_t terminate_secondary_media_se_operation : 1;
+        uint32_t primary_se_initialization              : 4;
+        uint32_t secondary_se_initialization            : 4;
+        uint32_t rsvdp0                                 : 17;
     };
 };
 
@@ -1436,7 +1570,7 @@ union genz_primary_media_status {
         uint64_t factory_default_in_progress                                                 : 1;
         uint64_t media_controller_error                                                      : 1;
         uint64_t voltage_regulator_failed                                                    : 1;
-        uint64_t rsvdz                                                                       : 16;
+        uint64_t rsvdz0                                                                      : 16;
     };
 };
 
@@ -1486,7 +1620,7 @@ union genz_secondary_media_status {
         uint64_t media_controller_error                                                  : 1;
         uint64_t secondary_media_specific_controller_error                               : 1;
         uint64_t secondary_media_error                                                   : 1;
-        uint64_t rsvdz                                                                   : 19;
+        uint64_t rsvdz0                                                                  : 19;
     };
 };
 
@@ -1494,12 +1628,18 @@ union genz_secondary_media_status {
 union genz_primary_media_cap_1_63_0 {
     uint64_t val;
     struct {
-        uint64_t primary_read_latency_base         : 7;
-        uint64_t primary_write_latency_base        : 7;
-        uint64_t primary_read_endurance_base       : 8;
-        uint64_t primary_write_endurance_base      : 8;
-        uint64_t primary_maximum_media_power_level : 10;
-        uint64_t padding                           : 24;
+        uint64_t primary_read_latency_base             : 7;
+        uint64_t primary_write_latency_base            : 7;
+        uint64_t primary_latency_scale_seconds         : 4;
+        uint64_t primary_read_endurance_base           : 8;
+        uint64_t primary_write_endurance_base          : 8;
+        uint64_t primary_endurance_scale               : 4;
+        uint64_t primary_maximum_media_power_level     : 10;
+        uint64_t primary_media_power_scale_mpwrs       : 3;
+        uint64_t primary_error_detection_range         : 4;
+        uint64_t primary_correctable_error_threshold   : 4;
+        uint64_t primary_uncorrectable_error_threshold : 4;
+        uint64_t primary_byte_block_addressing         : 1;
     };
 };
 
@@ -1513,7 +1653,7 @@ union genz_primary_media_cap_1_127_64 {
         uint64_t primary_max_error_detection_bits              : 7;
         uint64_t primary_max_error_corrected_bits              : 7;
         uint64_t primary_factory_default_support               : 1;
-        uint64_t rsvdz                                         : 1;
+        uint64_t rsvdz0                                        : 1;
         uint64_t primary_media_fault_injection_support         : 1;
         uint64_t primary_se_zero_media_support                 : 1;
         uint64_t primary_se_zero_media_range_support           : 1;
@@ -1523,7 +1663,9 @@ union genz_primary_media_cap_1_127_64 {
         uint64_t primary_se_vendor_defined_range_support       : 1;
         uint64_t primary_fatal_media_error_containment_support : 1;
         uint64_t primary_spare_media_devices                   : 4;
-        uint64_t padding                                       : 33;
+        uint64_t primary_row_remapping_size                    : 4;
+        uint64_t primary_media_volatility                      : 2;
+        uint64_t rsvdz1                                        : 27;
     };
 };
 
@@ -1533,11 +1675,16 @@ union genz_secondary_media_cap_1_63_0 {
     struct {
         uint64_t secondary_read_latency_base                                                                                                      : 7;
         uint64_t secondary_write_latency_base                                                                                                     : 7;
+        uint64_t secondary_latency_scale_seconds                                                                                                  : 4;
         uint64_t secondary_read_endurance_base                                                                                                    : 8;
         uint64_t secondary_write_endurance_base_an_unsigned_integer_used_to_calculate_the_maximum_write_endurance_associated_with_this_media_type : 8; //FIXME: name too long.
+        uint64_t secondary_endurance_scale                                                                                                        : 4;
         uint64_t secondary_maximum_media_power_level                                                                                              : 10;
-        uint64_t rsvdz                                                                                                                            : 1;
-        uint64_t padding                                                                                                                          : 23;
+        uint64_t secondary_media_power_scale_mpwrs                                                                                                : 3;
+        uint64_t secondary_error_detection_range                                                                                                  : 4;
+        uint64_t secondary_correctable_error_threshold                                                                                            : 4;
+        uint64_t secondary_uncorrectable_error_threshold                                                                                          : 4;
+        uint64_t rsvdz0                                                                                                                           : 1;
     };
 };
 
@@ -1550,6 +1697,7 @@ union genz_secondary_media_cap_1_127_64 {
         uint64_t secondary_poison_support                        : 1;
         uint64_t secondary_max_error_detection_bits              : 7;
         uint64_t secondary_max_error_corrected_bits              : 7;
+        uint64_t secondary_media_addressability                  : 2;
         uint64_t secondary_media_fault_injection_support         : 1;
         uint64_t secondary_se_zero_media_support                 : 1;
         uint64_t secondary_se_zero_media_range_support           : 1;
@@ -1559,10 +1707,13 @@ union genz_secondary_media_cap_1_127_64 {
         uint64_t secondary_se_vendor_defined_range_support       : 1;
         uint64_t secondary_fatal_media_error_containment_support : 1;
         uint64_t primary_media_backup_operations_support         : 1;
-        uint64_t rsvdz                                           : 1;
+        uint64_t rsvdz0                                          : 1;
         uint64_t secondary_media_caching_support                 : 1;
         uint64_t secondary_spare_media_devices                   : 4;
-        uint64_t padding                                         : 32;
+        uint64_t secondary_row_remapping_size                    : 4;
+        uint64_t secondary_media_volatility                      : 3;
+        uint64_t secondary_media_location                        : 1;
+        uint64_t rsvdz1                                          : 22;
     };
 };
 
@@ -1574,14 +1725,20 @@ union genz_primary_media_cap_1_control {
         uint64_t primary_uncorrectable_error_reporting_enable : 1;
         uint64_t primary_demand_scrubbing_enable              : 1;
         uint64_t primary_patrol_scrubbing_enable              : 1;
+        uint64_t primary_patrol_scrubbing_frequency           : 4;
         uint64_t primary_device_sparing_enable                : 1;
         uint64_t primary_poison_forwarding_enable             : 1;
         uint64_t primary_fault_injection_enable               : 1;
+        uint64_t primary_error_and_event_notification         : 1;
+        uint64_t primary_management_event_notification        : 2;
+        uint64_t primary_management_event_notification_method : 3;
         uint64_t primary_initiate_factory_default             : 1;
+        uint64_t primary_event_logging_level                  : 2;
+        uint64_t initiate_primary_sanitize_and_erase          : 4;
+        uint64_t primary_se_overwrite_media_count             : 3;
         uint64_t deallocate_primary_range                     : 1;
         uint64_t primary_abort_factory_default                : 1;
-        uint64_t rsvdp                                        : 35;
-        uint64_t padding                                      : 19;
+        uint64_t rsvdp0                                       : 35;
     };
 };
 
@@ -1593,13 +1750,20 @@ union genz_secondary_media_cap_1_control {
         uint64_t secondary_uncorrectable_error_reporting_enable : 1;
         uint64_t secondary_demand_scrubbing_enable              : 1;
         uint64_t secondary_patrol_scrubbing_enable              : 1;
+        uint64_t secondary_patrol_scrubbing_frequency           : 4;
         uint64_t secondary_device_sparing_enable                : 1;
         uint64_t secondary_poison_forwarding_enable             : 1;
         uint64_t secondary_fault_injection_enable               : 1;
-        uint64_t rsvdp                                          : 1;
+        uint64_t secondary_error_and_event_notification         : 1;
+        uint64_t secondary_management_event_notification        : 2;
+        uint64_t secondary_management_event_notification_method : 3;
+        uint64_t secondary_event_logging_level                  : 2;
+        uint64_t rsvdp0                                         : 1;
         uint64_t secondary_media_caching_enable                 : 1;
+        uint64_t initiate_secondary_sanitize_and_erase          : 4;
+        uint64_t secondary_se_overwrite_media_count             : 3;
         uint64_t deallocate_secondary_range                     : 1;
-        uint64_t padding                                        : 54;
+        uint64_t rsvdp1                                         : 35;
     };
 };
 
@@ -1640,7 +1804,7 @@ union genz_primary_media_fault_injection {
         uint64_t primary_media_controller_internal_error                               : 1;
         uint64_t primary_media_uncorrectable_error_detected                            : 1;
         uint64_t primary_media_poison_event                                            : 1;
-        uint64_t rsvdz                                                                 : 27;
+        uint64_t rsvdz0                                                                : 27;
         uint64_t inject_vendor_defined_event                                           : 4;
     };
 };
@@ -1682,7 +1846,7 @@ union genz_secondary_media_fault_injection {
         uint64_t secondary_media_controller_internal_error                               : 1;
         uint64_t secondary_media_uncorrectable_error_detected                            : 1;
         uint64_t secondary_media_poison_event                                            : 1;
-        uint64_t rsvdz                                                                   : 27;
+        uint64_t rsvdz0                                                                  : 27;
         uint64_t inject_vendor_defined_event                                             : 4;
     };
 };
@@ -1694,7 +1858,7 @@ union genz_power_status {
         uint16_t module_power_good           : 1;
         uint16_t unstable_insufficient_power : 1;
         uint16_t unexpected_power_loss       : 1;
-        uint16_t rsvdz                       : 13;
+        uint16_t rsvdz0                      : 13;
     };
 };
 
@@ -1703,11 +1867,12 @@ union genz_switch_cap_1 {
     uint32_t val;
     struct {
         uint32_t control_opclass_packet_filtering_support              : 1;
+        uint32_t ulat_scale                                            : 1;
+        uint32_t mlat_scale                                            : 1;
         uint32_t pco_communications_support                            : 1;
         uint32_t unreliable_control_write_msg_packet_filtering_support : 1; //FIXME: name too long.
         uint32_t default_collective_packet_relay_support               : 1;
-        uint32_t reserved                                              : 26;
-        uint32_t padding                                               : 2;
+        uint32_t reserved0                                             : 26;
     };
 };
 
@@ -1719,7 +1884,7 @@ union genz_switch_cap_1_control {
         uint32_t msmcprt_enable                         : 1;
         uint32_t default_multicast_packet_relay_enable  : 1;
         uint32_t default_collective_packet_relay_enable : 1;
-        uint32_t rsvdp                                  : 28;
+        uint32_t rsvdp0                                 : 28;
     };
 };
 
@@ -1727,7 +1892,7 @@ union genz_switch_cap_1_control {
 union genz_switch_status {
     uint16_t val;
     struct {
-        uint16_t rsvdz;
+        uint16_t rsvdz0;
     };
 };
 
@@ -1736,7 +1901,7 @@ union genz_switch_op_ctl {
     uint16_t val;
     struct {
         uint16_t packet_relay_enable : 1;
-        uint16_t rsvdp               : 15;
+        uint16_t rsvdp0              : 15;
     };
 };
 
@@ -1744,7 +1909,7 @@ union genz_switch_op_ctl {
 union genz_cstat_cap_1 {
     uint8_t val;
     struct {
-        uint8_t rsvdp;
+        uint8_t rsvdp0;
     };
 };
 
@@ -1752,9 +1917,10 @@ union genz_cstat_cap_1 {
 union genz_cstat_control {
     uint8_t val;
     struct {
-        uint8_t statistics_gathering_enable : 1;
-        uint8_t rsvdp                       : 5;
-        uint8_t padding                     : 2;
+        uint8_t statistics_gathering_enable            : 1;
+        uint8_t reset_all_statistics                   : 1;
+        uint8_t initiate_component_statistics_snapshot : 1;
+        uint8_t rsvdp0                                 : 5;
     };
 };
 
@@ -1762,8 +1928,9 @@ union genz_cstat_control {
 union genz_cstat_status {
     uint8_t val;
     struct {
-        uint8_t rsvdz   : 6;
-        uint8_t padding : 2;
+        uint8_t statistics_reset : 1;
+        uint8_t snapshot_status  : 1;
+        uint8_t rsvdz0           : 6;
     };
 };
 
@@ -1771,9 +1938,10 @@ union genz_cstat_status {
 union genz_mcast_cap_1 {
     uint16_t val;
     struct {
-        uint16_t reliable_multicast_support : 1;
-        uint16_t rsvdz                      : 9;
-        uint16_t padding                    : 6;
+        uint16_t reliable_multicast_support      : 1;
+        uint16_t provisioned_egress_mask_bits    : 4;
+        uint16_t reliable_multicast_role_support : 2;
+        uint16_t rsvdz0                          : 9;
     };
 };
 
@@ -1781,10 +1949,10 @@ union genz_mcast_cap_1 {
 union genz_mcast_cap_1_control {
     uint16_t val;
     struct {
-        uint16_t unreliable_multicast_enable : 1;
-        uint16_t reliable_multicast_enable   : 1;
-        uint16_t rsvdp                       : 13;
-        uint16_t padding                     : 1;
+        uint16_t unreliable_multicast_enable                                                                                                                                       : 1;
+        uint16_t reliable_multicast_enable                                                                                                                                         : 1;
+        uint16_t if_reliable_multicast_is_supported_then_this_bit_determines_if_each_entry_in_the_responder_tracking_table_consists_of_a_responder_cid_or_a_responder_cid_plus_sid : 1; //FIXME: name too long.
+        uint16_t rsvdp0                                                                                                                                                            : 13;
     };
 };
 
@@ -1795,7 +1963,7 @@ union genz_tr_status {
         uint32_t request_packet_relay_failure  : 1;
         uint32_t response_packet_relay_failure : 1;
         uint32_t access_key_status             : 1;
-        uint32_t rsvdz                         : 29;
+        uint32_t rsvdz0                        : 29;
     };
 };
 
@@ -1803,14 +1971,14 @@ union genz_tr_status {
 union genz_image_cap_1 {
     uint16_t val;
     struct {
+        uint16_t read_only_image_location             : 1;
         uint16_t crc16_support                        : 1;
         uint16_t image_hash_digest_support            : 1;
         uint16_t image_encryption_support             : 1;
         uint16_t control_space_image_location_support : 1;
         uint16_t data_space_image_location_support    : 1;
         uint16_t image_fault_injection_support        : 1;
-        uint16_t rsvdz                                : 9;
-        uint16_t padding                              : 1;
+        uint16_t rsvdz0                               : 9;
     };
 };
 
@@ -1819,7 +1987,7 @@ union genz_image_cap_1_control {
     uint16_t val;
     struct {
         uint16_t image_fault_injection_enable : 1;
-        uint16_t rsvdp                        : 15;
+        uint16_t rsvdp0                       : 15;
     };
 };
 
@@ -1827,7 +1995,7 @@ union genz_image_cap_1_control {
 union genz_image_table_control {
     uint16_t val;
     struct {
-        uint16_t rsvdp;
+        uint16_t rsvdp0;
     };
 };
 
@@ -1838,7 +2006,7 @@ union genz_image_fault_injection {
         uint16_t image_checksum_failure  : 1;
         uint16_t image_hash_digest_error : 1;
         uint16_t image_encryption_error  : 1;
-        uint16_t rsvdz                   : 13;
+        uint16_t rsvdz0                  : 13;
     };
 };
 
@@ -1849,7 +2017,7 @@ union genz_image_detect {
         uint16_t image_checksum_failure_detect  : 1;
         uint16_t image_hash_digest_error_detect : 1;
         uint16_t image_encryption_error_detect  : 1;
-        uint16_t rsvdp                          : 13;
+        uint16_t rsvdp0                         : 13;
     };
 };
 
@@ -1857,11 +2025,11 @@ union genz_image_detect {
 union genz_pt_cap_1 {
     uint16_t val;
     struct {
-        uint16_t precision_time_requester_support : 1;
-        uint16_t precision_time_responder_support : 1;
-        uint16_t precision_time_gtc_support       : 1;
-        uint16_t rsvdz                            : 12;
-        uint16_t padding                          : 1;
+        uint16_t precision_time_requester_support          : 1;
+        uint16_t precision_time_responder_support          : 1;
+        uint16_t precision_time_gtc_support                : 1;
+        uint16_t component_precision_time_granularity_unit : 1;
+        uint16_t rsvdz0                                    : 12;
     };
 };
 
@@ -1869,8 +2037,13 @@ union genz_pt_cap_1 {
 union genz_pt_ctl {
     uint16_t val;
     struct {
-        uint16_t rsvdp   : 10;
-        uint16_t padding : 6;
+        uint16_t precision_time_requester_enable : 1;
+        uint16_t precision_time_responder_enable : 1;
+        uint16_t precision_time_gtc_enable       : 1;
+        uint16_t migrate_pt_alt_responder        : 1;
+        uint16_t ptd_granularity_unit            : 1;
+        uint16_t gtc_cid_location                : 1;
+        uint16_t rsvdp0                          : 10;
     };
 };
 
@@ -1891,7 +2064,7 @@ union genz_mechanical_event_status {
         uint32_t power_fault_recorded                            : 1;
         uint32_t auxiliary_power_up_recorded                     : 1;
         uint32_t auxiliary_power_off_recorded                    : 1;
-        uint32_t rsvdz                                           : 19;
+        uint32_t rsvdz0                                          : 19;
     };
 };
 
@@ -1899,31 +2072,33 @@ union genz_mechanical_event_status {
 union genz_mechanical_cap_1 {
     uint64_t val;
     struct {
-        uint64_t attention_button_support                                                               : 1;
-        uint64_t attention_indicator_support                                                            : 1;
-        uint64_t power_controller_support                                                               : 1;
-        uint64_t power_indicator_support                                                                : 1;
-        uint64_t mrl_sensor_support                                                                     : 1;
-        uint64_t electromechanical_interlock_support                                                    : 1;
-        uint64_t common_reference_clock_support                                                         : 1;
-        uint64_t controller_cmd_completion_notification_support                                         : 1;
-        uint64_t max_mech_power_lvl_is_used_to_calculate_the_maximum_power_a_mechanical_module_supports : 10; //FIXME: name too long.
-        uint64_t main_power_voltage_support                                                             : 8;
-        uint64_t module_indicator_present_notification_support                                          : 1;
-        uint64_t module_indicator_locate_notification_support                                           : 1;
-        uint64_t module_indicator_failure_notification_support                                          : 1;
-        uint64_t module_indicator_notification_1_support                                                : 1;
-        uint64_t module_indicator_notification_2_support                                                : 1;
-        uint64_t module_indicator_notification_3_support                                                : 1;
-        uint64_t module_indicator_notification_4_support                                                : 1;
-        uint64_t module_indicator_notification_5_support                                                : 1;
-        uint64_t module_indicator_notification_6_support                                                : 1;
-        uint64_t module_indicator_notification_7_support                                                : 1;
-        uint64_t module_indicator_vendor_defined_1_support                                              : 1;
-        uint64_t module_indicator_vendor_defined_2_support                                              : 1;
-        uint64_t mechanical_event_injection_support                                                     : 1;
-        uint64_t rsvdz                                                                                  : 18;
-        uint64_t padding                                                                                : 7;
+        uint64_t attention_button_support                       : 1;
+        uint64_t attention_indicator_support                    : 1;
+        uint64_t power_controller_support                       : 1;
+        uint64_t power_indicator_support                        : 1;
+        uint64_t mrl_sensor_support                             : 1;
+        uint64_t electromechanical_interlock_support            : 1;
+        uint64_t mechanical_insertion_removal_support           : 2;
+        uint64_t common_reference_clock_support                 : 1;
+        uint64_t controller_cmd_completion_notification_support : 1;
+        uint64_t max_mech_power_lvl                             : 10;
+        uint64_t mech_power_scale                               : 3;
+        uint64_t main_power_voltage_support                     : 8;
+        uint64_t module_indicator_present_notification_support  : 1;
+        uint64_t module_indicator_locate_notification_support   : 1;
+        uint64_t module_indicator_failure_notification_support  : 1;
+        uint64_t module_indicator_notification_1_support        : 1;
+        uint64_t module_indicator_notification_2_support        : 1;
+        uint64_t module_indicator_notification_3_support        : 1;
+        uint64_t module_indicator_notification_4_support        : 1;
+        uint64_t module_indicator_notification_5_support        : 1;
+        uint64_t module_indicator_notification_6_support        : 1;
+        uint64_t module_indicator_notification_7_support        : 1;
+        uint64_t module_indicator_vendor_defined_1_support      : 1;
+        uint64_t module_indicator_vendor_defined_2_support      : 1;
+        uint64_t module_indicator_interpretation                : 2;
+        uint64_t mechanical_event_injection_support             : 1;
+        uint64_t rsvdz0                                         : 18;
     };
 };
 
@@ -1931,9 +2106,14 @@ union genz_mechanical_cap_1 {
 union genz_mechanical_control {
     uint64_t val;
     struct {
-        uint64_t mechanical_event_injection_enable : 1;
-        uint64_t rsvdp                             : 53;
-        uint64_t padding                           : 10;
+        uint64_t attention_indicator_control         : 1;
+        uint64_t main_power_controller_disable       : 1;
+        uint64_t power_indicator_control             : 1;
+        uint64_t electromechanical_interlock_control : 1;
+        uint64_t activity_indicator_control          : 5;
+        uint64_t auxiliary_power_disable             : 1;
+        uint64_t mechanical_event_injection_enable   : 1;
+        uint64_t rsvdp0                              : 53;
     };
 };
 
@@ -1954,7 +2134,7 @@ union genz_mechanical_event_detect {
         uint32_t power_fault_detect                            : 1;
         uint32_t auxiliary_power_up_detect                     : 1;
         uint32_t auxiliary_power_off_detect                    : 1;
-        uint32_t rsvdp                                         : 19;
+        uint32_t rsvdp0                                        : 19;
     };
 };
 
@@ -1975,7 +2155,7 @@ union genz_mechanical_event_injection {
         uint32_t inject_power_fault                            : 1;
         uint32_t inject_auxiliary_power_up                     : 1;
         uint32_t inject_auxiliary_power_off                    : 1;
-        uint32_t rsvdz                                         : 19;
+        uint32_t rsvdz0                                        : 19;
     };
 };
 
@@ -1987,7 +2167,7 @@ union genz_destination_table_cap_1 {
         uint32_t wildcard_ssdt_support : 1;
         uint32_t wildcard_msdt_support : 1;
         uint32_t rit_ssdt_support      : 1;
-        uint32_t rsvdz                 : 28;
+        uint32_t rsvdz0                : 28;
     };
 };
 
@@ -1996,8 +2176,8 @@ union genz_destination_table_control {
     uint32_t val;
     struct {
         uint32_t peer_authorization_enable : 1;
-        uint32_t rsvdp                     : 30;
-        uint32_t padding                   : 1;
+        uint32_t rit_ssdt_enable           : 1;
+        uint32_t rsvdp0                    : 30;
     };
 };
 
@@ -2007,7 +2187,7 @@ union genz_c_access_cap_1 {
     struct {
         uint8_t l_ac_validation_support   : 1;
         uint8_t p2p_ac_validation_support : 1;
-        uint8_t rsvdz                     : 2;
+        uint8_t rsvdz0                    : 2;
     };
 };
 
@@ -2016,10 +2196,10 @@ union genz_c_access_ctl {
     uint8_t val;
     struct {
         uint8_t c_access_r_key_validation_enable : 1;
+        uint8_t reset_c_access_tables            : 1;
         uint8_t l_ac_validation_enable           : 1;
         uint8_t p2p_ac_validation_enable         : 1;
-        uint8_t rsvdp                            : 4;
-        uint8_t padding                          : 1;
+        uint8_t rsvdp0                           : 4;
     };
 };
 
@@ -2027,7 +2207,7 @@ union genz_c_access_ctl {
 union genz_req_p2p_cap_1 {
     uint8_t val;
     struct {
-        uint8_t rsvdz;
+        uint8_t rsvdz0;
     };
 };
 
@@ -2035,7 +2215,7 @@ union genz_req_p2p_cap_1 {
 union genz_req_p2p_cap_1_control {
     uint8_t val;
     struct {
-        uint8_t rsvdp;
+        uint8_t rsvdp0;
     };
 };
 
@@ -2043,8 +2223,10 @@ union genz_req_p2p_cap_1_control {
 union genz_req_p2p_control {
     uint16_t val;
     struct {
-        uint16_t rsvdp   : 10;
-        uint16_t padding : 6;
+        uint16_t opclass_enable             : 2;
+        uint16_t primary_media_volatility   : 2;
+        uint16_t secondary_media_volatility : 2;
+        uint16_t rsvdp0                     : 10;
     };
 };
 
@@ -2052,8 +2234,15 @@ union genz_req_p2p_control {
 union genz_pa_cap_1 {
     uint32_t val;
     struct {
-        uint32_t rsvdz   : 2;
-        uint32_t padding : 30;
+        uint32_t pa_index_field_size        : 2;
+        uint32_t pa_entry_size              : 2;
+        uint32_t rsvdz0                     : 2;
+        uint32_t wildcard_akey_support      : 1;
+        uint32_t wildcard_peer_attr_support : 1;
+        uint32_t rsvdz1                     : 1;
+        uint32_t wildcard_acreq_support     : 1;
+        uint32_t wildcard_acrsp_support     : 1;
+        uint32_t rsvdz2                     : 21;
     };
 };
 
@@ -2062,7 +2251,7 @@ union genz_pa_cap_1_control {
     uint32_t val;
     struct {
         uint32_t access_key_enable : 1;
-        uint32_t rsvdp             : 31;
+        uint32_t rsvdp0            : 31;
     };
 };
 
@@ -2070,10 +2259,10 @@ union genz_pa_cap_1_control {
 union genz_c_event_cap_1 {
     uint16_t val;
     struct {
+        uint16_t event_signal_size           : 3;
         uint16_t c_event_interrupt_1_support : 1;
         uint16_t c_event_interrupt_2_support : 1;
-        uint16_t rsvdz                       : 11;
-        uint16_t padding                     : 3;
+        uint16_t rsvdz0                      : 11;
     };
 };
 
@@ -2087,7 +2276,7 @@ union genz_c_event_control {
         uint16_t interrupt_0_completed : 1;
         uint16_t interrupt_1_completed : 1;
         uint16_t interrupt_2_completed : 1;
-        uint16_t rsvdp                 : 10;
+        uint16_t rsvdp0                : 10;
     };
 };
 
@@ -2102,7 +2291,7 @@ union genz_lpd_cap_1 {
         uint32_t lpd_field_type_0_support    : 1;
         uint32_t lpd_field_type_3_support    : 1;
         uint32_t lpd_field_type_4_support    : 1;
-        uint32_t rsvdz                       : 25;
+        uint32_t rsvdz0                      : 25;
     };
 };
 
@@ -2115,7 +2304,7 @@ union genz_lpd_cap_1_control {
         uint32_t default_hsid_valid        : 1;
         uint32_t lpd_communications_enable : 1;
         uint32_t default_hcid_valid        : 1;
-        uint32_t rsvdp                     : 27;
+        uint32_t rsvdp0                    : 27;
     };
 };
 
@@ -2125,13 +2314,13 @@ union genz_f_ctl_sub_0 {
     struct {
         uint16_t hwinit_write_enable        : 1;
         uint16_t request_traffic_class      : 4;
+        uint16_t interrupt_r_key_enable     : 1;
         uint16_t r_key_non_interrupt_enable : 1;
         uint16_t pco_enable                 : 1;
         uint16_t lpd_field_type_0_enable    : 1;
         uint16_t lpd_field_type_3_enable    : 1;
         uint16_t lpd_field_type_4_enable    : 1;
-        uint16_t rsvdp                      : 5;
-        uint16_t padding                    : 1;
+        uint16_t rsvdp0                     : 5;
     };
 };
 
@@ -2141,7 +2330,7 @@ union genz_sod_cap_1 {
     struct {
         uint32_t multi_subnet_support      : 1;
         uint32_t tc_sode_selection_support : 1;
-        uint32_t rsvdz                     : 30;
+        uint32_t rsvdz0                    : 30;
     };
 };
 
@@ -2150,7 +2339,7 @@ union genz_sod_cap_1_control {
     uint32_t val;
     struct {
         uint32_t sod_communications_enable : 1;
-        uint32_t rsvdp                     : 31;
+        uint32_t rsvdp0                    : 31;
     };
 };
 
@@ -2160,7 +2349,7 @@ union genz_congestion_cap_1 {
     struct {
         uint16_t resource_congestion_management_support       : 1;
         uint16_t vendor_defined_congestion_management_support : 1;
-        uint16_t rsvdz                                        : 14;
+        uint16_t rsvdz0                                       : 14;
     };
 };
 
@@ -2168,8 +2357,9 @@ union genz_congestion_cap_1 {
 union genz_congestion_cap_1_control {
     uint16_t val;
     struct {
-        uint16_t rsvdp   : 12;
-        uint16_t padding : 4;
+        uint16_t congestion_management_control : 3;
+        uint16_t strict_increment_mode_control : 1;
+        uint16_t rsvdp0                        : 12;
     };
 };
 
@@ -2177,8 +2367,8 @@ union genz_congestion_cap_1_control {
 union genz_rkd_cap_1 {
     uint16_t val;
     struct {
-        uint16_t rsvdz   : 13;
-        uint16_t padding : 3;
+        uint16_t rkd_mechanism_table_type : 3;
+        uint16_t rsvdz0                   : 13;
     };
 };
 
@@ -2188,7 +2378,7 @@ union genz_rkd_control_1 {
     struct {
         uint16_t rkd_validation_enable : 1;
         uint16_t trusted_thread_enable : 1;
-        uint16_t rsvdp                 : 14;
+        uint16_t rsvdp0                : 14;
     };
 };
 
@@ -2196,9 +2386,9 @@ union genz_rkd_control_1 {
 union genz_pm_cap_1 {
     uint16_t val;
     struct {
-        uint16_t max_perf_records : 5;
-        uint16_t rsvdz            : 8;
-        uint16_t padding          : 3;
+        uint16_t performance_marker_support : 3;
+        uint16_t max_perf_records           : 5;
+        uint16_t rsvdz0                     : 8;
     };
 };
 
@@ -2207,8 +2397,8 @@ union genz_pm_control {
     uint16_t val;
     struct {
         uint16_t performance_log_record_enable : 1;
-        uint16_t rsvdp                         : 14;
-        uint16_t padding                       : 1;
+        uint16_t clear_performance_marker_log  : 1;
+        uint16_t rsvdp0                        : 14;
     };
 };
 
@@ -2216,6 +2406,8 @@ union genz_pm_control {
 union genz_atp_cap_1 {
     uint32_t val;
     struct {
+        uint32_t pasid_support                        : 1;
+        uint32_t prg_rspn_pasid_required              : 1;
         uint32_t address_translation_services_support : 1;
         uint32_t page_services_support                : 1;
         uint32_t context_management_support           : 1;
@@ -2223,8 +2415,7 @@ union genz_atp_cap_1 {
         uint32_t execution_permission_support         : 1;
         uint32_t global_mapping_support               : 1;
         uint32_t global_invalidate_support            : 1;
-        uint32_t rsvdz                                : 23;
-        uint32_t padding                              : 2;
+        uint32_t rsvdz0                               : 23;
     };
 };
 
@@ -2241,9 +2432,10 @@ union genz_atp_cap_1_control {
         uint32_t execute_permission_enable           : 1;
         uint32_t global_mapping_enable               : 1;
         uint32_t global_invalidate_enable            : 1;
+        uint32_t address_translation_cache_enable    : 1;
+        uint32_t max_context_id                      : 1;
         uint32_t smallest_translation_unit_stu       : 5;
-        uint32_t rsvdp                               : 16;
-        uint32_t padding                             : 2;
+        uint32_t rsvdp0                              : 16;
     };
 };
 
@@ -2254,7 +2446,7 @@ union genz_atp_status {
         uint32_t prg_response_notification_failure : 1;
         uint32_t unexpected_prg_index              : 1;
         uint32_t stopped                           : 1;
-        uint32_t rsvdz                             : 29;
+        uint32_t rsvdz0                            : 29;
     };
 };
 
@@ -2262,7 +2454,7 @@ union genz_atp_status {
 union genz_re_table_cap_1 {
     uint16_t val;
     struct {
-        uint16_t rsvdz;
+        uint16_t rsvdz0;
     };
 };
 
@@ -2270,7 +2462,7 @@ union genz_re_table_cap_1 {
 union genz_re_table_cap_1_control {
     uint16_t val;
     struct {
-        uint16_t rsvdp;
+        uint16_t rsvdp0;
     };
 };
 
@@ -2279,7 +2471,7 @@ union genz_re_table_control {
     uint16_t val;
     struct {
         uint16_t re_table_enable : 1;
-        uint16_t rsvdp           : 15;
+        uint16_t rsvdp0          : 15;
     };
 };
 
@@ -2292,7 +2484,7 @@ union genz_lph_cap_1 {
         uint32_t pco_support                 : 1;
         uint32_t lpd_field_type_3_support    : 1;
         uint32_t lpd_field_type_4_support    : 1;
-        uint32_t rsvdz                       : 27;
+        uint32_t rsvdz0                      : 27;
     };
 };
 
@@ -2307,7 +2499,7 @@ union genz_lph_cap_1_control {
         uint32_t default_hcid_valid        : 1;
         uint32_t lpd_field_type_3_enable   : 1;
         uint32_t lpd_field_type_4_enable   : 1;
-        uint32_t rsvdp                     : 25;
+        uint32_t rsvdp0                    : 25;
     };
 };
 
@@ -2316,10 +2508,10 @@ union genz_lph_ctl {
     uint16_t val;
     struct {
         uint16_t request_traffic_class      : 4;
+        uint16_t interrupt_r_key_enable     : 1;
         uint16_t r_key_non_interrupt_enable : 1;
         uint16_t pco_enable                 : 1;
-        uint16_t rsvdp                      : 9;
-        uint16_t padding                    : 1;
+        uint16_t rsvdp0                     : 9;
     };
 };
 
@@ -2327,11 +2519,11 @@ union genz_lph_ctl {
 union genz_pg_zmmu_cap_1 {
     uint32_t val;
     struct {
+        uint32_t zmmu_type                                 : 1;
         uint32_t lpd_responder_zmmu_no_bypass_support      : 1;
         uint32_t lpd_responder_zmmu_bypass_support         : 1;
         uint32_t lpd_responder_zmmu_bypass_control_support : 1;
-        uint32_t rsvdz                                     : 28;
-        uint32_t padding                                   : 1;
+        uint32_t rsvdz0                                    : 28;
     };
 };
 
@@ -2339,7 +2531,7 @@ union genz_pg_zmmu_cap_1 {
 union genz_pg_zmmu_cap_1_control {
     uint32_t val;
     struct {
-        uint32_t rsvdp;
+        uint32_t rsvdp0;
     };
 };
 
@@ -2347,11 +2539,11 @@ union genz_pg_zmmu_cap_1_control {
 union genz_pt_zmmu_cap_1 {
     uint32_t val;
     struct {
+        uint32_t zmmu_type                                 : 1;
         uint32_t lpd_responder_zmmu_no_bypass_support      : 1;
         uint32_t lpd_responder_zmmu_bypass_support         : 1;
         uint32_t lpd_responder_zmmu_bypass_control_support : 1;
-        uint32_t rsvdz                                     : 28;
-        uint32_t padding                                   : 1;
+        uint32_t rsvdz0                                    : 28;
     };
 };
 
@@ -2359,7 +2551,7 @@ union genz_pt_zmmu_cap_1 {
 union genz_pt_zmmu_cap_1_control {
     uint32_t val;
     struct {
-        uint32_t rsvdp;
+        uint32_t rsvdp0;
     };
 };
 
@@ -2367,8 +2559,8 @@ union genz_pt_zmmu_cap_1_control {
 union genz_interleave_cap_1 {
     uint32_t val;
     struct {
-        uint32_t rsvdz   : 30;
-        uint32_t padding : 2;
+        uint32_t requester_interleave_granule_size_support : 2;
+        uint32_t rsvdz0                                    : 30;
     };
 };
 
@@ -2376,7 +2568,7 @@ union genz_interleave_cap_1 {
 union genz_interleave_cap_1_control {
     uint32_t val;
     struct {
-        uint32_t rsvdp;
+        uint32_t rsvdp0;
     };
 };
 
@@ -2384,10 +2576,11 @@ union genz_interleave_cap_1_control {
 union genz_fw_table_cap_1 {
     uint16_t val;
     struct {
-        uint16_t mutable_fw_support           : 1;
-        uint16_t crc16_support                : 1;
-        uint16_t fw_image_hash_digest_support : 1;
-        uint16_t rsvdz                        : 13;
+        uint16_t mutable_fw_support                : 1;
+        uint16_t crc16_support                     : 1;
+        uint16_t fw_image_hash_digest_support      : 1;
+        uint16_t mutable_fw_update_prepare_support : 1;
+        uint16_t rsvdz0                            : 12;
     };
 };
 
@@ -2396,7 +2589,7 @@ union genz_fw_table_control {
     uint16_t val;
     struct {
         uint16_t fw_fault_injection_enable : 1;
-        uint16_t rsvdp                     : 15;
+        uint16_t rsvdp0                    : 15;
     };
 };
 
@@ -2410,7 +2603,7 @@ union genz_fw_detect {
         uint16_t fw_checksum_failure_detect                     : 1;
         uint16_t fw_hash_digest_error_detect                    : 1;
         uint16_t fw_encryption_error_detect                     : 1;
-        uint16_t rsvdp                                          : 10;
+        uint16_t rsvdp0                                         : 10;
     };
 };
 
@@ -2424,7 +2617,7 @@ union genz_fw_fault_injection {
         uint16_t fw_checksum_failure_detect                     : 1;
         uint16_t fw_hash_digest_error_detect                    : 1;
         uint16_t fw_encryption_error_detect                     : 1;
-        uint16_t rsvdz                                          : 10;
+        uint16_t rsvdz0                                         : 10;
     };
 };
 
@@ -2433,7 +2626,7 @@ union genz_swm_cap_1 {
     uint16_t val;
     struct {
         uint16_t swm_media_support : 1;
-        uint16_t rsvdz             : 15;
+        uint16_t rsvdz0            : 15;
     };
 };
 
@@ -2447,7 +2640,7 @@ union genz_swm_control_1 {
         uint16_t swm_interrupt    : 1;
         uint16_t swm_read_release : 1;
         uint16_t swm_zero         : 1;
-        uint16_t rsvdp            : 10;
+        uint16_t rsvdp0           : 10;
     };
 };
 
@@ -2463,7 +2656,7 @@ union genz_swm_status {
         uint16_t swm_read_multi_block : 1;
         uint16_t swm_read_last_block  : 1;
         uint16_t swm_write_next_block : 1;
-        uint16_t rsvdp                : 8;
+        uint16_t rsvdp0               : 8;
     };
 };
 
@@ -2478,8 +2671,10 @@ union genz_component_backup_cap_1 {
         uint64_t backup_fault_injection_support         : 1;
         uint64_t point_to_point_topology_backup_support : 1;
         uint64_t switch_topology_backup_support         : 1;
-        uint64_t rsvdz                                  : 51;
-        uint64_t padding                                : 6;
+        uint64_t max_backup_retry_support               : 2;
+        uint64_t max_restore_retry_support              : 2;
+        uint64_t max_erase_retry_support                : 2;
+        uint64_t rsvdz0                                 : 51;
     };
 };
 
@@ -2490,7 +2685,7 @@ union genz_component_backup_cap_1_control {
         uint64_t backup_fault_injection_enable         : 1;
         uint64_t point_to_point_topology_backup_enable : 1;
         uint64_t switch_topology_backup_enable         : 1;
-        uint64_t rsvdp                                 : 61;
+        uint64_t rsvdp0                                : 61;
     };
 };
 
@@ -2512,12 +2707,12 @@ union genz_component_backup_status_1 {
         uint32_t lps_assessment_status       : 1;
         uint32_t lps_assessment_type         : 1;
         uint32_t lps_assessment_in_progress  : 1;
-        uint32_t rsvdz                       : 1;
+        uint32_t rsvdz0                      : 1;
         uint32_t tps_failed                  : 1;
         uint32_t lps_assessment_error        : 1;
         uint32_t insufficient_lps_power      : 1;
         uint32_t lps_charged                 : 1;
-        uint32_t padding                     : 13;
+        uint32_t rsvdz1                      : 13;
     };
 };
 
@@ -2525,18 +2720,21 @@ union genz_component_backup_status_1 {
 union genz_component_backup_control_1 {
     uint32_t val;
     struct {
+        uint32_t wait_for_backup_power                            : 1;
+        uint32_t tps_state                                        : 1;
+        uint32_t lps_tps_enable                                   : 1;
         uint32_t initiate_lps_health_status                       : 1;
         uint32_t backup_fault_injection_enable                    : 1;
         uint32_t initiate_emergency_all_backup                    : 1;
         uint32_t emergency_backup_main_power_enable               : 1;
         uint32_t emergency_backup_media_controller_c_down_enable  : 1;
         uint32_t emergency_backup_all_interface_paths_lost_enable : 1;
-        uint32_t rsvdp                                            : 1;
+        uint32_t rsvdp0                                           : 1;
         uint32_t emergency_backup_management_initiated_enable     : 1;
         uint32_t emergency_backup_environmental_conditions_enable : 1;
         uint32_t emergency_backup_persistent_flush_ff_enable      : 1;
         uint32_t planned_backup_persistent_flush_ff_enable        : 1;
-        uint32_t padding                                          : 21;
+        uint32_t rsvdp1                                           : 18;
     };
 };
 
@@ -2546,7 +2744,7 @@ union genz_component_backup_fault_injection_1 {
     struct {
         uint64_t backup_success                                                          : 1;
         uint64_t emergency_backup_main_power_problem                                     : 1;
-        uint64_t rsvdz                                                                   : 1;
+        uint64_t rsvdz0                                                                  : 1;
         uint64_t emergency_backup_c_down                                                 : 1;
         uint64_t emergency_backup_path_lost                                              : 1;
         uint64_t emergency_backup_management_initiated                                   : 1;
@@ -2567,6 +2765,7 @@ union genz_component_backup_fault_injection_1 {
         uint64_t invalid_pm_backup_table_entry_configuration                             : 1;
         uint64_t operation_failed_primary_media_not_operational                          : 1;
         uint64_t operation_failed_primary_media_not_accessible                           : 1;
+        uint64_t rsvdz1                                                                  : 1;
         uint64_t operation_failed_could_not_allocate_pm_backup_table_entry               : 1; //FIXME: name too long.
         uint64_t operation_failed_lps_tps_issue_examine_other_status_bits_for_root_cause : 1; //FIXME: name too long.
         uint64_t operation_failed_primary_media_unsupported_or_invalid_hash_encryption   : 1; //FIXME: name too long.
@@ -2581,17 +2780,20 @@ union genz_component_backup_fault_injection_1 {
         uint64_t lps_present_lps_battery                                                 : 1;
         uint64_t lps_present_lps_supercapacitor                                          : 1;
         uint64_t lps_present_lps_hybrid_capacitor                                        : 1;
+        uint64_t rsvdz2                                                                  : 1;
         uint64_t lps_lower_thermal_threshold_exceeded                                    : 1;
         uint64_t lps_lower_thermal_threshold_restored                                    : 1;
         uint64_t lps_upper_thermal_threshold_exceeded                                    : 1;
         uint64_t lps_upper_thermal_threshold_restored                                    : 1;
         uint64_t lps_failed_voltage_regulator_failed                                     : 1;
         uint64_t lps_failed_non_operational_cannot_detect                                : 1;
+        uint64_t rsvdz3                                                                  : 1;
+        uint64_t rsvdz4                                                                  : 1;
         uint64_t lps_wear_threshold_exceeded                                             : 1;
         uint64_t lps_assessment_error                                                    : 1;
         uint64_t insufficient_lps_power                                                  : 1;
         uint64_t lps_charged                                                             : 1;
-        uint64_t padding                                                                 : 17;
+        uint64_t rsvdz5                                                                  : 13;
     };
 };
 
@@ -2599,7 +2801,7 @@ union genz_component_backup_fault_injection_1 {
 union genz_component_backup_fault_injection_2 {
     uint64_t val;
     struct {
-        uint64_t rsvdz                       : 60;
+        uint64_t rsvdz0                      : 60;
         uint64_t inject_vendor_defined_event : 4;
     };
 };
@@ -2617,7 +2819,8 @@ union genz_fw_ctl_sub_0 {
         uint16_t fw_mutable_halt             : 1;
         uint16_t activate_immutable_firmware : 1;
         uint16_t activate_mutable_firmware   : 1;
-        uint16_t rsvdp                       : 7;
+        uint16_t fw_mutable_update_prepare   : 1;
+        uint16_t rsvdp0                      : 6;
     };
 };
 
@@ -2625,19 +2828,21 @@ union genz_fw_ctl_sub_0 {
 union genz_fw_status_sub_0 {
     uint16_t val;
     struct {
-        uint16_t fw_image_crc_valid                   : 1;
-        uint16_t fw_image_hash_digest_valid           : 1;
-        uint16_t fw_update_disabled                   : 1;
-        uint16_t internal_controller_issue_detected   : 1;
-        uint16_t fw_update_in_progress                : 1;
-        uint16_t immutable_firmware_image_active      : 1;
-        uint16_t mutable_firmware_image_active        : 1;
-        uint16_t fw_immutable_halted                  : 1;
-        uint16_t fw_mutable_halted                    : 1;
-        uint16_t fw_hash_digest_challenge_in_progress : 1;
-        uint16_t fw_activation_in_progress            : 1;
-        uint16_t fw_update_activation_completed       : 1;
-        uint16_t rsvdz                                : 4;
+        uint16_t fw_image_crc_valid                      : 1;
+        uint16_t fw_image_hash_digest_valid              : 1;
+        uint16_t fw_update_disabled                      : 1;
+        uint16_t internal_controller_issue_detected      : 1;
+        uint16_t fw_update_in_progress                   : 1;
+        uint16_t immutable_firmware_image_active         : 1;
+        uint16_t mutable_firmware_image_active           : 1;
+        uint16_t fw_immutable_halted                     : 1;
+        uint16_t fw_mutable_halted                       : 1;
+        uint16_t fw_hash_digest_challenge_in_progress    : 1;
+        uint16_t fw_activation_in_progress               : 1;
+        uint16_t fw_update_activation_completed          : 1;
+        uint16_t fw_mutable_image_validation_in_progress : 1;
+        uint16_t fw_mutable_update_prepare_complete      : 1;
+        uint16_t rsvdz0                                  : 2;
     };
 };
 
@@ -2645,13 +2850,13 @@ union genz_fw_status_sub_0 {
 union genz_image_ctl_sub_0 {
     uint16_t val;
     struct {
-        uint16_t image_table_entry_valid    : 1;
-        uint16_t image_validate             : 1;
-        uint16_t image_authenticate_decrypt : 1;
-        uint16_t image_authenticate_hash    : 1;
-        uint16_t delete_image               : 1;
-        uint16_t rsvdp                      : 10;
-        uint16_t padding                    : 1;
+        uint16_t image_table_entry_valid      : 1;
+        uint16_t image_validate               : 1;
+        uint16_t image_authenticate_decrypt   : 1;
+        uint16_t image_authenticate_hash      : 1;
+        uint16_t image_address_space_location : 1;
+        uint16_t delete_image                 : 1;
+        uint16_t rsvdp0                       : 10;
     };
 };
 
@@ -2664,7 +2869,7 @@ union genz_image_status_sub_0 {
         uint16_t image_encryption_valid        : 1;
         uint16_t image_crc_in_progress         : 1;
         uint16_t image_hash_digest_in_progress : 1;
-        uint16_t rsvdp                         : 11;
+        uint16_t rsvdp0                        : 11;
     };
 };
 
@@ -2674,7 +2879,7 @@ union genz_oem_status {
     struct {
         uint32_t emergency_backup_failure_tps  : 1;
         uint32_t last_emergency_backup_failure : 1;
-        uint32_t rsvdp                         : 30;
+        uint32_t rsvdp0                        : 30;
     };
 };
 
@@ -2683,7 +2888,7 @@ union genz_opcode_set_id_control_1 {
     uint16_t val;
     struct {
         uint16_t opcode_set_enable : 1;
-        uint16_t rsvdp             : 15;
+        uint16_t rsvdp0            : 15;
     };
 };
 
@@ -2692,13 +2897,15 @@ union genz_peer_attr_sub_0 {
     uint16_t val;
     struct {
         uint16_t opcode_set_table_id                      : 3;
+        uint16_t latency_domain                           : 1;
         uint16_t peer_explicit_opclass_next_header_enable : 1;
-        uint16_t rsvdp                                    : 1;
+        uint16_t rsvdp0                                   : 1;
         uint16_t peer_precision_time_enable               : 1;
         uint16_t peer_aead_enable                         : 1;
+        uint16_t rsvdp1                                   : 2;
         uint16_t write_msg_embedded_read_enable           : 1;
         uint16_t meta_read_write_enable                   : 1;
-        uint16_t padding                                  : 7;
+        uint16_t rsvdp2                                   : 4;
     };
 };
 
@@ -2709,11 +2916,12 @@ union genz_pm_backup_status_sub_0 {
         uint64_t backup_success                                                        : 1;
         uint64_t emergency_backup_initiated                                            : 1;
         uint64_t emergency_backup_main_power_problem                                   : 1;
-        uint64_t rsvdz                                                                 : 1;
+        uint64_t rsvdz0                                                                : 1;
         uint64_t emergency_backup_c_down                                               : 1;
         uint64_t emergency_backup_path_lost                                            : 1;
         uint64_t emergency_backup_management_initiated                                 : 1;
         uint64_t planned_backup_initiated                                              : 1;
+        uint64_t rsvdz1                                                                : 1;
         uint64_t backup_error                                                          : 1;
         uint64_t backup_rejected_not_armed                                             : 1;
         uint64_t backup_abort_success                                                  : 1;
@@ -2727,6 +2935,7 @@ union genz_pm_backup_status_sub_0 {
         uint64_t restore_in_progress                                                   : 1;
         uint64_t restore_invalid_image                                                 : 1;
         uint64_t restore_volatile_invalid_state                                        : 1;
+        uint64_t arm_status                                                            : 1;
         uint64_t abort_current_op_failed                                               : 1;
         uint64_t backup_permanent_hw_failure                                           : 1;
         uint64_t invalid_pm_backup_table_entry_configuration                           : 1;
@@ -2737,7 +2946,7 @@ union genz_pm_backup_status_sub_0 {
         uint64_t operation_failed_lps_tps_issue                                        : 1;
         uint64_t operation_failed_primary_media_unsupported_or_invalid_hash_encryption : 1; //FIXME: name too long.
         uint64_t operation_failed_primary_media_length_exceeds_secondary_media         : 1; //FIXME: name too long.
-        uint64_t padding                                                               : 33;
+        uint64_t rsvdz2                                                                : 31;
     };
 };
 
@@ -2746,15 +2955,16 @@ union genz_pm_backup_control_sub_0 {
     uint32_t val;
     struct {
         uint32_t allocate_pm_backup_table_entry : 1;
+        uint32_t discrete_valid                 : 2;
         uint32_t backup_data_auth_enable        : 1;
-        uint32_t rsvdp                          : 1;
+        uint32_t rsvdp0                         : 1;
         uint32_t arm_emergency_backup           : 1;
         uint32_t disable_emergency_backup       : 1;
         uint32_t initiate_emergency_backup      : 1;
         uint32_t initiate_planned_backup        : 1;
         uint32_t initiate_restore               : 1;
         uint32_t abort_current_op               : 1;
-        uint32_t padding                        : 23;
+        uint32_t rsvdp1                         : 21;
     };
 };
 
@@ -2762,10 +2972,10 @@ union genz_pm_backup_control_sub_0 {
 union genz_rc_cap_1 {
     uint16_t val;
     struct {
-        uint16_t mss_support : 1;
-        uint16_t hcs_support : 1;
-        uint16_t rsvdz       : 12;
-        uint16_t padding     : 2;
+        uint16_t route_control_table_size : 2;
+        uint16_t mss_support              : 1;
+        uint16_t hcs_support              : 1;
+        uint16_t rsvdz0                   : 12;
     };
 };
 
@@ -2781,11 +2991,11 @@ union genz_sm_backup_status_sub_0 {
         uint64_t erase_invalid_image                                       : 1;
         uint64_t invalid_sm_backup_table_entry_configuration               : 1;
         uint64_t backup_permanent_hw_failure                               : 1;
-        uint64_t rsvdz                                                     : 1;
+        uint64_t rsvdz0                                                    : 1;
         uint64_t operation_failed_secondary_media_not_operational          : 1;
         uint64_t operation_failed_secondary_media_not_accessible           : 1;
         uint64_t operation_failed_could_not_allocate_sm_backup_table_entry : 1; //FIXME: name too long.
-        uint64_t padding                                                   : 52;
+        uint64_t rsvdz1                                                    : 52;
     };
 };
 
@@ -2794,10 +3004,10 @@ union genz_sm_backup_control_sub_0 {
     uint32_t val;
     struct {
         uint32_t allocate_sm_backup_table_entry : 1;
+        uint32_t discrete_valid                 : 2;
         uint32_t initiate_erase                 : 1;
         uint32_t abort_current_op               : 1;
-        uint32_t rsvdp                          : 27;
-        uint32_t padding                        : 2;
+        uint32_t rsvdp0                         : 27;
     };
 };
 
@@ -2806,8 +3016,9 @@ union genz_tr_ctl_sub_0 {
     uint16_t val;
     struct {
         uint16_t tr_relay_enable : 1;
-        uint16_t rsvdp           : 13;
-        uint16_t padding         : 2;
+        uint16_t tr_zmmu_reset   : 1;
+        uint16_t tr_rtr_reset    : 1;
+        uint16_t rsvdp0          : 13;
     };
 };
 
@@ -2878,26 +3089,26 @@ enum genz_component_cap_1_c_state_power_control_support {
     COMPONENT_CAP_1_C_STATE_POWER_CONTROL_SUPPORT_NOTIFICATION_AND_TRANSITION_REQUESTS = 0x1
 };
 
-enum genz_component_cap_1_power_scale_pwrs_is_used_to_calculate_the_various_component_maximum_non_auxiliary_power_consumption_values {
-    COMPONENT_CAP_1_POWER_SCALE_PWRS_IS_USED_TO_CALCULATE_THE_VARIOUS_COMPONENT_MAXIMUM_NON_AUXILIARY_POWER_CONSUMPTION_VALUES_1_0 = 0x0,
-    COMPONENT_CAP_1_POWER_SCALE_PWRS_IS_USED_TO_CALCULATE_THE_VARIOUS_COMPONENT_MAXIMUM_NON_AUXILIARY_POWER_CONSUMPTION_VALUES_0_1 = 0x1,
-    COMPONENT_CAP_1_POWER_SCALE_PWRS_IS_USED_TO_CALCULATE_THE_VARIOUS_COMPONENT_MAXIMUM_NON_AUXILIARY_POWER_CONSUMPTION_VALUES_0_01 = 0x2,
-    COMPONENT_CAP_1_POWER_SCALE_PWRS_IS_USED_TO_CALCULATE_THE_VARIOUS_COMPONENT_MAXIMUM_NON_AUXILIARY_POWER_CONSUMPTION_VALUES_0_001 = 0x3,
-    COMPONENT_CAP_1_POWER_SCALE_PWRS_IS_USED_TO_CALCULATE_THE_VARIOUS_COMPONENT_MAXIMUM_NON_AUXILIARY_POWER_CONSUMPTION_VALUES_0_0001 = 0x4,
-    COMPONENT_CAP_1_POWER_SCALE_PWRS_IS_USED_TO_CALCULATE_THE_VARIOUS_COMPONENT_MAXIMUM_NON_AUXILIARY_POWER_CONSUMPTION_VALUES_0_00001 = 0x5,
-    COMPONENT_CAP_1_POWER_SCALE_PWRS_IS_USED_TO_CALCULATE_THE_VARIOUS_COMPONENT_MAXIMUM_NON_AUXILIARY_POWER_CONSUMPTION_VALUES_0_000001 = 0x6,
-    COMPONENT_CAP_1_POWER_SCALE_PWRS_IS_USED_TO_CALCULATE_THE_VARIOUS_COMPONENT_MAXIMUM_NON_AUXILIARY_POWER_CONSUMPTION_VALUES_0_0000001 = 0x7
+enum genz_component_cap_1_power_scale_pwrs {
+    COMPONENT_CAP_1_POWER_SCALE_PWRS_1_0 = 0x0,
+    COMPONENT_CAP_1_POWER_SCALE_PWRS_0_1 = 0x1,
+    COMPONENT_CAP_1_POWER_SCALE_PWRS_0_01 = 0x2,
+    COMPONENT_CAP_1_POWER_SCALE_PWRS_0_001 = 0x3,
+    COMPONENT_CAP_1_POWER_SCALE_PWRS_0_0001 = 0x4,
+    COMPONENT_CAP_1_POWER_SCALE_PWRS_0_00001 = 0x5,
+    COMPONENT_CAP_1_POWER_SCALE_PWRS_0_000001 = 0x6,
+    COMPONENT_CAP_1_POWER_SCALE_PWRS_0_0000001 = 0x7
 };
 
-enum genz_component_cap_1_auxiliary_power_scale_apwrs_is_used_to_calculate_the_maximum_power_consumption_a_component_is_capable_of_consuming_when_operating_on_auxiliary_power {
-    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_IS_USED_TO_CALCULATE_THE_MAXIMUM_POWER_CONSUMPTION_A_COMPONENT_IS_CAPABLE_OF_CONSUMING_WHEN_OPERATING_ON_AUXILIARY_POWER_1_0 = 0x0,
-    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_IS_USED_TO_CALCULATE_THE_MAXIMUM_POWER_CONSUMPTION_A_COMPONENT_IS_CAPABLE_OF_CONSUMING_WHEN_OPERATING_ON_AUXILIARY_POWER_0_1 = 0x1,
-    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_IS_USED_TO_CALCULATE_THE_MAXIMUM_POWER_CONSUMPTION_A_COMPONENT_IS_CAPABLE_OF_CONSUMING_WHEN_OPERATING_ON_AUXILIARY_POWER_0_01 = 0x2,
-    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_IS_USED_TO_CALCULATE_THE_MAXIMUM_POWER_CONSUMPTION_A_COMPONENT_IS_CAPABLE_OF_CONSUMING_WHEN_OPERATING_ON_AUXILIARY_POWER_0_001 = 0x3,
-    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_IS_USED_TO_CALCULATE_THE_MAXIMUM_POWER_CONSUMPTION_A_COMPONENT_IS_CAPABLE_OF_CONSUMING_WHEN_OPERATING_ON_AUXILIARY_POWER_0_0001 = 0x4,
-    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_IS_USED_TO_CALCULATE_THE_MAXIMUM_POWER_CONSUMPTION_A_COMPONENT_IS_CAPABLE_OF_CONSUMING_WHEN_OPERATING_ON_AUXILIARY_POWER_0_00001 = 0x5,
-    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_IS_USED_TO_CALCULATE_THE_MAXIMUM_POWER_CONSUMPTION_A_COMPONENT_IS_CAPABLE_OF_CONSUMING_WHEN_OPERATING_ON_AUXILIARY_POWER_0_000001 = 0x6,
-    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_IS_USED_TO_CALCULATE_THE_MAXIMUM_POWER_CONSUMPTION_A_COMPONENT_IS_CAPABLE_OF_CONSUMING_WHEN_OPERATING_ON_AUXILIARY_POWER_0_0000001 = 0x7
+enum genz_component_cap_1_auxiliary_power_scale_apwrs {
+    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_1_0 = 0x0,
+    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_0_1 = 0x1,
+    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_0_01 = 0x2,
+    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_0_001 = 0x3,
+    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_0_0001 = 0x4,
+    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_0_00001 = 0x5,
+    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_0_000001 = 0x6,
+    COMPONENT_CAP_1_AUXILIARY_POWER_SCALE_APWRS_0_0000001 = 0x7
 };
 
 enum genz_component_cap_1_core_latency_scale {
@@ -2983,7 +3194,7 @@ enum genz_component_cap_1_control_max_power_control {
     COMPONENT_CAP_1_CONTROL_MAX_POWER_CONTROL_LPWR = 0x0,
     COMPONENT_CAP_1_CONTROL_MAX_POWER_CONTROL_NPWR = 0x1,
     COMPONENT_CAP_1_CONTROL_MAX_POWER_CONTROL_HPWR = 0x2,
-    COMPONENT_CAP_1_CONTROL_MAX_POWER_CONTROL_MAX_MECH_POWER_LVL_SEE_COMPONENT_MECHANICAL_STRUCTURE = 0x3
+    COMPONENT_CAP_1_CONTROL_MAX_POWER_CONTROL_MAX_MECH_POWER_LVL = 0x3
 };
 
 enum genz_component_cap_1_control_c_state_power_control_enable {
@@ -3031,9 +3242,9 @@ enum genz_component_cap_2_performance_marker_support {
 
 enum genz_component_cap_2_meta_read_write_support {
     COMPONENT_CAP_2_META_READ_WRITE_SUPPORT_UNSUPPORTED = 0x0,
-    COMPONENT_CAP_2_META_READ_WRITE_SUPPORT_C_UUID_SEE_CORE_STRUCTURE = 0x1,
-    COMPONENT_CAP_2_META_READ_WRITE_SUPPORT_VENDOR_DEFINED_SEE_COMPONENT_MEDIA_STRUCTURE = 0x2,
-    COMPONENT_CAP_2_META_READ_WRITE_SUPPORT_SERVICE_UUID_SEE_SERVICE_UUID_STRUCTURE = 0x3
+    COMPONENT_CAP_2_META_READ_WRITE_SUPPORT_C_UUID = 0x1,
+    COMPONENT_CAP_2_META_READ_WRITE_SUPPORT_VENDOR_DEFINED = 0x2,
+    COMPONENT_CAP_2_META_READ_WRITE_SUPPORT_SERVICE_UUID = 0x3
 };
 
 enum genz_component_cap_2_control_di_pi_block_size {
@@ -3810,6 +4021,7 @@ enum genz_st_type {
     ST_TYPE_ADVANCED_1_OPCLASS = 0x4,
     ST_TYPE_ADVANCED_2_OPCLASS = 0x5,
     ST_TYPE_RESERVED_OPCLASS = -1,
+    ST_TYPE_DR_OPCLASS = 0x14,
     ST_TYPE_CTXID_OPCLASS = 0x15,
     ST_TYPE_MULTICAST_OPCLASS = 0x16,
     ST_TYPE_SOD_OPCLASS = 0x17,
@@ -3826,7 +4038,6 @@ enum genz_st_type {
     ST_TYPE_P2P_64_RESPONSE_VENDOR_DEFINED = 0x23,
     ST_TYPE_P2P_64_REQUEST_VENDOR_DEFINED = 0x24,
     ST_TYPE_P2P_64_ATOMICS_AND_CTLS = 0x25,
-    ST_TYPE_DR_OPCLASS = 0x26,
     ST_TYPE_VENDOR_DEFINED_STATISTICS_STRUCTURE = -1
 };
 
@@ -3924,7 +4135,7 @@ enum genz_mechanical_cap_1_mech_power_scale {
 enum genz_mechanical_cap_1_module_indicator_interpretation {
     MECHANICAL_CAP_1_MODULE_INDICATOR_INTERPRETATION_COMPONENTS_BASE_CLASS = 0x0,
     MECHANICAL_CAP_1_MODULE_INDICATOR_INTERPRETATION_COMPONENTS_C_UUID = 0x1,
-    MECHANICAL_CAP_1_MODULE_INDICATOR_INTERPRETATION_VENDOR_DEFINED_STRUCTURE_SEE_MECH_VENDOR_DEF_PTR = 0x2
+    MECHANICAL_CAP_1_MODULE_INDICATOR_INTERPRETATION_VENDOR_DEFINED_STRUCTURE = 0x2
 };
 
 enum genz_mechanical_control_attention_indicator_control {
