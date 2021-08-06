@@ -39,14 +39,14 @@
  *
  * XML file meta based of which this file was generated:
  *     Version   : N/A
- *     Date      : 2020-03-09 15:27:23.558578
+ *     Date      : 2021-07-29 11:05:03.950507
  *     ctl_file  : gen-z-spec-control.vsdx
  *     pkt_file  : gen-z-spec-protocol.vsdx
- *     word_file : gen-z-core-specification-v1.1.docx
+ *     word_file : gen-z-core-specification-v1.1b.docx
  *
  * Generator Script Meta:
- *     Version      : v0.8
- *     Generated On : 2020-05-13 13:10:39.213746
+ *     Version      : v0.9
+ *     Generated On : 2021-08-03 16:42:58.445504
  */
 #include <linux/kernel.h>
 #include <linux/genz-types.h>
@@ -54,7 +54,7 @@
 struct genz_hardware_classes genz_hardware_classes[] = {
      { "Reserved—shall not be used",                           "reserved_shall_not_be_used", GENZ_RESERVED_SHALL_NOT_BE_USED },
      { "Memory ( P2P 64 )",                                    "memory", GENZ_MEMORY },
-     { "Memory (Explicit OpClass)",                            "memory", GENZ_MEMORY },
+     { "Memory (Explicit OpClass )",                           "memory", GENZ_MEMORY },
      { "Integrated Switch",                                    "switch", GENZ_SWITCH },
      { "Enclosure / Expansion Switch",                         "switch", GENZ_SWITCH },
      { "Fabric Switch",                                        "switch", GENZ_SWITCH },
