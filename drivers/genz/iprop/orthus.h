@@ -113,6 +113,7 @@ struct orthus_bridge {
 	struct iprop_genz_raw_cb_table  raw_cb_table;
 	spinlock_t                      obr_lock;  /* global bridge lock */
 	struct device                   *obr_dev;
+	struct genz_bridge_dev          *gzbr;
 	/* Revisit: finish this */
 };
 

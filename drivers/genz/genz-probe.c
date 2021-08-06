@@ -660,6 +660,7 @@ struct genz_comp *genz_alloc_comp(void)
 	struct genz_comp *zcomp;
 
 	zcomp = kzalloc(sizeof(*zcomp), GFP_KERNEL);
+	spin_lock_init(&zcomp->uep_lock);
 	return zcomp;
 }
 

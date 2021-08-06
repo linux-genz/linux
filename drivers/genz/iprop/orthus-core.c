@@ -910,6 +910,7 @@ static int orthus_probe(struct platform_device *pdev)
 				ret);
 			goto err;
 		}
+		obr->gzbr = genz_find_bridge(dev);
 	}
 	return 0;
 
