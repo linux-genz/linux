@@ -200,7 +200,7 @@ void __init setup_per_cpu_areas(void)
  * RETURNS:
  * 0 on success, -errno on failure.
  */
-int __init numa_add_memblk(int nid, u64 start, u64 end)
+int numa_add_memblk(int nid, u64 start, u64 end)
 {
 	int ret;
 
