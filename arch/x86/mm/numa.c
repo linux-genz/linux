@@ -122,7 +122,7 @@ void __init setup_node_to_cpumask_map(void)
 	pr_debug("Node to cpumask map for %u nodes\n", nr_node_ids);
 }
 
-static int __init numa_add_memblk_to(int nid, u64 start, u64 end,
+static int numa_add_memblk_to(int nid, u64 start, u64 end,
 				     struct numa_meminfo *mi)
 {
 	/* ignore zero length blks */
@@ -187,10 +187,11 @@ static void __init numa_move_tail_memblk(struct numa_meminfo *dst, int idx,
  * RETURNS:
  * 0 on success, -errno on failure.
  */
-int __init numa_add_memblk(int nid, u64 start, u64 end)
+int numa_add_memblk(int nid, u64 start, u64 end)
 {
 	return numa_add_memblk_to(nid, start, end, &numa_meminfo);
 }
+EXPORT_SYMBOL(numa_add_memblk);
 
 /* Allocate NODE_DATA for a node on the local memory */
 static void __init alloc_node_data(int nid)
