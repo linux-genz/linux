@@ -153,14 +153,6 @@ static int genz_bdev_ioctl(struct block_device *bdev, fmode_t fm,
 	return -ENOTTY;
 }
 
-static int genz_bdev_revalidate_disk(struct gendisk *bgen)
-{
-	struct genz_bdev *zbd = bgen->private_data;
-
-	dev_dbg(disk_to_dev(bgen), "zbd=%px\n", zbd);
-	return 0;
-}
-
 #ifdef OLD_GZD
 static irqreturn_t genz_bdev_irq_handler(int irq, void *data)
 {
@@ -280,7 +272,6 @@ static const struct block_device_operations genz_bdev_ops = {
 	.open            = genz_bdev_open,
 	.release         = genz_bdev_release,
 	.ioctl           = genz_bdev_ioctl,
-	.revalidate_disk = genz_bdev_revalidate_disk
 };
 
 static void genz_blk_sgl_cmpl(struct genz_dev *zdev,
@@ -720,8 +711,6 @@ static int genz_blk_construct_bdev(struct genz_bdev *zbd,
 			 bbr->zbdev->br_info.block_max_xfer/KERNEL_SECTOR_SIZE);
 	blk_queue_max_segment_size(zbd->queue,
 				   bbr->zbdev->br_info.block_max_xfer);
-	/* Gen-Z does not need bouncing. */
-	blk_queue_bounce_limit(zbd->queue, BLK_BOUNCE_ANY);
 	blk_queue_write_cache(zbd->queue, false, false);
 
 	/* Tell the block layer that this is not a rotational device */
