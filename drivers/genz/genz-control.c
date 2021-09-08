@@ -1544,6 +1544,7 @@ static off_t find_chain_offset(struct genz_bridge_dev *zbdev,
 				return -EINVAL;
 			}
 			chain_offset = csp[i].pointer_offset;
+			*chain_csp = &csp[i];
 		}
 	}
 	if (chain_offset == -ENOENT) {
@@ -1551,7 +1552,6 @@ static off_t find_chain_offset(struct genz_bridge_dev *zbdev,
 		pr_debug("Did not find a CHAIN offset for structure\n");
 		return -ENOENT;
 	}
-	*chain_csp = csp;
 	return chain_offset;
 }
 
@@ -1591,8 +1591,7 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 			struct genz_control_info *parent,
 			struct genz_control_info **sibling,
 			struct kobject *dir,
-			const struct genz_control_structure_ptr *csp,
-			int num_ptrs)
+			const struct genz_control_structure_ptr *csp)
 {
 	int chain_num = 0;
 	struct genz_control_structure_header hdr, *hdrp;
@@ -1687,12 +1686,12 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 
 		/* Follow chain pointer to read the next struct/table */
 		if (is_struct) {
-			ret = read_and_validate_header(zbdev, rmri, hdr_offset,
+			ret = read_and_validate_header(zbdev, rmri, ci->start,
 				chain_csp, hdrp, &hdr_offset);
 			type = hdr.type;
 			vers = hdr.vers;
 		} else {  /* table */
-			ret = read_pointer_at_offset(zbdev, rmri, hdr_offset,
+			ret = read_pointer_at_offset(zbdev, rmri, ci->start,
 				(int)chain_csp->ptr_size,
 				chain_csp->pointer_offset, &hdr_offset);
 			type = chain_csp->struct_type;
@@ -1897,7 +1896,7 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 			if (is_chain)
 				ret = traverse_chained_control_pointers(
 					zbdev, rmri, parent, &sibling, dir,
-					csp_entry, num_ptrs);
+					csp_entry);
 			else
 				ret = traverse_structure(zbdev, rmri, parent,
 							 &sibling, dir, csp_entry);
@@ -1913,13 +1912,14 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 					     dir, csp_entry);
 			break;
 		case GENZ_CONTROL_POINTER_TABLE:
-			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_TABLE\n",
-				 csp_entry->ptr_name);
-			if (is_head_of_chain(zbdev, rmri, parent->start, csp_entry)) {
-				pr_debug("is_head_of_chain is true\n");
+			is_chain = is_head_of_chain(zbdev, rmri, parent->start, csp_entry);
+			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_TABLE, is_chain=%d\n",
+				 (csp_entry->ptr_name) ? csp_entry->ptr_name :
+				 "generic PTR", is_chain);
+			if (is_chain) {
 				ret = traverse_chained_control_pointers(
 					zbdev, rmri, parent, &sibling, dir,
-					csp_entry, num_ptrs);
+					csp_entry);
 			} else {
 				/* Revisit: special case for Route Control Table
 				 * symlink for 2nd reference (CompDest/Switch)
