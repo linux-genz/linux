@@ -463,10 +463,12 @@ int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv,
 	info = &zbdev->br_info;
 	ret = zbdrv->bridge_info(zbdev, &zbdev->br_info);
 	dev_dbg(dev,
-		"bridge_info: ret=%d, req_zmmu=%u, rsp_zmmu=%u, xdm=%u, rdm=%u, nr_req_page_grids=%u, nr_rsp_page_grids=%u, nr_req_ptes=%llu, nr_rsp_ptes=%llu\n",
+		"bridge_info: ret=%d, req_zmmu=%u, rsp_zmmu=%u, xdm=%u, rdm=%u, load_store=%u, kern_map_data=%u, loopback=%u, nr_req_page_grids=%u, nr_rsp_page_grids=%u, nr_req_ptes=%llu, nr_rsp_ptes=%llu, block_max_xfer=%llu, min_cpuvisible_addr=0x%llx, max_cpuvisible_addr=0x%llx\n",
 		ret, info->req_zmmu, info->rsp_zmmu, info->xdm, info->rdm,
+		info->load_store, info->kern_map_data, info->loopback,
 		info->nr_req_page_grids, info->nr_rsp_page_grids,
-		info->nr_req_ptes, info->nr_rsp_ptes);
+		info->nr_req_ptes, info->nr_rsp_ptes, info->block_max_xfer,
+		info->min_cpuvisible_addr, info->max_cpuvisible_addr);
 	if (ret < 0)
 		goto out; /* Revisit: properly undo stuff */
 
@@ -505,6 +507,7 @@ int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv,
 	spin_unlock(&bridge_list_lock);
 
 out:
+	dev_dbg(dev, "done, ret=%d\n", ret);
 	return ret;
 }
 EXPORT_SYMBOL(genz_register_bridge);
