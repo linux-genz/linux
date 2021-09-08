@@ -1096,7 +1096,8 @@ static int read_pointer_at_offset(struct genz_bridge_dev *zbdev,
 {
 	int ret;
 
-	pr_debug("start+offset 0x%lx\n", start+offset);
+	pr_debug("start=0x%lx, offset=0x%lx, start+offset=0x%lx\n",
+		 start, offset, start+offset);
 	*ptr_offset = 0;
 	/* Read the given offset to get the pointer to the control structure */
 	ret = genz_control_read(zbdev, start+offset,
@@ -1382,7 +1383,7 @@ static int genz_control_create_bin_file(struct genz_control_info *ci,
 {
 	int ret;
 
-	pr_debug("creating file %s\n", ci->battr.attr.name);
+	pr_debug("creating file %s\n", name);
 	/* initialize the binary attribute file */
 	sysfs_bin_attr_init(&ci->battr);
 	ci->battr.attr.name = name;
@@ -1491,9 +1492,9 @@ static inline int get_control_table_ptr(
 		struct genz_bridge_dev *zbdev, int table_type,
 		const struct genz_control_structure_ptr **csp, int *num_ptrs)
 {
-	pr_debug("table type=%d\n", table_type);
+	pr_debug("table type=0x%x\n", table_type);
 	if (!genz_validate_table_type(table_type)) {
-		pr_debug("unknown table type %u\n", table_type);
+		pr_debug("unknown table type 0x%x\n", table_type);
 		*csp = NULL;
 		*num_ptrs = 0;
 		return ENOENT;
@@ -1609,6 +1610,7 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 	 * Read the first pointer in the chain to make sure there is
 	 * one before creating the directory to contain the chained structures.
 	 */
+	pr_debug("entered, is_struct=%d\n", is_struct);
 	if (is_struct) {
 		ret = read_and_validate_header(zbdev, rmri, parent->start, csp,
 					       &hdr, &hdr_offset);
@@ -1640,6 +1642,7 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 	name = genz_control_name(type, csp);
 
 	while (!done) {
+		pr_debug("%s, chain_num=%d\n", name, chain_num);
 		/* Allocate a genz_control_info/kobject for this directory */
 		ci = alloc_control_info(zbdev, hdrp, hdr_offset, parent, sibling, csp, rmri);
 		if (ci == NULL) {
@@ -1651,8 +1654,9 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 			ci->size = (*csp->size_fn)(ci);
 		}
 
-		pr_debug("%s type 0x%x size 0x%lx name %s\n",
-			 is_struct ? "struct" : "table", ci->type, ci->size, name);
+		pr_debug("%s type 0x%x start 0x%lx size 0x%lx name %s\n",
+			 is_struct ? "struct" : "table",
+			 ci->type, ci->start, ci->size, name);
 		if (cont_dir == NULL) {  /* create chain container directory */
 			ret = chain_container_dir(ci, name, dir);
 			if (ret < 0) {
@@ -1680,6 +1684,7 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 		ret = traverse_control_pointers(zbdev, rmri, ci, type, vers,
 						&ci->kobj, NULL);
 		if (ret < 0) {
+			pr_debug("traverse_control_pointers error, ret=%d\n", ret);
 			/* Handle error! */
 			return ret;
 		}
@@ -1699,8 +1704,10 @@ static int traverse_chained_control_pointers(struct genz_bridge_dev *zbdev,
 		}
 
 		/* The pointer is NULL - the end of the list - or some problem */
-		if (ret != 0)
+		if (ret != 0) {
+			pr_debug("exiting loop, ret=%d\n", ret);
 			done = 1;
+		}
 	}
 	return ret;
 }
@@ -1861,6 +1868,20 @@ static int traverse_structure(struct genz_bridge_dev *zbdev,
 	return 0;
 }
 
+static const char *ptr_type_name(uint type) {
+	static const char *name[] = {
+		"GENZ_CONTROL_POINTER_NONE",
+		"GENZ_CONTROL_POINTER_STRUCTURE",
+		"GENZ_CONTROL_POINTER_CHAINED",
+		"GENZ_CONTROL_POINTER_ARRAY",
+		"GENZ_CONTROL_POINTER_TABLE",
+		"GENZ_CONTROL_POINTER_TABLE_WITH_HEADER"
+	};
+
+	/* Revisit: range check */
+	return name[type];
+}
+
 static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 	struct genz_rmr_info *rmri,
 	struct genz_control_info *parent,
@@ -1873,6 +1894,7 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 	struct genz_control_info *sibling = NULL;
 	bool is_chain;
 	int i, ret, num_ptrs;
+	const char *tname;
 
 	ret = get_control_ptr(zbdev, struct_type, struct_vers, &csp, &num_ptrs);
 	if (ret < 0) {
@@ -1884,15 +1906,17 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 			csp_entry = &csp[order[i]];
 		else  /* increasing order */
 			csp_entry = &csp[i];
+		tname = ptr_type_name(csp_entry->ptr_type);
 		switch (csp_entry->ptr_type) {
 		case GENZ_CONTROL_POINTER_NONE:
-			pr_debug("%s, ignoring ptr_type GENZ_CONTROL_POINTER_NONE\n",
-				 csp_entry->ptr_name);
+			pr_debug("%s, ignoring ptr_type %s\n",
+				 csp_entry->ptr_name, tname);
 			break;
 		case GENZ_CONTROL_POINTER_STRUCTURE:
 			is_chain = is_head_of_chain(zbdev, rmri, parent->start, csp_entry);
-			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_STRUCTURE, is_chain=%d\n",
-				 csp_entry->ptr_name, is_chain);
+			pr_debug("%s, ptr_type %s, is_chain=%d\n",
+				 (csp_entry->ptr_name) ? csp_entry->ptr_name :
+				 "generic PTR", tname, is_chain);
 			if (is_chain)
 				ret = traverse_chained_control_pointers(
 					zbdev, rmri, parent, &sibling, dir,
@@ -1902,20 +1926,20 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 							 &sibling, dir, csp_entry);
 			break;
 		case GENZ_CONTROL_POINTER_CHAINED:
-			pr_debug("%s, caller will handle ptr_type GENZ_CONTROL_POINTER_CHAINED\n",
-				 csp_entry->ptr_name);
+			pr_debug("%s, caller will handle ptr_type %s\n",
+				 csp_entry->ptr_name, tname);
 			break;
 		case GENZ_CONTROL_POINTER_ARRAY:
-			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_ARRAY\n",
-				 csp_entry->ptr_name);
+			pr_debug("%s, ptr_type %s\n",
+				 csp_entry->ptr_name, tname);
 			ret = traverse_table(zbdev, rmri, parent, &sibling,
 					     dir, csp_entry);
 			break;
 		case GENZ_CONTROL_POINTER_TABLE:
 			is_chain = is_head_of_chain(zbdev, rmri, parent->start, csp_entry);
-			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_TABLE, is_chain=%d\n",
+			pr_debug("%s, ptr_type %s, is_chain=%d\n",
 				 (csp_entry->ptr_name) ? csp_entry->ptr_name :
-				 "generic PTR", is_chain);
+				 "generic PTR", tname, is_chain);
 			if (is_chain) {
 				ret = traverse_chained_control_pointers(
 					zbdev, rmri, parent, &sibling, dir,
@@ -1929,8 +1953,8 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 			}
 			break;
 		case GENZ_CONTROL_POINTER_TABLE_WITH_HEADER:
-			pr_debug("%s, ptr_type GENZ_CONTROL_POINTER_TABLE_WITH_HEADER\n",
-				 csp_entry->ptr_name);
+			pr_debug("%s, ptr_type %s\n",
+				 csp_entry->ptr_name, tname);
 			ret = traverse_table(zbdev, rmri, parent, &sibling,
 					     dir, csp_entry);
 			break;
