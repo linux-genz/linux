@@ -423,6 +423,8 @@ static void genz_dir_release(struct kobject *kobj)
 	dev_dbg(zbdev->bridge_dev, "kobj %s\n", kobject_name(kobj));
 	/* Revisit: kobject_cleanup() should be doing this */
 	kobj->state_initialized = 0;
+	/* Revisit: prevent double-free when kobj is reinitialized */
+	kobj->name = NULL;
 }
 
 static struct kobj_type genz_dir_ktype = {
