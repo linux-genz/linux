@@ -492,7 +492,10 @@ int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv,
 	}
 
 	ret = genz_bridge_create_control_files(zbdev);
-	/* Revisit: handle errors */
+	if (ret < 0) {
+		pr_debug("genz_bridge_create_control_files failed, ret=%d\n", ret);
+		goto out; /* Revisit: properly undo stuff */
+	}
 
 	/* add zbdev to global list */
 	spin_lock(&bridge_list_lock);
