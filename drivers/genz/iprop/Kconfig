@@ -3,7 +3,7 @@
 # GENZ configuration
 #
 
-menuconfig GENZ_ORTHUS
+config GENZ_ORTHUS
 	tristate "Gen-Z IntelliProp Orthus Bridge support"
 	depends on GENZ
 	help
@@ -13,3 +13,14 @@ menuconfig GENZ_ORTHUS
 
 	  To compile this code as a module, choose M here: the module
 	  will be called orthus.
+
+config GENZ_SPHINX
+	tristate "Gen-Z IntelliProp Sphinx Bridge support"
+	depends on GENZ && CXL_BUS
+	help
+	  This option enables the Gen-Z IntelliProp Sphinx bridge driver.
+
+	  Say Y here to enable support for this driver.
+
+	  To compile this code as a module, choose M here: the module
+	  will be called sphinx.
