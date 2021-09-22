@@ -1,7 +1,14 @@
-//#include "iprop_types.h"
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * IntelliProp Gen-Z Page Grid Utility Functions
+ *
+ * Author: Erich Hanke <ehanke@intelliprop.com>
+ *
+ * © Copyright 2021 IntelliProp Inc. All rights reserved.
+ */
+
 #include <linux/kernel.h> //for printk
 #include "iprop_genz_page_grid_pte_util.h"
-
 
 void write_pte( struct genz_reqr_pte_config * pte_cfg,
                 uint32_t * pte_base,
@@ -62,7 +69,6 @@ void write_pte( struct genz_reqr_pte_config * pte_cfg,
     if (drc)
       addr |= ((uint64_t)dr_intf << 40);
     iprop_field_place(addr,            pte_cfg->addr.start,             pte_cfg->addr.width,            pte_ptr);
-    //iprop_field_place(dr_intf,         pte_cfg->dr_intf.start,          pte_cfg->dr_intf.width,         pte_ptr);
 
 }
 
@@ -108,29 +114,29 @@ void print_pte(struct genz_reqr_pte_config * pte_cfg, uint32_t * pte_base, uint3
 
     printk("PTE[%02X]: ---------------------- %d, pte_dw:%d\n", pte_index, pte_width, pte_dw_width);
     printk("{\n");
-    if (pte_cfg->addr.width)            {printk("    addr:           %lX\n", field_select64(pte__63__0, 63, pte_cfg->addr.start));}
-    if (pte_cfg->rkey.width)            {printk("    rkey:           %lX\n", field_select64(pte__63__0, pte_cfg->rkey.start + pte_cfg->rkey.width - 1,                  pte_cfg->rkey.start));}
-    if (pte_cfg->co.width)              {printk("    co:             %lX\n", field_select64(pte__63__0, pte_cfg->co.start + pte_cfg->co.width - 1,                      pte_cfg->co.start));}
-    if (pte_cfg->tr_index.width)        {printk("    tr_index:       %lX\n", field_select64(pte__63__0, pte_cfg->tr_index.start + pte_cfg->tr_index.width - 1,          pte_cfg->tr_index.start));}
-    if (pte_cfg->global_dest.width)     {printk("    global_dest:    %lX\n", field_select64(pte__63__0, pte_cfg->global_dest.start + pte_cfg->global_dest.width - 1,    pte_cfg->global_dest.start));}
-    if (pte_cfg->local_dest.width)      {printk("    local_dest:     %lX\n", field_select64(pte__63__0, pte_cfg->local_dest.start + pte_cfg->local_dest.width - 1,      pte_cfg->local_dest.start));}
-    if (pte_cfg->passid.width)          {printk("    passid:         %lX\n", field_select64(pte__63__0, pte_cfg->passid.start + pte_cfg->passid.width - 1,              pte_cfg->passid.start));}
-    if (pte_cfg->traffic_class.width)   {printk("    tc:             %lX\n", field_select64(pte__63__0, pte_cfg->traffic_class.start + pte_cfg->traffic_class.width - 1,pte_cfg->traffic_class.start));}
-    if (pte_cfg->write_mode.width)      {printk("    write_mode:     %lX\n", field_select64(pte__63__0, pte_cfg->write_mode.start + pte_cfg->write_mode.width - 1,      pte_cfg->write_mode.start));}
-    if (pte_cfg->ns_en.width)           {printk("    ns:             %lX\n", field_select64(pte__63__0, pte_cfg->ns_en.start + pte_cfg->ns_en.width - 1,                pte_cfg->ns_en.start));}
-    if (pte_cfg->lp_en.width)           {printk("    lp:             %lX\n", field_select64(pte__63__0, pte_cfg->lp_en.start + pte_cfg->lp_en.width - 1,                pte_cfg->lp_en.start));}
-    if (pte_cfg->pec.width)             {printk("    pec:            %lX\n", field_select64(pte__63__0, pte_cfg->pec.start + pte_cfg->pec.width - 1,                    pte_cfg->pec.start));}
-    if (pte_cfg->pfme_en.width)         {printk("    pfme_en:        %lX\n", field_select64(pte__63__0, pte_cfg->pfme_en.start + pte_cfg->pfme_en.width - 1,            pte_cfg->pfme_en.start));}
-    if (pte_cfg->pasid_en.width)        {printk("    pasid_en:       %lX\n", field_select64(pte__63__0, pte_cfg->pasid_en.start + pte_cfg->pasid_en.width - 1,          pte_cfg->pasid_en.start));}
-    if (pte_cfg->wp.width)              {printk("    wp:             %lX\n", field_select64(pte__63__0, pte_cfg->wp.start + pte_cfg->wp.width - 1,                      pte_cfg->wp.start));}
-    if (pte_cfg->cap.width)             {printk("    cap:            %lX\n", field_select64(pte__63__0, pte_cfg->cap.start + pte_cfg->cap.width - 1,                    pte_cfg->cap.start));}
-    if (pte_cfg->cache_coherence.width) {printk("    cache_coherence:%lX\n", field_select64(pte__63__0, pte_cfg->cache_coherence.start + pte_cfg->cache_coherence.width - 1,pte_cfg->cache_coherence.start));}
-    if (pte_cfg->proxy_page.width)      {printk("    proxy_page:     %lX\n", field_select64(pte__63__0, pte_cfg->proxy_page.start + pte_cfg->proxy_page.width - 1,      pte_cfg->proxy_page.start));}
-    if (pte_cfg->drc.width)             {printk("    drc:            %lX\n", field_select64(pte__63__0, pte_cfg->drc.start + pte_cfg->drc.width - 1,                    pte_cfg->drc.start));}
-    if (pte_cfg->space_type.width)      {printk("    space_type:     %lX\n", field_select64(pte__63__0, pte_cfg->space_type.start + pte_cfg->space_type.width - 1,      pte_cfg->space_type.start));}
-    if (pte_cfg->d_attr.width)          {printk("    d_attr:         %lX\n", field_select64(pte__63__0, pte_cfg->d_attr.start + pte_cfg->d_attr.width - 1,              pte_cfg->d_attr.start));}
-    if (pte_cfg->entry_type.width)      {printk("    entry_type:     %lX\n", field_select64(pte__63__0, pte_cfg->entry_type.start + pte_cfg->entry_type.width - 1,      pte_cfg->entry_type.start));}
-    if (pte_cfg->valid.width)           {printk("    valid:          %lX\n", field_select64(pte__63__0, pte_cfg->valid.start + pte_cfg->valid.width - 1,                pte_cfg->valid.start));}
+    if (pte_cfg->addr.width)            {printk("    addr:           %llX\n", field_select64(pte__63__0, 63, pte_cfg->addr.start));}
+    if (pte_cfg->rkey.width)            {printk("    rkey:           %llX\n", field_select64(pte__63__0, pte_cfg->rkey.start + pte_cfg->rkey.width - 1,                  pte_cfg->rkey.start));}
+    if (pte_cfg->co.width)              {printk("    co:             %llX\n", field_select64(pte__63__0, pte_cfg->co.start + pte_cfg->co.width - 1,                      pte_cfg->co.start));}
+    if (pte_cfg->tr_index.width)        {printk("    tr_index:       %llX\n", field_select64(pte__63__0, pte_cfg->tr_index.start + pte_cfg->tr_index.width - 1,          pte_cfg->tr_index.start));}
+    if (pte_cfg->global_dest.width)     {printk("    global_dest:    %llX\n", field_select64(pte__63__0, pte_cfg->global_dest.start + pte_cfg->global_dest.width - 1,    pte_cfg->global_dest.start));}
+    if (pte_cfg->local_dest.width)      {printk("    local_dest:     %llX\n", field_select64(pte__63__0, pte_cfg->local_dest.start + pte_cfg->local_dest.width - 1,      pte_cfg->local_dest.start));}
+    if (pte_cfg->passid.width)          {printk("    passid:         %llX\n", field_select64(pte__63__0, pte_cfg->passid.start + pte_cfg->passid.width - 1,              pte_cfg->passid.start));}
+    if (pte_cfg->traffic_class.width)   {printk("    tc:             %llX\n", field_select64(pte__63__0, pte_cfg->traffic_class.start + pte_cfg->traffic_class.width - 1,pte_cfg->traffic_class.start));}
+    if (pte_cfg->write_mode.width)      {printk("    write_mode:     %llX\n", field_select64(pte__63__0, pte_cfg->write_mode.start + pte_cfg->write_mode.width - 1,      pte_cfg->write_mode.start));}
+    if (pte_cfg->ns_en.width)           {printk("    ns:             %llX\n", field_select64(pte__63__0, pte_cfg->ns_en.start + pte_cfg->ns_en.width - 1,                pte_cfg->ns_en.start));}
+    if (pte_cfg->lp_en.width)           {printk("    lp:             %llX\n", field_select64(pte__63__0, pte_cfg->lp_en.start + pte_cfg->lp_en.width - 1,                pte_cfg->lp_en.start));}
+    if (pte_cfg->pec.width)             {printk("    pec:            %llX\n", field_select64(pte__63__0, pte_cfg->pec.start + pte_cfg->pec.width - 1,                    pte_cfg->pec.start));}
+    if (pte_cfg->pfme_en.width)         {printk("    pfme_en:        %llX\n", field_select64(pte__63__0, pte_cfg->pfme_en.start + pte_cfg->pfme_en.width - 1,            pte_cfg->pfme_en.start));}
+    if (pte_cfg->pasid_en.width)        {printk("    pasid_en:       %llX\n", field_select64(pte__63__0, pte_cfg->pasid_en.start + pte_cfg->pasid_en.width - 1,          pte_cfg->pasid_en.start));}
+    if (pte_cfg->wp.width)              {printk("    wp:             %llX\n", field_select64(pte__63__0, pte_cfg->wp.start + pte_cfg->wp.width - 1,                      pte_cfg->wp.start));}
+    if (pte_cfg->cap.width)             {printk("    cap:            %llX\n", field_select64(pte__63__0, pte_cfg->cap.start + pte_cfg->cap.width - 1,                    pte_cfg->cap.start));}
+    if (pte_cfg->cache_coherence.width) {printk("    cache_coherence:%llX\n", field_select64(pte__63__0, pte_cfg->cache_coherence.start + pte_cfg->cache_coherence.width - 1,pte_cfg->cache_coherence.start));}
+    if (pte_cfg->proxy_page.width)      {printk("    proxy_page:     %llX\n", field_select64(pte__63__0, pte_cfg->proxy_page.start + pte_cfg->proxy_page.width - 1,      pte_cfg->proxy_page.start));}
+    if (pte_cfg->drc.width)             {printk("    drc:            %llX\n", field_select64(pte__63__0, pte_cfg->drc.start + pte_cfg->drc.width - 1,                    pte_cfg->drc.start));}
+    if (pte_cfg->space_type.width)      {printk("    space_type:     %llX\n", field_select64(pte__63__0, pte_cfg->space_type.start + pte_cfg->space_type.width - 1,      pte_cfg->space_type.start));}
+    if (pte_cfg->d_attr.width)          {printk("    d_attr:         %llX\n", field_select64(pte__63__0, pte_cfg->d_attr.start + pte_cfg->d_attr.width - 1,              pte_cfg->d_attr.start));}
+    if (pte_cfg->entry_type.width)      {printk("    entry_type:     %llX\n", field_select64(pte__63__0, pte_cfg->entry_type.start + pte_cfg->entry_type.width - 1,      pte_cfg->entry_type.start));}
+    if (pte_cfg->valid.width)           {printk("    valid:          %llX\n", field_select64(pte__63__0, pte_cfg->valid.start + pte_cfg->valid.width - 1,                pte_cfg->valid.start));}
     printk("}\n");
 }
 
@@ -233,66 +239,33 @@ void iprop_genz_calc_pte_width(struct genz_component_page_grid_structure * const
     pte_cfg->addr.start = valid_bits;
     valid_bits += 52;                                        // address
 
-    //pte_cfg->dr_intf.width = (pte_attr->st_drc_support) ? 12 : 0;
-    //pte_cfg->dr_intf.start = valid_bits;
-    //valid_bits += (pte_attr->st_drc_support) ? 12 : 0;       // Switch egress interface identifier
-
     pte_cfg->pte_field_width = valid_bits;
 
 }
 
-//void iprop_genz_con_init_page_grid(struct genz_page_grid_restricted_page_grid_table_array * const gz_pg,
-//                                   uint16_t pg_entry,
-//                                   uint64_t pg_base_addr,
-//                                   uint8_t  page_size,
-//                                   uint32_t page_count,
-//                                   uint8_t  restricted_access,
-//                                   uint32_t base_pte_index)
-//{
-//    gz_pg[pg_entry].pg_base_address_0 = pg_base_addr >> 12;
-//    gz_pg[pg_entry].page_size_0       = page_size;
-//    gz_pg[pg_entry].page_count_0      = page_count;
-//    gz_pg[pg_entry].res               = (restricted_access & 1);
-//    gz_pg[pg_entry].base_pte_index_0  = base_pte_index;
-//}
-//
-//void iprop_genz_con_dump_page_grid(struct genz_page_grid_restricted_page_grid_table_array * const gz_pg, uint16_t pg_entry)
-//{
-//    uint64_t * addr   = (uint64_t*)&gz_pg[pg_entry];
-//    printk("pg_entry[%04X]: addr of pg entry 0x%016lX\n", pg_entry, (uint64_t)addr);
-//    uint64_t val_low  = *addr++;
-//    uint64_t val_high = *addr;
-//    printk("pg_entry[%04X]: raw              0x%016lX %016lX\n", pg_entry, val_high, val_low);
-//    printk("pg_entry[%04X]: pg_base_address: 0x%016lX\n",    pg_entry, (uint64_t)(gz_pg[pg_entry].pg_base_address_0) << 12);
-//    printk("pg_entry[%04X]: page_size:       0x%016lX\n",    pg_entry, (uint64_t)1 << gz_pg[pg_entry].page_size_0);
-//    printk("pg_entry[%04X]: page_count:      0x%06X\n",      pg_entry,  gz_pg[pg_entry].page_count_0);
-//    printk("pg_entry[%04X]: res:             0x%X\n",        pg_entry,  gz_pg[pg_entry].res);
-//    printk("pg_entry[%04X]: base_pte_index:  0x%08X\n",      pg_entry,  gz_pg[pg_entry].base_pte_index_0);
-//}
-
 void iprop_field_place(uint64_t field, uint16_t field_start_bit, uint8_t field_width, uint8_t * struct_base)
 {
-    if (field_width == 0) {
-        // nothing to do here...
-        return;
-    }
     // calculate the number of bits from the field_start_bit to the end of the first byte
     uint8_t  const dist_to_byte_end   = (8 - (field_start_bit & 7));
     // calculate the number of valid bits in the first byte
     uint8_t  const first_n_valid_bits = field_width >= dist_to_byte_end ?  dist_to_byte_end : field_width;
     // calculate the byte index into the structure
     uint16_t cur_byte_offset    = field_start_bit / 8;
-
     // starting mask w/o consideration of width
     uint16_t start_byte_valid_mask = (1 << (8 - field_start_bit % 8))-1;
+    uint8_t rmw;
 
+    if (field_width == 0) {
+        // nothing to do here...
+        return;
+    }
     if (field_width < (8 - (field_start_bit & 7))) {
         start_byte_valid_mask >>= (8 - (field_start_bit & 7)) - field_width;
     }
     start_byte_valid_mask <<= field_start_bit & 7;
 
     // Read Modify Write the first Byte
-    uint8_t rmw = struct_base[cur_byte_offset];
+    rmw = struct_base[cur_byte_offset];
     rmw &= ~start_byte_valid_mask;
     rmw |=  (field << (field_start_bit & 7)) & start_byte_valid_mask;
     struct_base[cur_byte_offset++] = rmw;

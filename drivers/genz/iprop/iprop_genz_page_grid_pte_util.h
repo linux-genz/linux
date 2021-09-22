@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * IntelliProp Gen-Z Page Grid Utility Function Header
+ *
+ * Author: Erich Hanke <ehanke@intelliprop.com>
+ *
+ * © Copyright 2021 IntelliProp Inc. All rights reserved.
+ */
+
 #ifndef __IPROP_GENZ_PTE__
 #define __IPROP_GENZ_PTE__
 

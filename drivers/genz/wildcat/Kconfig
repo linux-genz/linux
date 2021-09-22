@@ -3,7 +3,7 @@
 # GENZ configuration
 #
 
-menuconfig GENZ_WILDCAT
+config GENZ_WILDCAT
 	tristate "Gen-Z Wildcat Bridge support"
 	depends on GENZ && AMD_IOMMU_V2
 	help
