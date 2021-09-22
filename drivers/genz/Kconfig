@@ -17,11 +17,10 @@ menuconfig GENZ
 	  To compile this code as a module, choose M here: the module
 	  will be called genz.
 
+if GENZ
 
-
-menuconfig GENZ_BLK
+config GENZ_BLK
 	tristate "Gen-Z block driver"
-	depends on GENZ
 	select DAX_DRIVER
 	help
 	  This option enables the Gen-Z block driver.
@@ -33,3 +32,4 @@ menuconfig GENZ_BLK
 
 source "drivers/genz/iprop/Kconfig"
 source "drivers/genz/wildcat/Kconfig"
+endif
