@@ -295,10 +295,6 @@ struct genz_bridge_driver {
 			     struct genz_pte_info *info);
 	int (*rsp_pte_write)(struct genz_bridge_dev *br,
 			     struct genz_pte_info *info);
-	int (*req_pte_clear)(struct genz_bridge_dev *br,
-			     struct genz_pte_info *info);
-	int (*rsp_pte_clear)(struct genz_bridge_dev *br,
-			     struct genz_pte_info *info);
 	int (*dma_map_sg_attrs)(    /* for genz_umem_pin */
 		struct genz_bridge_dev *br, struct scatterlist *sg, int nents,
 		enum dma_data_direction direction, unsigned long dma_attrs);
@@ -397,6 +393,7 @@ struct genz_pte_info {
 	struct genz_page_grid  *pg;
 	unsigned int           pte_index;
 	unsigned int           zmmu_pages;
+	uint16_t               dr_iface;
 	bool                   humongous;
 	union genz_pte         pte;
 	struct rb_node         node;  /* within pgi->pte_tree */
@@ -690,6 +687,7 @@ struct genz_uuid_info {
 	struct genz_mem_data *mdata;
 	uuid_t *uuid;
 	uint32_t uu_flags;
+	uuid_t loc_uuid;
 };
 
 /*
@@ -836,8 +834,6 @@ int genz_zmmu_rsp_pte_alloc(struct genz_pte_info *info, uint64_t *rsp_zaddr,
                             uint32_t *pg_ps);
 void genz_zmmu_req_pte_free(struct genz_pte_info *info);
 void genz_zmmu_rsp_pte_free(struct genz_pte_info *info);
-void genz_zmmu_req_pte_clear(struct genz_pte_info *info);
-void genz_zmmu_rsp_pte_clear(struct genz_pte_info *info);
 uint64_t genz_zmmu_pte_addr(const struct genz_pte_info *info, uint64_t addr);
 struct uuid_tracker *genz_uuid_search(uuid_t *uuid);
 struct uuid_tracker *genz_uuid_tracker_alloc(
@@ -870,7 +866,7 @@ void genz_rmr_remove_unode(struct genz_mem_data *mdata,
 int genz_teardown_remote_uuid(uuid_t *src_uuid);
 struct genz_rmr *genz_rmr_search(
 	struct genz_mem_data *mdata, uint32_t dgcid, uint64_t rsp_zaddr,
-	uint64_t length, uint64_t access, uint64_t req_addr);
+	uint64_t length, uint16_t dr_iface, uint64_t access, uint64_t req_addr);
 struct genz_rmr *genz_rmr_get(
 	struct genz_mem_data *mdata, uuid_t *uuid, uint32_t dgcid,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint pasid,
@@ -895,7 +891,9 @@ int genz_rmr_import(
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint32_t rkey,
 	uint16_t dr_iface, const char *rmr_name, struct genz_rmr_info *rmri);
 int genz_rmr_free(struct genz_rmr_info *rmri);
-int genz_rmr_update(uint32_t rkey, uint16_t dr_iface, struct genz_rmr_info *rmri);
+int genz_rmr_update(uint32_t rkey, struct genz_rmr_info *rmri);
+int genz_rmr_change_dr(uuid_t *uuid, uint32_t new_gcid, uint16_t new_dr_iface,
+		       struct genz_rmr_info *rmri);
 int genz_rmr_resize(uuid_t *uuid, uint64_t new_len, struct genz_rmr_info *rmri);
 struct genz_rmr_info *devm_genz_rmr_import(struct genz_dev *zdev,
 	struct genz_uuid_info *uui, uint32_t dgcid,

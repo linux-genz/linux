@@ -903,9 +903,9 @@ void genz_zmmu_req_pte_free(struct genz_pte_info *ptei)
 
 	pr_debug("pte_index=%u, zmmu_pages=%u\n",
 		 ptei->pte_index, ptei->zmmu_pages);
-
-	if (br->zbdrv->req_pte_clear) { /* call bridge driver to clear HW PTE */
-		br->zbdrv->req_pte_clear(br, ptei);
+	ptei->pte.req.v = 0;
+	if (br->zbdrv->req_pte_write) { /* call bridge driver to clear HW PTE */
+		br->zbdrv->req_pte_write(br, ptei);
 	}
 
 	spin_lock_irqsave(&br->zmmu_lock, flags);
@@ -968,9 +968,9 @@ void genz_zmmu_rsp_pte_free(struct genz_pte_info *ptei)
 
 	pr_debug("pte_index=%u, zmmu_pages=%u\n",
 		 ptei->pte_index, ptei->zmmu_pages);
-
-	if (br->zbdrv->rsp_pte_clear) { /* call bridge driver to clear HW PTE */
-		br->zbdrv->rsp_pte_clear(br, ptei);
+	ptei->pte.rsp.v = 0;
+	if (br->zbdrv->rsp_pte_write) { /* call bridge driver to clear HW PTE */
+		br->zbdrv->rsp_pte_write(br, ptei);
 	}
 
 	spin_lock_irqsave(&br->zmmu_lock, flags);
