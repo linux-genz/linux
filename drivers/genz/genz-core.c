@@ -563,6 +563,8 @@ int genz_unregister_bridge(struct device *dev)
 		remove_resource(&zbdev->ld_st_res);
 		if (zbdev->ld_st_res.name)
 			kfree(zbdev->ld_st_res.name);
+		if (zbdev->control_mdata)
+			kfree(zbdev->control_mdata);
 		pr_debug("free genz_bridge_dev %px\n", zbdev);
 		kfree(zbdev);
 	} else {
@@ -827,5 +829,6 @@ static void __exit genz_exit(void)
 module_exit(genz_exit);
 
 MODULE_LICENSE("GPL v2");
+MODULE_AUTHOR("Jim Hull <jmhull@intelliprop.com>");
 MODULE_AUTHOR("Betty Dall <betty.dall@hpe.com>");
 MODULE_AUTHOR("Jim Hull <jim.hull@hpe.com>");

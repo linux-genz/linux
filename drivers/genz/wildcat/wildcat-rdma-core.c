@@ -1493,7 +1493,7 @@ int wildcat_rdma_user_req_RMR_IMPORT(struct io_entry *entry)
 	 */
 	dgcid = wildcat_gcid_from_uuid(uuid);
 	rmr = genz_rmr_get(mdata, uuid, dgcid, rsp_zaddr, len, access,
-			   entry->fdata->pasid, 0, &rmri);
+			   entry->fdata->pasid, 0, GENZ_DR_IFACE_NONE, &rmri);
 	if (IS_ERR(rmr)) {
 		status = PTR_ERR(rmr);
 		if (status == -EEXIST)
