@@ -723,6 +723,112 @@ enum genz_pfn_mode {
 	PFN_MODE_FAM,
 };
 
+struct genz_uep_pkt {  /* UEP: Unsolicited Event Packet */
+	uint32_t DCIDl:     5;
+	uint32_t LENl:      3;
+	uint32_t DCIDm:     4;
+	uint32_t LENh:      4;
+	uint32_t DCIDh:     3;
+	uint32_t VC:        5;
+	uint32_t OpCodel:   2;
+	uint32_t PCRC:      6;
+	uint32_t OpCodeh:   3;
+	uint32_t OCL:       5;
+	uint32_t R0:       12;
+	uint32_t SCID:     12;
+	uint32_t AKey:      6;
+	uint32_t Deadline: 10;
+	uint32_t ECN:       1;
+	uint32_t GC:        1;
+	uint32_t NH:        1;
+	uint32_t PM:        1;
+	uint32_t CV:        1;
+	uint32_t SV:        1;
+	uint32_t IV:        1;
+	uint32_t Event:     8;
+	uint32_t R1:        1;
+	union {
+		struct {  /* NH=0, GC=0 */
+			uint32_t RCCID:    12;
+			uint32_t IfaceID:  12;
+			uint32_t RCSIDl:    8;
+			uint32_t RCSIDh:    8;
+			uint32_t R2:        8;
+			uint32_t EventID:  16;
+			uint32_t ES:       32;
+			uint32_t R3:        8;
+			uint32_t ECRC:     24;
+		} u00;
+		struct {  /* NH=0, GC=1 */
+			uint32_t DSID:     16;
+			uint32_t SSID:     16;
+			uint32_t RCCID:    12;
+			uint32_t IfaceID:  12;
+			uint32_t RCSIDl:    8;
+			uint32_t RCSIDh:    8;
+			uint32_t R2:        8;
+			uint32_t EventID:  16;
+			uint32_t ES:       32;
+			uint32_t R3:        8;
+			uint32_t ECRC:     24;
+		} u01;
+		struct {  /* NH=1, GC=0 */
+			uint32_t RCCID:    12;
+			uint32_t IfaceID:  12;
+			uint32_t RCSIDl:    8;
+			uint32_t RCSIDh:    8;
+			uint32_t R2:        8;
+			uint32_t EventID:  16;
+			uint32_t ES:       32;
+			uint32_t NextHdr0: 32;
+			uint32_t NextHdr1: 32;
+			uint32_t NextHdr2: 32;
+			uint32_t NextHdr3: 32;
+			uint32_t R3:        8;
+			uint32_t ECRC:     24;
+		} u10;
+		struct {  /* NH=1, GC=1 */
+			uint32_t DSID:     16;
+			uint32_t SSID:     16;
+			uint32_t RCCID:    12;
+			uint32_t IfaceID:  12;
+			uint32_t RCSIDl:    8;
+			uint32_t RCSIDh:    8;
+			uint32_t R2:        8;
+			uint32_t EventID:  16;
+			uint32_t ES:       32;
+			uint32_t NextHdr0: 32;
+			uint32_t NextHdr1: 32;
+			uint32_t NextHdr2: 32;
+			uint32_t NextHdr3: 32;
+			uint32_t R3:        8;
+			uint32_t ECRC:     24;
+		} u11;
+	} u;
+};
+
+struct genz_uep_info {
+	union {
+		uint64_t flags;
+		struct {
+			uint64_t version:   4;  /* set by br driver */
+			uint64_t local:     1;  /* set by br driver */
+			uint64_t ts_valid:  1;  /* set by br driver or subsys */
+			uint64_t rv:       58;
+		};
+	};
+	struct timespec64 ts;    /* set by br driver or subsys */
+	struct genz_uep_pkt uep; /* set by br driver */
+};
+
+static inline void genz_set_uep_timestamp(struct genz_uep_info *uepi)
+{
+	ktime_get_real_ts64(&uepi->ts);
+	uepi->ts_valid = 1;
+}
+
+#define GENZ_UEP_INFO_VERS 1
+
 uint32_t genz_dev_gcid(struct genz_dev *zdev, uint index);
 
 /* SID is 16 bits starting at bit 13 of a GCID */
@@ -931,5 +1037,6 @@ int genz_control_read(struct genz_bridge_dev *br, loff_t offset,
 int genz_control_write(struct genz_bridge_dev *br, loff_t offset,
 		       size_t size, void *data,
 		       struct genz_rmr_info *rmri, uint flags);
+int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi);
 
 #endif /* LINUX_GENZ_H */
