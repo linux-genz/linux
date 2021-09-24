@@ -756,7 +756,7 @@ out:
 	return status;
 
 	/* error cases */
-#ifdef REVIST
+#ifdef REVISIT
 err_msg_send:
 	genz_free_uuid_node(mdata, &uu->remote->local_uuid_lock,
 			    &uu->remote->local_uuid_tree,
@@ -778,14 +778,50 @@ int genz_uuid_free(struct genz_mem_data *mdata, uuid_t *uuid,
 		   uint32_t *uu_flags, bool *local)
 {
 	struct genz_bridge_dev *br;
+	struct uuid_tracker    *uu;
+	int                    status = 0;
 
 	if (!mdata)
 		return -EINVAL;
 	br = mdata->bridge;
-	if (!br || !br->zbdrv || !br->zbdrv->uuid_free)
+	if (!br || !br->zbdrv)
 		return -EINVAL;
-	/* Revisit: add default implementation */
-	return br->zbdrv->uuid_free(mdata, uuid, uu_flags, local);
+	if (br->zbdrv->uuid_free)
+		return br->zbdrv->uuid_free(mdata, uuid, uu_flags, local);
+	/* default implementation */
+	uu = genz_uuid_search(uuid);
+	if (!uu) {
+		status = -EINVAL;
+		goto out;
+	}
+
+	/* we now hold an extra reference to uu - release it */
+	genz_uuid_remove(uu);
+	status = genz_free_local_or_remote_uuid(mdata, uuid, uu, local);
+	if (status < 0)
+		goto out;
+
+	if (!*local) {
+		status = genz_free_uuid_node(
+			mdata, &uu->remote->local_uuid_lock,
+			&uu->remote->local_uuid_tree,
+			&mdata->local_uuid->uuid, false);
+		*uu_flags = uu->remote->uu_flags;
+#ifdef REVISIT
+		/* send msg to release UUID on remote node - this can sleep a while */
+		if (!(*uu_flags & UUID_IS_FAM)) {
+			state = wildcat_msg_send_UUID_FREE(
+				br, &mdata->local_uuid->uuid, uuid, true);
+			if (IS_ERR(state)) {
+				status = PTR_ERR(state);
+				pr_debug("wildcat_msg_send_UUID_FREE status=%d\n",
+					 status);
+			}
+		}
+#endif
+	}
+out:
+	return status;
 }
 EXPORT_SYMBOL(genz_uuid_free);
 
@@ -809,3 +845,39 @@ void genz_uuid_exit(void)
 	spin_unlock_irqrestore(&genz_uuid_rbtree_lock, flags);
 }
 EXPORT_SYMBOL(genz_uuid_exit);
+
+static void devm_genz_uuid_import_release(void *data)
+{
+	struct genz_uuid_info *uui = (struct genz_uuid_info *)data;
+	bool local;
+
+	genz_uuid_free(uui->mdata, uui->uuid, &uui->uu_flags, &local);
+}
+
+struct genz_uuid_info *devm_genz_uuid_import(struct genz_dev *zdev, uuid_t *uuid,
+					     uint32_t uu_flags, gfp_t alloc_flags)
+{
+	struct device         *dev = &zdev->dev;
+	struct genz_uuid_info *uui;
+	struct genz_mem_data  *mdata;
+	int                   ret;
+
+	mdata = devm_kzalloc(dev, sizeof(*mdata), alloc_flags);
+	if (!mdata)
+		return ERR_PTR(-ENOMEM);
+	uui = devm_kzalloc(dev, sizeof(*uui), alloc_flags);
+	if (!uui)
+		return ERR_PTR(-ENOMEM);
+	uui->mdata = mdata;
+	uui->uuid = uuid;  /* Revisit: is ptr ok, or do we need uuid copy? */
+	uui->uu_flags = uu_flags;
+
+	ret = genz_uuid_import(mdata, uuid, uu_flags, alloc_flags);
+	if (ret < 0)
+		return ERR_PTR(ret);
+	ret = devm_add_action_or_reset(dev, devm_genz_uuid_import_release, uui);
+	if (ret < 0)
+		return ERR_PTR(ret);
+	return uui;
+}
+EXPORT_SYMBOL(devm_genz_uuid_import);
