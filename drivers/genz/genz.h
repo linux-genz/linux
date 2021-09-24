@@ -261,6 +261,7 @@ struct genz_driver_aux {
 /* Global Variables */
 extern struct list_head genz_fabrics;
 extern spinlock_t genz_fabrics_lock;
+extern struct genz_fabric *genz_temp_fabric;
 
 /* Function Prototypes */
 void genz_lock_rescan_remove(void);
@@ -277,5 +278,9 @@ int genz_rsp_page_grid_alloc(struct genz_bridge_dev *br,
 			     struct genz_page_grid *grid);
 void genz_uuid_exit(void);
 struct genz_bridge_dev *genz_zdev_bridge(struct genz_dev *zdev);
+void genz_add_zbdev_to_fabric(struct genz_bridge_dev *zbdev,
+			      struct genz_fabric *f);
+void genz_remove_zbdev_from_fabric(struct genz_bridge_dev *zbdev);
+struct genz_bridge_dev *genz_lookup_zbdev(struct genz_fabric *f, uint32_t gcid);
 
 #endif /* DRIVERS_GENZ_H */
