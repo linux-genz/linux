@@ -10,3 +10,4 @@ device_dax-y := device.o
 dax_pmem-y := pmem.o
 
 obj-y += hmem/
+obj-y += genz/

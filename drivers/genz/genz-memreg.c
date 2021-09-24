@@ -772,6 +772,8 @@ void genz_rmr_free_all(struct genz_mem_data *mdata)
 }
 EXPORT_SYMBOL(genz_rmr_free_all);
 
+extern uint req_write_mode;  /* Revisit: module param hack */
+
 struct genz_rmr *genz_rmr_get(
 	struct genz_mem_data *mdata, uuid_t *uuid, uint32_t dgcid,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint pasid,
@@ -838,7 +840,7 @@ struct genz_rmr *genz_rmr_get(
 	info->pte.req.rkey       = rkey;
 	info->pte.req.dgcid      = dgcid;
 	info->pte.req.d_attr     = GENZ_DA_UNICAST;  /* Revisit: others */
-	info->pte.req.write_mode = GENZ_WM_LATE_ACK; /* Revisit: others */
+	info->pte.req.write_mode = req_write_mode; /* Revisit: hack */
 	/* Revisit: pp, cce, ce, wpe, pse, pfme, lpe, nse, tc */
 	info->pte.req.v = 1;
 	pr_debug("rmr: info=%p, addr=0x%llx, dgcid=%s, rkey=0x%x, uu=%p\n",
@@ -947,6 +949,7 @@ int genz_rmr_import(
 	rmri->pg_ps = 0;
 	rmri->dr_iface = dr_iface;
 	rmri->zres.ro_rkey = rmri->zres.rw_rkey = rkey;
+	rmri->mdata = mdata;
 	remote = !!(access & (GENZ_MR_GET_REMOTE|GENZ_MR_PUT_REMOTE));
 	writable = !!(access & GENZ_MR_PUT_REMOTE);
 	cpu_visible = !!(access & GENZ_MR_REQ_CPU);
@@ -1008,12 +1011,16 @@ int genz_rmr_import(
 }
 EXPORT_SYMBOL(genz_rmr_import);
 
-int genz_rmr_free(struct genz_mem_data *mdata, struct genz_rmr_info *rmri)
+int genz_rmr_free(struct genz_rmr_info *rmri)
 {
 	int                     status = 0;
 	struct genz_rmr         *rmr;
+	struct genz_mem_data    *mdata;
 	ulong                   flags;
 
+	if (!rmri || !rmri->mdata)
+		return -EINVAL;
+	mdata = rmri->mdata;
 	spin_lock_irqsave(&mdata->md_lock, flags);
 	rmr = genz_rmr_search(mdata, rmri->gcid, rmri->rsp_zaddr, rmri->len,
 			      rmri->access, rmri->req_addr);
@@ -1032,15 +1039,18 @@ unlock:
 }
 EXPORT_SYMBOL(genz_rmr_free);
 
-int genz_rmr_update(struct genz_mem_data *mdata, uint32_t rkey,
-		    uint16_t dr_iface, struct genz_rmr_info *rmri)
+int genz_rmr_update(uint32_t rkey, uint16_t dr_iface, struct genz_rmr_info *rmri)
 {
 	struct genz_pte_info    *ptei;
 	int                     status = 0;
 	struct genz_rmr         *rmr;
+	struct genz_mem_data    *mdata;
 	ulong                   flags;
 	bool                    control, dr;
 
+	if (!rmri || !rmri->mdata)
+		return -EINVAL;
+	mdata = rmri->mdata;
 	spin_lock_irqsave(&mdata->md_lock, flags);
 	rmr = genz_rmr_search(mdata, rmri->gcid, rmri->rsp_zaddr, rmri->len,
 			      rmri->access, rmri->req_addr);
@@ -1072,12 +1082,11 @@ out:
 }
 EXPORT_SYMBOL(genz_rmr_update);
 
-int genz_rmr_resize(
-	struct genz_mem_data *mdata, uuid_t *uuid,
-	uint64_t new_len, struct genz_rmr_info *rmri)
+int genz_rmr_resize(uuid_t *uuid, uint64_t new_len, struct genz_rmr_info *rmri)
 {
 	int                     status = 0;
 	struct genz_rmr_info    prev;
+	struct genz_mem_data    *mdata = rmri->mdata;
 
 	pr_debug("mdata=%px, uuid=%pUb, new_len=0x%llx, rmri=%px\n",
 		 mdata, uuid, new_len, rmri);
@@ -1086,7 +1095,7 @@ int genz_rmr_resize(
 		return 0;
 
 	prev = *rmri;
-	status = genz_rmr_free(mdata, rmri);
+	status = genz_rmr_free(rmri);
 	if (status < 0)
 		return status;
 	status = genz_rmr_import(mdata, uuid, prev.gcid, prev.rsp_zaddr,
@@ -1096,3 +1105,37 @@ int genz_rmr_resize(
 	return status;
 }
 EXPORT_SYMBOL(genz_rmr_resize);
+
+static void devm_genz_rmr_import_release(void *data)
+{
+	genz_rmr_free((struct genz_rmr_info *)data);
+}
+
+struct genz_rmr_info *devm_genz_rmr_import(struct genz_dev *zdev,
+	struct genz_uuid_info *uui, uint32_t dgcid,
+	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint32_t rkey,
+	uint16_t dr_iface, const char *rmr_name)
+{
+	struct genz_rmr_info *rmri;
+	int ret;
+
+	rmri = devm_kzalloc(&zdev->dev, sizeof(*rmri), GFP_KERNEL);
+	if (!rmri)
+		return ERR_PTR(-ENOMEM);
+	ret = genz_rmr_import(uui->mdata, uui->uuid, dgcid, rsp_zaddr, len,
+			      access, rkey, dr_iface, rmr_name, rmri);
+	if (ret < 0)
+		return ERR_PTR(ret);
+	ret = devm_add_action_or_reset(&zdev->dev, devm_genz_rmr_import_release,
+				       rmri);
+	if (ret < 0)
+		return ERR_PTR(ret);
+	return rmri;
+}
+EXPORT_SYMBOL(devm_genz_rmr_import);
+
+void devm_genz_rmr_free(struct genz_dev *zdev, struct genz_rmr_info *rmri)
+{
+	devm_release_action(&zdev->dev, devm_genz_rmr_import_release, rmri);
+}
+EXPORT_SYMBOL(devm_genz_rmr_free);

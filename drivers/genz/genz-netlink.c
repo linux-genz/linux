@@ -64,6 +64,7 @@ const static struct nla_policy genz_genl_uuid_list_policy[GENZ_A_UL_MAX + 1] = {
 const static struct nla_policy genz_genl_resource_policy[GENZ_A_U_MAX + 1] = {
 	[GENZ_A_U_CLASS_UUID] = { .len = UUID_LEN },
 	[GENZ_A_U_INSTANCE_UUID] = { .len = UUID_LEN },
+	[GENZ_A_U_FLAGS] = { .type = NLA_U64 },
 	/* Revisit: add serial number? */
 	[GENZ_A_U_CLASS] = { .type = NLA_U16 },
 	[GENZ_A_U_MRL] = { .type = NLA_NESTED },
@@ -294,6 +295,10 @@ static int parse_resource_list(const struct nlattr *resource_list,
 				      nla_data(u_attrs[GENZ_A_U_INSTANCE_UUID]));
 			pr_debug("\t\tINSTANCE_UUID: %pUb\n",
 				 &zdev->instance_uuid);
+		}
+		if (u_attrs[GENZ_A_U_FLAGS]) {
+			zdev->driver_flags = nla_get_u64(u_attrs[GENZ_A_U_FLAGS]);
+			pr_debug("\t\tFLAGS: 0x%llx\n", zdev->driver_flags);
 		}
 		if (u_attrs[GENZ_A_U_CLASS]) {
 			int condensed_class;
