@@ -1921,6 +1921,9 @@ static int traverse_control_pointers(struct genz_bridge_dev *zbdev,
 					zbdev, rmri, parent, &sibling, dir,
 					csp_entry, num_ptrs);
 			} else {
+				/* Revisit: special case for Route Control Table
+				 * symlink for 2nd reference (CompDest/Switch)
+				 */
 				ret = traverse_table(zbdev, rmri, parent,
 						     &sibling, dir, csp_entry);
 			}
@@ -1998,6 +2001,29 @@ int genz_control_read_structure(struct genz_bridge_dev *zbdev,
 		zbdev, cs_offset+field_offset, field_size, buf, rmri, 0);
 	if (ret)
 		pr_debug("genz_control_read failed with %d\n", ret);
+
+	return ret;
+}
+
+int genz_control_write_structure(struct genz_bridge_dev *zbdev,
+		struct genz_rmr_info *rmri,
+		void *buf, off_t cs_offset,
+		off_t field_offset, size_t field_size)
+{
+	int ret;
+
+	if (buf == NULL) {
+		pr_debug("buf is NULL\n");
+		return -EINVAL;
+	}
+	if (field_size == 0) {
+		pr_debug("field_size is 0\n");
+		return -EINVAL;
+	}
+	ret = genz_control_write(
+		zbdev, cs_offset+field_offset, field_size, buf, rmri, 0);
+	if (ret)
+		pr_debug("genz_control_write failed with %d\n", ret);
 
 	return ret;
 }
@@ -2101,6 +2127,32 @@ int genz_control_read_mgr_uuid(struct genz_bridge_dev *zbdev,
 	if (ret == 0)
 		ret = abs(genz_uuid_cmp(mgr_uuid, &zero_uuid));
 	pr_debug("%pUb, ret=%d\n", mgr_uuid, ret);
+	return ret;
+}
+
+int genz_control_read_c_control(struct genz_bridge_dev *zbdev,
+				struct genz_rmr_info *rmri, uint64_t *c_control)
+{
+	int ret;
+
+	ret = genz_control_read_structure(zbdev, rmri, c_control, 0,
+			offsetof(struct genz_core_structure, c_control),
+			sizeof(*c_control));
+	pr_debug("offset=0x%lx, c_control=0x%llx\n",
+		 offsetof(struct genz_core_structure, c_control), *c_control);
+	return ret;
+}
+
+int genz_control_write_c_control(struct genz_bridge_dev *zbdev,
+				 struct genz_rmr_info *rmri, uint64_t c_control)
+{
+	int ret;
+
+	ret = genz_control_write_structure(zbdev, rmri, &c_control, 0,
+			offsetof(struct genz_core_structure, c_control),
+			sizeof(c_control));
+	pr_debug("offset=0x%lx, c_control=0x%llx\n",
+		 offsetof(struct genz_core_structure, c_control), c_control);
 	return ret;
 }
 
