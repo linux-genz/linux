@@ -75,7 +75,7 @@ struct genz_dev {
 	struct list_head	zres_list;  /* head of zres list */
 	struct list_head	uu_node;   /* list of zdevs with same UUID */
 	struct genz_control_info *root_control_info;
-	struct kobject		*root_kobj; /* kobj for /sys/devices/genz<N> */
+	struct kobject		root_kobj; /* kobj for control space */
 	struct genz_driver	*zdrv;
 	struct genz_bridge_dev	*zbdev;
 	struct genz_component	*zcomp;     /* parent component */
@@ -84,6 +84,7 @@ struct genz_dev {
 };
 #define to_genz_dev(n) container_of(n, struct genz_dev, dev)
 #define kobj_to_genz_dev(n) to_genz_dev(kobj_to_dev(n))
+#define root_kobj_to_genz_dev(n) container_of(n, struct genz_dev, root_kobj)
 
 struct genz_driver {
 	const char			*name;
