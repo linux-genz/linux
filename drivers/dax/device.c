@@ -398,6 +398,7 @@ int dev_dax_probe(struct dev_dax *dev_dax)
 	void *addr;
 	int rc, i;
 
+	dev_dbg(dev, "entered\n");
 	pgmap = dev_dax->pgmap;
 	if (dev_WARN_ONCE(dev, pgmap && dev_dax->nr_range > 1,
 			"static pgmap / multi-range device conflict\n"))
@@ -443,11 +444,13 @@ int dev_dax_probe(struct dev_dax *dev_dax)
 	if (rc)
 		return rc;
 
+	dev_dbg(dev, "cdev_add() success\n");
 	rc = devm_add_action_or_reset(dev, dev_dax_cdev_del, cdev);
 	if (rc)
 		return rc;
 
 	run_dax(dax_dev);
+	dev_dbg(dev, "after run_dax()\n");
 	return devm_add_action_or_reset(dev, dev_dax_kill, dev_dax);
 }
 EXPORT_SYMBOL_GPL(dev_dax_probe);

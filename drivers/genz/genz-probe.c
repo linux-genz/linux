@@ -707,10 +707,13 @@ int genz_init_comp(struct genz_comp *zcomp,
 
 	zcomp->subnet = s;
 	zcomp->cid = cid;
-	kobject_init(&zcomp->kobj, &genz_comp_ktype);
-	if (add_kobj) {
-		ret = kobject_add(&zcomp->kobj, &s->kobj,
-				  "%u:%04x:%03x", f->number, s->sid, cid);
+	if (add_kobj && !zcomp->add_kobj) {
+		ret = kobject_init_and_add(&zcomp->kobj, &genz_comp_ktype,
+			 &s->kobj, "%u:%04x:%03x", f->number, s->sid, cid);
+		if (ret == 0)
+			zcomp->add_kobj = true;  /* Revisit: locking */
+		else
+			kobject_put(&zcomp->kobj);
 	}
 	return ret;
 }
@@ -789,7 +792,7 @@ struct genz_os_comp *genz_lookup_os_comp(struct genz_os_subnet *s,
 }
 
 struct genz_comp *genz_add_comp(struct genz_subnet *s,
-				uint32_t cid)
+				uint32_t cid, bool add_kobj)
 {
 	struct genz_comp *found = NULL;
 	int ret = 0;
@@ -804,9 +807,9 @@ struct genz_comp *genz_add_comp(struct genz_subnet *s,
 			pr_debug("alloc_comp failed\n");
 			return found;
 		}
-		ret = genz_init_comp(found, s, cid, true);
+		ret = genz_init_comp(found, s, cid, add_kobj);
 		if (ret) {
-			pr_debug("init_comp failed\n");
+			pr_debug("genz_init_comp failed, ret=%d\n", ret);
 			return NULL;
 		}
 		/* Revisit: make sure this has not already been added. */
@@ -814,6 +817,13 @@ struct genz_comp *genz_add_comp(struct genz_subnet *s,
 		list_add_tail(&found->fab_comp_node, &s->fabric->components);
 		spin_unlock_irqrestore(&s->fabric->components_lock, flags);
 		pr_debug("added component %px to the component list\n", found);
+	} else {
+		if (add_kobj && !found->add_kobj) {
+			ret = genz_init_comp(found, s, cid, add_kobj);
+			if (ret) {
+				pr_debug("genz_init_comp failed, ret=%d\n", ret);
+			}
+		}
 	}
 	return found;
 }
@@ -846,6 +856,17 @@ struct genz_os_comp *genz_add_os_comp(struct genz_os_subnet *s,
 		pr_debug("added component %px to the os_comp list\n", found);
 	}
 	return found;
+}
+
+struct genz_comp *genz_lookup_gcid(struct genz_fabric *f, uint32_t gcid)
+{
+	struct genz_subnet *s;
+	struct genz_comp   *c = NULL;
+
+	s = genz_lookup_subnet(genz_gcid_sid(gcid), f);
+	if (s != NULL)
+		c = genz_lookup_comp(s, genz_gcid_cid(gcid));
+	return c;
 }
 
 /**
