@@ -561,6 +561,10 @@ enum genz_control_flag {
 	GENZ_CONTROL_MSG_IV         = 0x80
 };
 
+enum genz_data_flag {
+	GENZ_DATA_FLUSH             = 0x01,
+};
+
 enum uuid_type {
 	UUID_TYPE_LOCAL    = 0x1,
 	UUID_TYPE_REMOTE   = 0x2,
