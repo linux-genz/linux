@@ -428,22 +428,21 @@ struct genz_umem *genz_umem_get(struct genz_mem_data *mdata, uint64_t vaddr,
 		return ERR_PTR(-ENOMEM);
 	}
 
-	umem->pte_info    = info;
-	umem->mdata       = mdata;
-	info->bridge      = mdata->bridge;
-	umem->vaddr       = vaddr;
-	info->addr        = vaddr;
-	umem->size        = size;
-	info->length      = size;
-	info->access      = USER_ACCESS(access) | GENZ_MR_RSP;
-	info->space_type  = GENZ_DATA;  /* the only supported type */
-	info->pasid       = pasid;
-	info->rsp.ro_rkey = ro_rkey;
-	info->rsp.rw_rkey = rw_rkey;
-	umem->page_shift  = PAGE_SHIFT;
-	umem->writable    = !!(access & (GENZ_MR_GET|GENZ_MR_PUT_REMOTE));
+	umem->pte_info        = info;
+	umem->mdata           = mdata;
+	info->bridge          = mdata->bridge;
+	umem->vaddr           = vaddr;
+	info->addr            = vaddr;
+	umem->size            = size;
+	info->length          = size;
+	info->access          = USER_ACCESS(access) | GENZ_MR_RSP;
+	info->pte.rsp.pasid   = pasid;
+	info->pte.rsp.ro_rkey = ro_rkey;
+	info->pte.rsp.rw_rkey = rw_rkey;
+	umem->page_shift      = PAGE_SHIFT;
+	umem->writable        = !!(access & (GENZ_MR_GET|GENZ_MR_PUT_REMOTE));
 	/* We assume the memory is from hugetlb until proven otherwise */
-	umem->hugetlb     = 1;
+	umem->hugetlb         = 1;
 	kref_init(&umem->refcount);
 	kref_init(&info->refcount);
 
@@ -545,7 +544,7 @@ static inline int rmr_cmp(uint32_t dgcid, uint64_t rsp_zaddr,
 	int cmp;
 	const struct genz_pte_info *info = r->pte_info;
 
-	cmp = arithcmp(dgcid, info->req.dgcid);
+	cmp = arithcmp(dgcid, info->pte.req.dgcid);
 	if (cmp)
 		return cmp;
 	cmp = arithcmp(rsp_zaddr, r->rsp_zaddr);
@@ -630,7 +629,7 @@ static struct genz_rmr *rmr_insert(struct genz_rmr *rmr)
 	while (*new) {
 		struct genz_rmr *this =
 			container_of(*new, struct genz_rmr, md_node);
-		int64_t result = rmr_cmp(info->req.dgcid, rmr->rsp_zaddr,
+		int64_t result = rmr_cmp(info->pte.req.dgcid, rmr->rsp_zaddr,
 					 info->length, info->access, this);
 
 		parent = *new;
@@ -726,7 +725,7 @@ void genz_rmr_remove_unode(struct genz_mem_data *mdata, struct uuid_node *unode)
 		info = rmr->pte_info;
 		pr_debug("dgcid=%s, rsp_zaddr=0x%016llx, "
 			 "len=0x%zx, access=0x%llx\n",
-			 genz_gcid_str(info->req.dgcid, str, sizeof(str)),
+			 genz_gcid_str(info->pte.req.dgcid, str, sizeof(str)),
 			 rmr->rsp_zaddr, info->length, info->access);
 		next = rb_next_postorder(rb);  /* must precede rmr_free() */
 		rmr->fd_erase = true;
@@ -752,7 +751,7 @@ void genz_rmr_free_all(struct genz_mem_data *mdata)
 		info = rmr->pte_info;
 		pr_debug("dgcid = %s, rsp_zaddr = 0x%016llx, "
 			 "len = 0x%zx, access = 0x%llx\n",
-			 genz_gcid_str(info->req.dgcid, str, sizeof(str)),
+			 genz_gcid_str(info->pte.req.dgcid, str, sizeof(str)),
 			 rmr->rsp_zaddr, info->length, info->access);
 		next = rb_next_postorder(rb);  /* must precede rmr_free() */
 		rmr->fd_erase = false;
@@ -769,18 +768,20 @@ EXPORT_SYMBOL(genz_rmr_free_all);
 struct genz_rmr *genz_rmr_get(
 	struct genz_mem_data *mdata, uuid_t *uuid, uint32_t dgcid,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint pasid,
-	uint32_t rkey, struct genz_rmr_info *rmri)
+	uint32_t rkey, uint16_t dr_iface, struct genz_rmr_info *rmri)
 {
 	struct genz_rmr         *rmr, *found;
 	struct genz_pte_info    *info;
 	struct uuid_node        *unode;
 	struct uuid_tracker     *uu;
-	bool                    writable, indiv_rkeys;
+	bool                    writable, indiv_rkeys, control, dr;
 	int                     ret = 0;
 	char                    gcstr[GCID_STRING_LEN+1];
 
 	writable = !!(access & GENZ_MR_PUT_REMOTE);
 	indiv_rkeys = !!(access & GENZ_MR_INDIV_RKEYS);
+	control = !!(access & GENZ_MR_CONTROL);
+	dr = control && (dr_iface != GENZ_DR_IFACE_NONE);
 	rmr = kzalloc(sizeof(*rmr), GFP_KERNEL);
 	if (!rmr) {
 		ret = -ENOMEM;
@@ -804,26 +805,39 @@ struct genz_rmr *genz_rmr_get(
 	uu = unode->tracker;
 	if (!indiv_rkeys && uu->remote->rkeys_valid)
 		rkey = (writable) ? uu->remote->rw_rkey : uu->remote->ro_rkey;
-	rmr->mdata       = mdata;
-	rmr->pte_info    = info;
-	rmr->rsp_zaddr   = rsp_zaddr;
-	rmr->uu          = uu;
-	rmr->unode       = unode;
-	rmr->writable    = writable;
+	rmr->mdata          = mdata;
+	rmr->pte_info       = info;
+	rmr->rsp_zaddr      = rsp_zaddr;
+	rmr->uu             = uu;
+	rmr->unode          = unode;
+	rmr->writable       = writable;
 	kref_init(&rmr->refcount);
 	kref_init(&info->refcount);
-	info->bridge     = mdata->bridge;
-	info->addr       = rsp_zaddr;
-	info->access     = USER_ACCESS(access) | GENZ_MR_REQ;
-	info->length     = len;
-	info->space_type = GENZ_DATA;  /* Revisit: add CONTROL */
-	info->pasid      = pasid;
-	info->req.rkey   = rkey;
-	info->req.dgcid  = dgcid;
+	info->bridge        = mdata->bridge;
+	info->addr          = rsp_zaddr;
+	info->access        = USER_ACCESS(access) | GENZ_MR_REQ;
+	info->length        = len;
+	info->pte.req.st    = (control) ? GENZ_CONTROL : GENZ_DATA;
+	if (control) {
+		info->pte.req.pec = 1;
+		info->pte.req.control.addr = rsp_zaddr;
+		info->pte.req.drc = dr;
+		if (dr)
+			info->pte.req.control.dr_iface = dr_iface;
+	} else {
+		info->pte.req.data.addr = rsp_zaddr;
+	}
+	info->pte.req.pasid      = pasid;
+	info->pte.req.rkey       = rkey;
+	info->pte.req.dgcid      = dgcid;
+	info->pte.req.d_attr     = GENZ_DA_UNICAST;  /* Revisit: others */
+	info->pte.req.write_mode = GENZ_WM_LATE_ACK; /* Revisit: others */
+	/* Revisit: pp, cce, ce, wpe, pse, pfme, lpe, nse, tc */
+	info->pte.req.v = 1;
 	pr_debug("rmr: info=%p, addr=0x%llx, dgcid=%s, rkey=0x%x, uu=%p\n",
 		 info, info->addr,
-		 genz_gcid_str(info->req.dgcid, gcstr, sizeof(gcstr)),
-		 info->req.rkey, rmr->uu);
+		 genz_gcid_str(info->pte.req.dgcid, gcstr, sizeof(gcstr)),
+		 info->pte.req.rkey, rmr->uu);
 
 	found = rmr_insert(rmr);
 	if (found != rmr) {
@@ -904,13 +918,15 @@ EXPORT_SYMBOL(genz_mr_reg);
 int genz_rmr_import(
 	struct genz_mem_data *mdata, uuid_t *uuid, uint32_t dgcid,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint32_t rkey,
-	const char *rmr_name, struct genz_rmr_info *rmri)
+	uint16_t dr_iface, const char *rmr_name, struct genz_rmr_info *rmri)
 {
 	struct genz_bridge_dev  *br = mdata->bridge;
 	struct genz_bridge_info *br_info = &br->br_info;
 	int                     status = 0;
 	struct genz_rmr         *rmr;
 	bool                    remote, cpu_visible, writable, individual, kmap;
+	bool                    control;
+	ulong                   mflags;
 	uint64_t cpuvisible_offset = br_info->cpuvisible_phys_offset;
 
 	rmri->rsp_zaddr = rsp_zaddr;
@@ -920,19 +936,21 @@ int genz_rmr_import(
 	rmri->req_addr = GENZ_BASE_ADDR_ERROR;
 	rmri->cpu_addr = NULL;
 	rmri->pg_ps = 0;
-	rmri->dr_iface = GENZ_DR_IFACE_NONE;  /* Revisit */
+	rmri->dr_iface = dr_iface;
 	remote = !!(access & (GENZ_MR_GET_REMOTE|GENZ_MR_PUT_REMOTE));
 	writable = !!(access & GENZ_MR_PUT_REMOTE);
 	cpu_visible = !!(access & GENZ_MR_REQ_CPU);
 	individual = !!(access & GENZ_MR_INDIVIDUAL);
 	kmap = !!(access & GENZ_MR_KERN_MAP);
+	control = !!(access & GENZ_MR_CONTROL);
+	mflags = (control) ? MEMREMAP_WC : MEMREMAP_WB; /* Revisit: WC ok? */
 
 	pr_debug("uuid=%pUb, rsp_zaddr=0x%016llx, "
-		 "len=0x%llx, access=0x%llx, rkey=0x%x, "
+		 "len=0x%llx, access=0x%llx, rkey=0x%x, dr_iface=%u, "
 		 "remote=%u, writable=%u, cpu_visible=%u, individual=%u, "
-		 "kmap=%u\n",
-		 uuid, rsp_zaddr, len, access, rkey, remote, writable,
-		 cpu_visible, individual, kmap);
+		 "kmap=%u, control=%u\n",
+		 uuid, rsp_zaddr, len, access, rkey, dr_iface, remote, writable,
+		 cpu_visible, individual, kmap, control);
 
 	if (!remote || !individual || /* Revisit: allow !individual */
 	    (genz_gcid_is_local(mdata->bridge, dgcid) && !br_info->loopback)) {
@@ -941,7 +959,7 @@ int genz_rmr_import(
 	}
 
 	rmr = genz_rmr_get(mdata, uuid, dgcid, rsp_zaddr, len, access,
-			   NO_PASID, rkey, rmri);
+			   NO_PASID, rkey, dr_iface, rmri);
 	if (IS_ERR(rmr)) {
 		status = PTR_ERR(rmr);
 		goto out;
@@ -960,7 +978,7 @@ int genz_rmr_import(
 	if (cpu_visible) {
 		if (kmap)
 			rmri->cpu_addr = memremap(PFN_PHYS(rmr->mmap_pfn),
-						  len, MEMREMAP_WB);
+						  len, mflags);
 		rmri->res.start = PFN_PHYS(rmr->mmap_pfn);
 		rmri->res.end = rmri->res.start + rmri->len - 1;
 		rmri->res.flags = IORESOURCE_MEM;
