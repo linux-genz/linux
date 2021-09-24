@@ -1294,26 +1294,74 @@ static struct genz_control_info *alloc_control_info(
 	return ci;
 }
 
-static struct genz_mem_data *alloc_mdata(struct genz_bridge_dev *zbdev)
+static struct genz_mem_data *alloc_mdata(struct genz_bridge_dev *zbdev,
+					 uuid_t *mgr_uuid)
 {
 	struct genz_mem_data     *mdata;
+	struct uuid_tracker      *uu;
+	struct uuid_node         *md_node;
+	int                      ret;
+	bool                     local;
 	ulong                    flags;
 
-	mdata = kzalloc(sizeof(*mdata), GFP_KERNEL);
-	if (!mdata) {
-		pr_debug("failed to allocate genz_mem_data\n");
-		return NULL;
-	}
-	genz_init_mem_data(mdata, zbdev);
 	spin_lock_irqsave(&zbdev->zmmu_lock, flags);
 	if (zbdev->control_mdata == NULL) {
+		mdata = kzalloc(sizeof(*mdata), GFP_ATOMIC);
+		if (!mdata) {
+			pr_debug("failed to allocate genz_mem_data\n");
+			goto unlock;
+		}
+		genz_init_mem_data(mdata, zbdev);
 		zbdev->control_mdata = mdata;
+		/* Need mgr_uuid REMOTE tracker to do rmr_imports against
+		 * and LOCAL tracker for mdata */
+		uu = genz_uuid_tracker_alloc_and_insert(
+			mgr_uuid, UUID_TYPE_LOOPBACK, 0, mdata, GFP_ATOMIC, &ret);
+		if (!uu) {
+			pr_debug("genz_uuid_tracker_alloc_and_insert error ret=%d\n", ret);
+			goto err_uu;
+		}
+		/* we now hold a reference to uu */
+		mdata->local_uuid = uu;
+		/* add uu to mdata->md_remote_uuid_tree */
+		md_node = genz_remote_uuid_alloc_and_insert(
+			uu, &mdata->uuid_lock, &mdata->md_remote_uuid_tree,
+			GFP_ATOMIC, &ret);
+		if (ret == -EEXIST) {
+			pr_debug("mgr_uuid %pUb already exists\n", mgr_uuid);
+		} else if (ret < 0) {
+			pr_debug("genz_remote_uuid_alloc_and_insert error ret=%d\n", ret);
+			goto err_md;
+		}
 	} else {
-		kfree(mdata);
 		mdata = zbdev->control_mdata;
 	}
+
+unlock:
 	spin_unlock_irqrestore(&zbdev->zmmu_lock, flags);
 	return mdata;
+err_md:
+	genz_free_local_or_remote_uuid(mdata, mgr_uuid, uu, &local);
+	mdata->local_uuid = NULL;
+err_uu:
+	kfree(mdata);
+	zbdev->control_mdata = mdata = NULL;
+	goto unlock;
+}
+
+static void remove_mdata(struct genz_bridge_dev *zbdev)
+{
+	struct genz_mem_data *mdata = zbdev->control_mdata;
+	uuid_t *mgr_uuid = &mdata->local_uuid->uuid;
+	bool local;
+
+	genz_free_uuid_node(mdata, &mdata->uuid_lock,
+			    &mdata->md_remote_uuid_tree, mgr_uuid, false);
+	genz_free_local_or_remote_uuid(mdata, mgr_uuid,
+				       mdata->local_uuid, &local);
+	/* Revisit: this is wrong - mdata needs reference counting */
+	kfree(mdata);
+	zbdev->control_mdata = NULL;
 }
 
 static int genz_control_create_bin_file(struct genz_control_info *ci,
@@ -1777,7 +1825,7 @@ static int traverse_structure(struct genz_bridge_dev *zbdev,
 	ret = kobject_init_and_add(&ci->kobj, &control_info_ktype, struct_dir,
 			"%s@0x%lx", genz_structure_name(hdr.type), ci->start);
 	if (ret < 0) {
-		pr_debug("kobject_add failed with %d\n", ret);
+		pr_debug("kobject_init_and_add failed with %d\n", ret);
 		kobject_put(&ci->kobj);
 		return ret;
 	}
@@ -2138,49 +2186,36 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 				 struct genz_comp *dr_comp,
 				 uint16_t dr_iface, uuid_t *mgr_uuid)
 {
-	uint32_t                 gcid = genz_comp_gcid(f_comp);
+	uint32_t                 gcid;
 	struct kobject           *dr_dir, *iface_dir;
 	struct genz_rmr_info     *dr_rmri;
 	struct genz_mem_data     *mdata;
-	struct uuid_tracker      *uu;
-	struct uuid_node         *md_node;
 	uint64_t                 access;
 	uint32_t                 rkey;
 	int                      ret;
+	bool                     br_is_dr;
 
-	mdata = alloc_mdata(zbdev);
+	mdata = alloc_mdata(zbdev, mgr_uuid);
 	if (!mdata) {
 		pr_debug("failed to allocate genz_mem_data\n");
 		return -ENOMEM;
 	}
+	br_is_dr = (dr_comp == &zbdev->zdev.zcomp->comp);
+	gcid = genz_comp_gcid((br_is_dr) ? f_comp : dr_comp);
 	dr_dir = &f_comp->ctl_kobj;
 	dr_rmri = &f_comp->ctl_rmr_info;
 	iface_dir = genz_comp_iface_dir(dr_comp, dr_iface);
 	if (!iface_dir) {
 		pr_debug("dr_iface %u not found\n", dr_iface);
 		ret = -EINVAL;
-		goto err_list;
+		goto err_mdata;
 	}
 	/* Make the dr directory under interfaceN of the relaying component */
 	ret = kobject_init_and_add(dr_dir, &control_dir_ktype, iface_dir, "dr");
 	if (ret < 0) {
 		pr_debug("unable to create dr directory\n");
-		goto err_list;
-	}
-
-	/* Need mgr_uuid REMOTE tracker to do rmr_imports against */
-	uu = genz_uuid_tracker_alloc_and_insert(
-		mgr_uuid, UUID_TYPE_REMOTE,
-		0, mdata, GFP_KERNEL, &ret);
-	if (!uu)
 		goto err_kobj;
-	/* we now hold a reference to uu */
-	/* add uu to mdata->md_remote_uuid_tree */
-	md_node = genz_remote_uuid_alloc_and_insert(uu, &mdata->uuid_lock,
-					    &mdata->md_remote_uuid_tree,
-					    GFP_KERNEL, &ret);
-	if (ret < 0)
-		goto err_uu;
+	}
 
 	access = GENZ_MR_READ_REMOTE|GENZ_MR_WRITE_REMOTE|
 		 GENZ_MR_INDIVIDUAL|GENZ_MR_CONTROL;
@@ -2193,7 +2228,7 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 			      access, rkey, dr_iface, "control", dr_rmri);
 	if (ret < 0) {
 		pr_debug("genz_rmr_import error ret=%d\n", ret);
-		goto err_md_node;
+		goto err_kobj;
 	}
 	pr_debug("calling start_core_structure\n");
 	ret = start_core_structure(zbdev, dr_rmri,
@@ -2202,19 +2237,16 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 			dr_dir);
 	if (ret < 0) {
 		pr_debug("start_core_structure error ret=%d\n", ret);
-		goto err_md_node;
+		goto err_rmr;
 	}
 	return 0;
 
-err_md_node:
-	genz_free_uuid_node(mdata, &mdata->uuid_lock,
-			    &mdata->md_remote_uuid_tree, mgr_uuid, false);
-err_uu:
-	genz_uuid_remove(uu);
+err_rmr:
+	genz_rmr_free(dr_rmri);
 err_kobj:
-	/* Revisit: error handling */
-err_list:
-	kfree(mdata);
+	kobject_put(dr_dir);
+err_mdata:
+	remove_mdata(zbdev);
 	return ret;
 }
 
@@ -2256,14 +2288,12 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 	uint32_t                 gcid = genz_comp_gcid(f_comp);
 	struct genz_rmr_info     *rmri;
 	struct genz_mem_data     *mdata;
-	struct uuid_tracker      *uu;
-	struct uuid_node         *md_node;
 	uint64_t                 access;
 	uint32_t                 rkey;
 	int                      ret;
 
 	rmri = &f_comp->ctl_rmr_info;
-	mdata = alloc_mdata(zbdev);
+	mdata = alloc_mdata(zbdev, mgr_uuid);
 	if (!mdata) {
 		pr_debug("failed to allocate genz_mem_data\n");
 		return -ENOMEM;
@@ -2272,26 +2302,25 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 		/* we already have (dr) control space - move/update it */
 		ret = kobject_move(&f_comp->ctl_kobj, &f_comp->kobj);
 		if (ret < 0) {
-			/* Revisit: error handling */
-			return ret;
+			pr_debug("genz_kobject_move error ret=%d\n", ret);
+			goto err_mdata;
 		}
 		ret = kobject_rename(&f_comp->ctl_kobj, "control");
 		if (ret < 0) {
-			/* Revisit: error handling */
-			return ret;
+			pr_debug("genz_kobject_rename error ret=%d\n", ret);
+			goto err_mdata;
 		}
-		/* update rmr with GENZ_DR_IFACE_NONE */
-		ret = genz_rmr_update(rmri->zres.rw_rkey,
-				      GENZ_DR_IFACE_NONE, rmri);
+		/* update rmr to disable DR */
+		ret = genz_rmr_change_dr(&zbdev->fabric->mgr_uuid, gcid,
+					 GENZ_DR_IFACE_NONE, rmri);
 		if (ret < 0) {
-			/* Revisit: error handling */
-			pr_debug("genz_rmr_update error ret=%d\n", ret);
-			return ret;
+			pr_debug("genz_rmr_change_dr error ret=%d\n", ret);
+			goto err_mdata;
 		}
 		ret = genz_comp_read_attrs(zbdev, rmri, f_comp);
 		if (ret < 0) {
 			pr_debug("genz_comp_read_attrs error ret=%d\n", ret);
-			return ret;
+			goto err_mdata;
 		}
 		ret = genz_create_fab_files(&f_comp->kobj);
 		return ret;
@@ -2301,22 +2330,8 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 				   &f_comp->kobj, "control");
 	if (ret < 0) {
 		pr_debug("unable to create control directory\n");
-		goto err_list;
+		goto err_mdata;
 	}
-
-	/* Need mgr_uuid REMOTE tracker to do rmr_imports against */
-	uu = genz_uuid_tracker_alloc_and_insert(
-		mgr_uuid, UUID_TYPE_REMOTE,
-		0, mdata, GFP_KERNEL, &ret);
-	if (!uu)
-		goto err_kobj;
-	/* we now hold a reference to uu */
-	/* add uu to mdata->md_remote_uuid_tree */
-	md_node = genz_remote_uuid_alloc_and_insert(uu, &mdata->uuid_lock,
-					    &mdata->md_remote_uuid_tree,
-					    GFP_KERNEL, &ret);
-	if (ret < 0)
-		goto err_uu;
 
 	access = GENZ_MR_READ_REMOTE|GENZ_MR_WRITE_REMOTE|
 		 GENZ_MR_INDIVIDUAL|GENZ_MR_CONTROL;
@@ -2329,7 +2344,7 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 			      access, rkey, dr_iface, "control", rmri);
 	if (ret < 0) {
 		pr_debug("genz_rmr_import error ret=%d\n", ret);
-		goto err_md_node;
+		goto err_kobj;
 	}
 	ret = genz_comp_read_attrs(zbdev, rmri, f_comp);
 	if (ret < 0) {
@@ -2356,15 +2371,10 @@ err_fab_files:
 	genz_remove_fab_files(&f_comp->kobj);
 err_rmr:
 	genz_rmr_free(rmri);
-err_md_node:
-	genz_free_uuid_node(mdata, &mdata->uuid_lock,
-			    &mdata->md_remote_uuid_tree, mgr_uuid, false);
-err_uu:
-	genz_uuid_remove(uu);
 err_kobj:
-	/* Revisit: error handling */
-err_list:
-	kfree(mdata);
+	kobject_put(&f_comp->ctl_kobj);
+err_mdata:
+	remove_mdata(zbdev);
 	return ret;
 }
 
