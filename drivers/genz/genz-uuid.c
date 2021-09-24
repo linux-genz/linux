@@ -450,6 +450,7 @@ int genz_free_local_or_remote_uuid(struct genz_mem_data *mdata, uuid_t *uuid,
 	ulong  flags;
 
 	spin_lock_irqsave(&mdata->uuid_lock, flags);
+	/* Revisit: this does not handle LOOPBACK: LOCAL && REMOTE */
 	*local = (uu == mdata->local_uuid);
 	if (*local) {
 		status = genz_free_local_uuid(mdata, false);
@@ -860,14 +861,22 @@ struct genz_uuid_info *devm_genz_uuid_import(struct genz_dev *zdev, uuid_t *uuid
 	struct device         *dev = &zdev->dev;
 	struct genz_uuid_info *uui;
 	struct genz_mem_data  *mdata;
+	struct uuid_tracker   *uu;
 	int                   ret;
 
 	mdata = devm_kzalloc(dev, sizeof(*mdata), alloc_flags);
 	if (!mdata)
 		return ERR_PTR(-ENOMEM);
+	genz_init_mem_data(mdata, zdev->zbdev);
 	uui = devm_kzalloc(dev, sizeof(*uui), alloc_flags);
 	if (!uui)
 		return ERR_PTR(-ENOMEM);
+	genz_generate_uuid(zdev->zbdev, &uui->loc_uuid);
+	uu = genz_uuid_tracker_alloc_and_insert(
+		&uui->loc_uuid, UUID_TYPE_LOCAL, 0, mdata, GFP_KERNEL, &ret);
+	if (!uu)
+		return ERR_PTR(ret);
+	mdata->local_uuid = uu;
 	uui->mdata = mdata;
 	uui->uuid = uuid;  /* Revisit: is ptr ok, or do we need uuid copy? */
 	uui->uu_flags = uu_flags;
