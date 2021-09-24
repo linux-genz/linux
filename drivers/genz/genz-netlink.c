@@ -97,6 +97,15 @@ const static struct nla_policy genz_genl_fab_comp_policy[GENZ_A_FC_MAX + 1] = {
 	[GENZ_A_FC_MGR_UUID]     = { .len = UUID_LEN },
 };
 
+const static struct nla_policy genz_genl_uep_policy[GENZ_A_UEP_MAX + 1] = {
+	[GENZ_A_UEP_FLAGS]       = { .type = NLA_U64 },
+	[GENZ_A_UEP_MGR_UUID]    = { .len = UUID_LEN },
+	[GENZ_A_UEP_BRIDGE_GCID] = { .type = NLA_U32 },
+	[GENZ_A_UEP_TS_SEC]      = { .type = NLA_U64 },
+	[GENZ_A_UEP_TS_NSEC]     = { .type = NLA_U64 },
+	[GENZ_A_UEP_PKT]         = { .len = sizeof(struct genz_uep_pkt) },
+};
+
 static inline int check_netlink_perm(void)
 {
 	if (!capable(CAP_SYS_RAWIO)) {  /* Revisit: best CAP? */
@@ -1027,14 +1036,20 @@ static struct genl_ops genz_gnl_ops[] = {
 	},
 };
 
+static struct genl_multicast_group genz_mcgrps[] = {
+	{ .name = "ueps" },
+};
+
 /* Netlink Generic Family Definition */
-static struct genl_family genz_gnl_family = {
+struct genl_family genz_gnl_family = {
 	.hdrsize = 0,
 	.name = GENZ_FAMILY_NAME,
 	.version = 1,
 	.maxattr = GENZ_A_MAX,
 	.ops = genz_gnl_ops,
-	.n_ops = ARRAY_SIZE(genz_gnl_ops)
+	.n_ops = ARRAY_SIZE(genz_gnl_ops),
+	.mcgrps = genz_mcgrps,
+	.n_mcgrps = ARRAY_SIZE(genz_mcgrps)
 };
 
 

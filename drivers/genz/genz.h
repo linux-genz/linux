@@ -169,6 +169,8 @@ struct genz_comp {
 	struct genz_control_info *root_control_info;
 	struct kobject		kobj;          /* kobj for component */
 	struct kobject		ctl_kobj;      /* kobj for control space */
+	uint16_t                uep_id;        /* last processed UEP EventID */
+	spinlock_t              uep_lock;      /* Revisit: mutex? */
 };
 #define kobj_to_genz_comp(x) container_of(x, struct genz_comp, kobj)
 
@@ -184,6 +186,16 @@ struct genz_os_comp {
 static inline uint32_t genz_comp_gcid(struct genz_comp *zcomp)
 {
 	return genz_gcid(zcomp->subnet->sid, zcomp->cid);
+}
+
+static inline uint32_t genz_br_gcid(struct genz_bridge_dev *zbdev)
+{
+	return genz_comp_gcid(&zbdev->zdev.zcomp->comp);
+}
+
+static inline uuid_t genz_br_mgr_uuid(struct genz_bridge_dev *zbdev)
+{
+	return zbdev->zdev.zcomp->comp.subnet->fabric->mgr_uuid;
 }
 
 struct genz_component_attribute {
