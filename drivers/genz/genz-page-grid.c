@@ -725,7 +725,7 @@ static struct genz_page_grid *zmmu_pg_page_size(struct genz_pte_info *ptei,
 		ps = clamp(ilog2(length_adjusted),
 			   GENZ_PAGE_GRID_MIN_PAGESIZE,
 			   GENZ_PAGE_GRID_MAX_PAGESIZE);
-		/* try to find a page the fits the (adjusted) length */
+		/* try to find a page that fits the (adjusted) length */
 		ps = find_next_bit(
 			(cpu_visible) ? pgi->pg_cpu_visible_ps_bitmap :
 			pgi->pg_non_visible_ps_bitmap, PAGE_GRID_PS_BITS, ps);
@@ -868,7 +868,10 @@ int genz_zmmu_req_pte_alloc(struct genz_pte_info *ptei,
 
 	if (ret < 0) {
 		/* Revisit: deallocate PTE? */
+	  goto out;
 	}
+
+	rmri->access |= GENZ_MR_MAPPED;
 
 out:
 	pr_debug("ret=%d, addr=0x%llx\n", ret, ptei->addr);
