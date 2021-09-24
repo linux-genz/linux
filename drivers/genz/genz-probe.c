@@ -519,6 +519,8 @@ struct genz_component *genz_alloc_component(void)
 		return NULL;
 
 	kref_init(&zcomp->kref);
+	spin_lock_init(&zcomp->dr_lock);
+	INIT_LIST_HEAD(&zcomp->dr_iface_list);
 	return zcomp;
 }
 
