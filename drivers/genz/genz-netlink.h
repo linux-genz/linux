@@ -35,6 +35,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <linux/netlink.h>
+#include <net/genetlink.h>
+
 /* Gen-Z OS Component Structure */
 enum {
 	GENZ_A_UNSPEC,
@@ -45,6 +48,7 @@ enum {
 	GENZ_A_MGR_UUID,
 	GENZ_A_RESOURCE_LIST,
 	__GENZ_A_MAX,
+	GENZ_ATTR_PAD = GENZ_A_UNSPEC,
 };
 #define GENZ_A_MAX (__GENZ_A_MAX - 1)
 
@@ -110,6 +114,19 @@ enum {
 };
 #define GENZ_A_FC_MAX (__GENZ_A_FC_MAX - 1)
 
+/* Gen-Z UEP Structure */
+enum {
+	GENZ_A_UEP_UNSPEC,
+	GENZ_A_UEP_FLAGS,        /* UEP info flags */
+	GENZ_A_UEP_MGR_UUID,     /* MGR_UUID of bridge targeted by UEP */
+	GENZ_A_UEP_BRIDGE_GCID,  /* GCID of bridge targeted by UEP */
+	GENZ_A_UEP_TS_SEC,       /* UEP timestamp seconds */
+	GENZ_A_UEP_TS_NSEC,      /* UEP timestamp nanoseconds */
+	GENZ_A_UEP_PKT,          /* the complete UEP packet */
+	__GENZ_A_UEP_MAX,
+};
+#define GENZ_A_UEP_MAX (__GENZ_A_UEP_MAX - 1)
+
 #define GENZ_CONTROL_STR_LEN	13  /* controlNNNN */
 #define GENZ_DATA_STR_LEN	10  /* dataNNNN */
 
@@ -125,6 +142,7 @@ enum {
 	GENZ_C_REMOVE_FABRIC,
 	GENZ_C_ADD_FABRIC_DR_COMPONENT,
 	GENZ_C_REMOVE_FABRIC_DR_COMPONENT,
+	GENZ_C_NOTIFY_UEP,
 	__GENZ_C_MAX,
 };
 #define GENZ_C_MAX (__GENZ_C_MAX - 1)
@@ -133,6 +151,8 @@ enum {
 
 #define NLINK_MSG_LEN 1024
 #define GENZ_FAMILY_NAME "genz_cmd"
+
+extern struct genl_family genz_gnl_family;
 
 int genz_nl_init(void);
 void genz_nl_exit(void);

@@ -75,6 +75,10 @@ int genz_control_read_structure(struct genz_bridge_dev *zbdev,
 		struct genz_rmr_info *rmri,
 		void *buf, off_t cs_offset,
 		off_t field_offset, size_t field_size);
+int genz_control_write_structure(struct genz_bridge_dev *zbdev,
+		struct genz_rmr_info *rmri,
+		void *buf, off_t cs_offset,
+		off_t field_offset, size_t field_size);
 void *genz_control_structure_buffer_alloc(
 		enum genz_control_structure_type stype, int flags);
 int genz_control_read_cid0(struct genz_bridge_dev *zbdev,
@@ -91,6 +95,10 @@ int genz_control_read_fru_uuid(struct genz_bridge_dev *zbdev,
 			       struct genz_rmr_info *rmri, uuid_t *fru_uuid);
 int genz_control_read_mgr_uuid(struct genz_bridge_dev *zbdev,
 			       struct genz_rmr_info *rmri, uuid_t *mgr_uuid);
+int genz_control_read_c_control(struct genz_bridge_dev *zbdev,
+				struct genz_rmr_info *rmri, uint64_t *c_control);
+int genz_control_write_c_control(struct genz_bridge_dev *zbdev,
+				 struct genz_rmr_info *rmri, uint64_t c_control);
 struct genz_control_info *genz_first_struct_of_type(
 			    struct genz_control_info *parent, uint type);
 struct genz_control_info *genz_next_struct_of_type(

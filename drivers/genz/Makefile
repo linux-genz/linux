@@ -14,7 +14,8 @@ genz-y := genz-core.o \
 	  genz-uuid.o \
 	  genz-memreg.o \
 	  genz-probe.o \
-	  genz-queue.o
+	  genz-queue.o \
+	  genz-uep.o
 
 obj-$(CONFIG_GENZ)           += genz.o
 obj-$(CONFIG_GENZ_BLK)       += genz-blk.o
