@@ -60,6 +60,10 @@ static char *rsp_page_grid = "4K:448,128T^64,1G:256,2M:256";
 module_param(rsp_page_grid, charp, 0444);
 MODULE_PARM_DESC(rsp_page_grid, "responder page grid allocations - page_sz{^:}page_cnt[, ...]");
 
+uint req_write_mode = GENZ_WM_LATE_ACK;
+module_param(req_write_mode, uint, 0444);
+MODULE_PARM_DESC(req_write_mode, "requester PTE write mode");
+
 struct genz_fabric *genz_temp_fabric = NULL;
 
 /**
