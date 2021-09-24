@@ -1558,7 +1558,8 @@ int wildcat_rdma_user_req_RMR_FREE(struct io_entry *entry)
 	CHECK_INIT_STATE(entry, status, out);
 
 	spin_lock_irqsave(&mdata->md_lock, flags);
-	rmr = genz_rmr_search(mdata, dgcid, rsp_zaddr, len, access, req_addr);
+	rmr = genz_rmr_search(mdata, dgcid, rsp_zaddr, len, GENZ_DR_IFACE_NONE,
+			      access, req_addr);
 	if (!rmr) {
 		status = -EINVAL;
 		goto unlock;

@@ -30,7 +30,7 @@ extern int numa_off;
  * numa_cpu_node().
  */
 extern s16 __apicid_to_node[MAX_LOCAL_APIC];
-extern nodemask_t numa_nodes_parsed __initdata;
+extern nodemask_t numa_nodes_parsed;
 
 extern int __init numa_add_memblk(int nodeid, u64 start, u64 end);
 extern void __init numa_set_distance(int from, int to, int distance);
