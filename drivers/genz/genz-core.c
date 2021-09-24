@@ -45,7 +45,7 @@
 #include "genz-probe.h"
 
 /* Revisit: make these dynamic and per-bridge somehow */
-#define REQ_ZMMU_ENTRIES             (1024)
+#define REQ_ZMMU_ENTRIES             (16*1024)
 #define RSP_ZMMU_ENTRIES             (1024)
 
 static int no_genz;
