@@ -74,8 +74,6 @@ struct genz_dev {
 	uint16_t		class;
 	struct list_head	zres_list;  /* head of zres list */
 	struct list_head	uu_node;   /* list of zdevs with same UUID */
-	struct genz_control_info *root_control_info;
-	struct kobject		root_kobj; /* kobj for control space */
 	struct genz_driver	*zdrv;
 	struct genz_bridge_dev	*zbdev;
 	struct genz_component	*zcomp;     /* parent component */
@@ -84,7 +82,6 @@ struct genz_dev {
 };
 #define to_genz_dev(n) container_of(n, struct genz_dev, dev)
 #define kobj_to_genz_dev(n) to_genz_dev(kobj_to_dev(n))
-#define root_kobj_to_genz_dev(n) container_of(n, struct genz_dev, root_kobj)
 
 struct genz_driver {
 	const char			*name;
@@ -382,16 +379,6 @@ union genz_pte {
 	struct genz_rsp_pte rsp;
 };
 
-struct genz_req_pte_info {
-	uint32_t              dgcid;
-	uint32_t              rkey;
-};
-
-struct genz_rsp_pte_info {
-	uint32_t              ro_rkey;
-	uint32_t              rw_rkey;
-};
-
 struct genz_pte_info {
 	struct genz_bridge_dev *bridge;
 	uint64_t               addr;
@@ -402,13 +389,8 @@ struct genz_pte_info {
 	struct genz_page_grid  *pg;
 	unsigned int           pte_index;
 	unsigned int           zmmu_pages;
-	uint8_t                space_type;
 	bool                   humongous;
-	uint32_t               pasid;
-	union {
-		struct genz_req_pte_info req;
-		struct genz_rsp_pte_info rsp;
-	};
+	union genz_pte         pte;
 	struct rb_node         node;  /* within pgi->pte_tree */
 	struct kref            refcount;
 };
@@ -452,6 +434,7 @@ struct genz_bridge_dev {
 	/* Revisit: add address space */
 	struct kobject		genzN_dir;
 	//struct kset		*genz_control_kset;
+	struct genz_mem_data    *control_mdata;
 };
 #define to_zbdev(d) container_of(d, struct genz_bridge_dev, zdev)
 #define kobj_to_zbdev(kobj) container_of(kobj, struct genz_bridge_dev, genzN_dir)
@@ -517,8 +500,10 @@ static inline uint64_t genz_pg_size(struct genz_page_grid *genz_pg)
 #define GENZ_MR_FLAG1           ((uint32_t)1 << 5)
 #define GENZ_MR_FLAG2           ((uint32_t)1 << 6)
 #define GENZ_MR_FLAG3           ((uint32_t)1 << 7)
-#define GENZ_MR_REQ             ((uint32_t)1 << 16) /* driver internal */
-#define GENZ_MR_RSP             ((uint32_t)1 << 17) /* driver internal */
+#define GENZ_MR_REQ             ((uint32_t)1 << 16) /* subsystem internal */
+#define GENZ_MR_RSP             ((uint32_t)1 << 17) /* subsystem internal */
+#define GENZ_MR_MAPPED          ((uint32_t)1 << 18) /* subsystem internal */
+#define GENZ_MR_CONTROL         ((uint32_t)1 << 25) /* control space */
 #define GENZ_MR_KERN_MAP        ((uint32_t)1 << 26) /* kernel mapping */
 #define GENZ_MR_REQ_CPU         ((uint32_t)1 << 27) /* CPU visible mapping */
 #define GENZ_MR_REQ_CPU_CACHE   ((uint32_t)3 << 28) /* CPU cache mode */
@@ -535,8 +520,25 @@ static inline uint64_t genz_pg_size(struct genz_page_grid *genz_pg)
 #define GENZ_CONTROL_SIZE_UNIT  16 /* control structs are in 16-byte units */
 
 enum space_type {
-	GENZ_DATA    = 0,
-	GENZ_CONTROL = 1
+	GENZ_CONTROL = 0,
+	GENZ_DATA    = 1
+};
+
+enum d_attr {
+	GENZ_DA_INTERLEAVE   = 1,
+	GENZ_DA_UNICAST      = 2,
+	GENZ_DA_MULTICAST_SS = 4,
+	GENZ_DA_MULTICAST_MS = 5
+};
+
+enum write_mode {
+	GENZ_WM_EARLY_ACK   = 0,
+	GENZ_WM_LATE_ACK    = 1,
+	GENZ_WM_LATE_ACK_PU = 2,
+	GENZ_WM_NO_ACK      = 3,
+	GENZ_WM_SOD         = 4,
+	GENZ_WM_INTERRUPT   = 5,
+	GENZ_WM_LATE_ACK_PF = 6
 };
 
 enum genz_control_flag {
@@ -752,26 +754,6 @@ static inline const char *genz_name(const struct genz_dev *zdev)
         return dev_name(&zdev->dev);
 }
 
-static inline int genz_control_read(struct genz_bridge_dev *br, loff_t offset,
-				    size_t size, void *data,
-				    struct genz_rmr_info *rmri, uint flags)
-{
-	/* Revisit: need req ZMMU mapping */
-	if (!br->zbdrv->control_read)  /* control_read is required */
-		return -EINVAL;
-	return br->zbdrv->control_read(br, offset, size, data, rmri, flags);
-}
-
-static inline int genz_control_write(struct genz_bridge_dev *br, loff_t offset,
-				     size_t size, void *data,
-				     struct genz_rmr_info *rmri, uint flags)
-{
-	/* Revisit: need req ZMMU mapping */
-	if (!br->zbdrv->control_write)  /* control_write is required */
-		return -EINVAL;
-	return br->zbdrv->control_write(br, offset, size, data, rmri, flags);
-}
-
 static inline int genz_data_read(struct genz_bridge_dev *br, loff_t offset,
 				 size_t size, void *data,
 				 struct genz_rmr_info *rmri, uint flags)
@@ -850,7 +832,7 @@ struct genz_rmr *genz_rmr_search(
 struct genz_rmr *genz_rmr_get(
 	struct genz_mem_data *mdata, uuid_t *uuid, uint32_t dgcid,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint pasid,
-	uint32_t rkey, struct genz_rmr_info *rmri);
+	uint32_t rkey, uint16_t dr_iface, struct genz_rmr_info *rmri);
 void genz_umem_free_all(struct genz_mem_data *mdata,
                         struct genz_pte_info **humongous_zmmu_rsp_pte);
 struct genz_umem *genz_umem_search(struct genz_mem_data *mdata,
@@ -869,7 +851,7 @@ int genz_mr_reg(struct genz_mem_data *mdata, uint64_t vaddr,
 int genz_rmr_import(
 	struct genz_mem_data *mdata, uuid_t *uuid, uint32_t dgcid,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint32_t rkey,
-	const char *rmr_name, struct genz_rmr_info *rmri);
+	uint16_t dr_iface, const char *rmr_name, struct genz_rmr_info *rmri);
 int genz_rmr_free(struct genz_mem_data *mdata, struct genz_rmr_info *rmri);
 bool genz_gcid_is_local(struct genz_bridge_dev *br, uint32_t gcid);
 int genz_alloc_queues(struct genz_bridge_dev *br,
@@ -883,5 +865,11 @@ int genz_uuid_free(struct genz_mem_data *mdata, uuid_t *uuid,
 		   uint32_t *uu_flags, bool *local);
 bool genz_validate_structure_type(int type);
 bool genz_validate_structure_size(struct genz_control_structure_header *hdr);
+int genz_control_read(struct genz_bridge_dev *br, loff_t offset,
+		      size_t size, void *data,
+		      struct genz_rmr_info *rmri, uint flags);
+int genz_control_write(struct genz_bridge_dev *br, loff_t offset,
+		       size_t size, void *data,
+		       struct genz_rmr_info *rmri, uint flags);
 
 #endif /* LINUX_GENZ_H */
