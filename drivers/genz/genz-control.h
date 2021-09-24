@@ -80,3 +80,7 @@ int genz_control_read_fru_uuid(struct genz_bridge_dev *zbdev,
 			       struct genz_rmr_info *rmri, uuid_t *fru_uuid);
 int genz_control_read_mgr_uuid(struct genz_bridge_dev *zbdev,
 			       struct genz_rmr_info *rmri, uuid_t *mgr_uuid);
+struct genz_control_info *genz_first_struct_of_type(
+			    struct genz_control_info *parent, uint type);
+struct genz_control_info *genz_next_struct_of_type(
+			    struct genz_control_info *prev, uint type);
