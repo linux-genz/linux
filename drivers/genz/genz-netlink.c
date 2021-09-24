@@ -592,6 +592,7 @@ static int parse_fabric_component(struct genl_info *info,
 				  uint *scenario)
 {
 	bool os = false;
+	bool add_kobj;
 	bool valid_dr_iface;
 	int ret = 0;
 
@@ -718,7 +719,7 @@ static int parse_fabric_component(struct genl_info *info,
 		ret = -EINVAL;
 		goto err;
 	}
-	os = (*scenario == 1 || *scenario == 2);
+	os = (*scenario == 1);
 	if (os) {
 		fci->osub = genz_add_os_subnet(genz_gcid_sid(fci->gcid),
 					       fci->f);
@@ -741,8 +742,9 @@ static int parse_fabric_component(struct genl_info *info,
 			ret = -EINVAL;
 			goto err;
 		}
+		add_kobj = (*scenario == 2) || (*scenario == 3);
 		fci->zcomp = genz_add_comp(fci->zsub,
-					   genz_gcid_cid(fci->gcid));
+					   genz_gcid_cid(fci->gcid), add_kobj);
 		if (fci->zcomp == NULL) {
 			pr_debug("genz_add_comp failed\n");
 			ret = -EINVAL;
@@ -751,6 +753,7 @@ static int parse_fabric_component(struct genl_info *info,
 	}
 
 err:
+	pr_debug("scenario=%u, ret=%d\n", *scenario, ret);
 	return ret;
 }
 
@@ -871,7 +874,6 @@ static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *i
 	if (ret < 0)
 		goto err;
 	ret = parse_fabric_component(info, &fci, true, &scenario);
-	/* Revisit: finish this */
 	/* Two scenarios.  See parse_fabric_component() for details.
 	 * 4. A direct-attached component is to be accessed via directed relay
 	 * 5. A switch-attached component is to be accessed via directed relay
@@ -908,8 +910,25 @@ static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *i
 			goto err;
 		}
 	} else if (scenario == 5) {
-		/* Revisit: finish this */
-		pr_debug("scenario 5 - not yet implemented\n");
+		zbdev = genz_lookup_zbdev(fci.f, fci.br_gcid);
+		if (zbdev == NULL) {
+			pr_debug("scenario 5, br_gcid (%d) not found\n",
+				 fci.br_gcid);
+			ret = -EINVAL;
+			goto err;
+		}
+		/* Revisit: refactor this - almost the same as scenario 4 */
+		dr_comp = genz_lookup_gcid(fci.f, fci.dr_gcid);
+		if (!dr_comp) {
+			pr_debug("genz_lookup_gcid failed\n");
+			goto err;
+		}
+		ret = genz_dr_create_control_files(zbdev, fci.zcomp, dr_comp,
+						   fci.dr_iface, &fci.mgr_uuid);
+		if (ret < 0) {
+			pr_debug("genz_dr_create_control_files failed, ret=%d\n", ret);
+			goto err;
+		}
 	} else {
 		pr_debug("invalid combination of GCIDs\n");
 		ret = -EINVAL;
