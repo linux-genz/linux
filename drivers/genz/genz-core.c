@@ -105,9 +105,9 @@ bool genz_validate_structure_type(int type)
 		return false;
 	/*
 	 * If there is a hole in the array, then it has a NULL entry. Make
-	 * sure this type has a valid entry.
+	 * sure this type has a valid entry by checking the name pointer.
 	 */
-	return (genz_struct_type_to_ptrs[type].ptr != NULL);
+	return (genz_struct_type_to_ptrs[type].name != NULL);
 }
 EXPORT_SYMBOL_GPL(genz_validate_structure_type);
 
