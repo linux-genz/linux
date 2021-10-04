@@ -863,6 +863,26 @@ struct genz_os_comp *genz_add_os_comp(struct genz_os_subnet *s,
 	return found;
 }
 
+struct genz_os_comp *genz_add_os_subnet_comp(struct genz_fabric *fabric,
+					     uint16_t sid, uint16_t cid)
+{
+	struct genz_os_subnet *s;
+	struct genz_os_comp *ocomp;
+
+	s = genz_add_os_subnet(sid, fabric);
+	if (s == NULL) {
+		pr_debug("genz_add_subnet failed\n");
+		return ERR_PTR(-ENOMEM);
+	}
+	ocomp = genz_add_os_comp(s, cid);
+	if (ocomp == NULL) {
+		pr_debug("genz_add_os_comp failed\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	return ocomp;
+}
+
 struct genz_comp *genz_lookup_gcid(struct genz_fabric *f, uint32_t gcid)
 {
 	struct genz_subnet *s;
