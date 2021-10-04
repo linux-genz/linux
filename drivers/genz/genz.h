@@ -313,6 +313,9 @@ int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
 int genz_rsp_page_grid_alloc(struct genz_bridge_dev *br,
 			     struct genz_page_grid *grid);
 void genz_uuid_exit(void);
+int genz_move_fabric_bridge(struct genz_bridge_dev *zbdev,
+			    struct genz_os_comp *ocomp,
+			    struct genz_fabric *fabric);
 struct genz_bridge_dev *genz_zdev_bridge(struct genz_dev *zdev);
 void genz_add_zbdev_to_fabric(struct genz_bridge_dev *zbdev,
 			      struct genz_fabric *f);

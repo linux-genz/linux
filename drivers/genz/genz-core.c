@@ -320,7 +320,6 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	uint16_t sid, cid;
 	int ret = 0;
 	bool uninit = false;
-	struct genz_os_subnet *s;
 	struct genz_fabric *f;
 
 	zbdev->zbdrv = zbdrv;
@@ -360,12 +359,6 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 			goto error;
 		}
 	}
-	s = genz_add_os_subnet(sid, f);
-	if (s == NULL) {
-		pr_debug("genz_add_subnet failed\n");
-		ret = -ENOMEM;
-		goto error;
-	}
 	if (uninit) {
 		cid = 0;  /* Revisit: MultiBridge */
 	} else {
@@ -375,10 +368,10 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 			goto error;
 		}
 	}
-	zbdev->zdev.zcomp = genz_add_os_comp(s, cid);
-	if (zbdev->zdev.zcomp == NULL) {
-		pr_debug("genz_add_os_comp failed\n");
-		ret = -ENOMEM;
+	zbdev->zdev.zcomp = genz_add_os_subnet_comp(f, sid, cid);
+	if (IS_ERR(zbdev->zdev.zcomp)) {
+		pr_debug("genz_add_os_subnet_comp failed\n");
+		ret = PTR_ERR(zbdev->zdev.zcomp);
 		goto error;
 	}
 	ret = genz_init_dev(&zbdev->zdev, f);
@@ -575,11 +568,68 @@ int genz_unregister_bridge(struct device *dev)
 }
 EXPORT_SYMBOL(genz_unregister_bridge);
 
+static struct genz_bridge_dev *find_fabric_bridge(struct genz_fabric *fabric)
+{
+	struct genz_bridge_dev *zbdev = NULL;
+	unsigned long flags;
+
+	spin_lock_irqsave(&fabric->bridges_lock, flags);
+	/* Revisit: do something smarter than "first_entry" */
+	if (fabric && !list_empty(&fabric->bridges)) {
+		zbdev = list_first_entry(&fabric->bridges,
+					 struct genz_bridge_dev,
+					 fab_bridge_node);
+	}
+	spin_unlock_irqrestore(&fabric->bridges_lock, flags);
+	return zbdev;
+}
+
+static struct genz_bridge_dev *find_fabric0_bridge(void)
+{
+	struct genz_bridge_dev *zbdev = NULL;
+
+	if (genz_temp_fabric) {
+		zbdev = find_fabric_bridge(genz_temp_fabric);
+		/* Revisit: match MGR-UUID */
+	}
+	return zbdev;
+}
+
+int genz_move_fabric_bridge(struct genz_bridge_dev *zbdev,
+			    struct genz_os_comp *ocomp,
+			    struct genz_fabric *fabric)
+{
+	int ret;
+
+	/* Revisit: can we use kobject_move instead? */
+	/* copy over values from old zbdev */
+	ocomp->comp.cclass = zbdev->zdev.zcomp->comp.cclass;
+	ocomp->comp.serial = zbdev->zdev.zcomp->comp.serial;
+	ocomp->comp.c_uuid = zbdev->zdev.zcomp->comp.c_uuid;
+	ocomp->comp.fru_uuid = zbdev->zdev.zcomp->comp.fru_uuid;
+	/* remove old zbdev stuff */
+	genz_bridge_remove_control_files(zbdev);
+	genz_remove_zbdev_from_fabric(zbdev);
+	/* add new zbdev stuff */
+	genz_add_zbdev_to_fabric(zbdev, fabric);
+	zbdev->zdev.zcomp = ocomp;
+	ret = genz_bridge_create_control_files(zbdev);
+	if (ret < 0) {
+		pr_debug("genz_bridge_create_control_files failed, ret=%d\n", ret);
+	}
+
+	return ret;
+}
+
 struct genz_bridge_dev *genz_zdev_bridge(struct genz_dev *zdev)
 {
 	struct genz_bridge_dev *zbdev = NULL;
 	struct genz_fabric *fabric;
+	struct genz_os_comp *ocomp;
+	uint16_t sid, cid;
 	unsigned long flags;
+	char gcstr[GCID_STRING_LEN+1];
+	int ret;
 
 	pr_debug("zdev->zcomp is %px\n", zdev->zcomp);
 	pr_debug("zdev->zcomp->subnet is %px\n", zdev->zcomp->subnet);
@@ -588,7 +638,6 @@ struct genz_bridge_dev *genz_zdev_bridge(struct genz_dev *zdev)
 	fabric = zdev->zcomp->subnet->subnet.fabric;
 	dev_dbg(&zdev->dev, "fabric=%px\n", fabric);
 
-	/* Revisit: do something smarter than "first_entry" */
 	spin_lock_irqsave(&fabric->bridges_lock, flags);
 	if (fabric && !list_empty(&fabric->bridges)) {
 		zbdev = list_first_entry(&fabric->bridges,
@@ -597,6 +646,33 @@ struct genz_bridge_dev *genz_zdev_bridge(struct genz_dev *zdev)
 	}
 	spin_unlock_irqrestore(&fabric->bridges_lock, flags);
 
+	/* if zbdev is still NULL, search fabric0 for a bridge
+	 * with matching MGR-UUID, and move it to this fabric
+	 */
+	if (!zbdev) {
+		zbdev = find_fabric0_bridge(); /* Revisit: MGR-UUID */
+		if (!zbdev)
+			goto out;
+		/* get FM-assigned sid/cid */
+		ret = genz_control_read_sid(zbdev, NULL, &sid);
+		ret |= genz_control_read_cid0(zbdev, NULL, &cid);
+		dev_dbg(&zdev->dev, "moving bridge%u from fabric0 to %u:%s\n",
+			zbdev->bridge_num, fabric->number,
+			genz_gcid_str(genz_gcid(sid, cid), gcstr, sizeof(gcstr)));
+		if (ret) {
+			goto out;
+		}
+		ocomp = genz_add_os_subnet_comp(fabric, sid, cid);
+		if (IS_ERR(ocomp)) {
+			goto out;
+		}
+		ret = genz_move_fabric_bridge(zbdev, ocomp, fabric);
+		if (ret < 0) {
+			goto out;
+		}
+	}
+
+out:
 	dev_dbg(&zdev->dev, "zbdev=%px\n", zbdev);
 	return zbdev;
 }
