@@ -380,7 +380,6 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 	uint32_t fabric_num, gcid;
 	int ret = 0;
 	struct genz_fabric *f;
-	struct genz_os_subnet *s;
 	struct uuid_tracker *uu;
 	uuid_t mgr_uuid;
 
@@ -423,15 +422,10 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		pr_debug("GCID is out of range\n");
 		return -EINVAL;
 	}
-	s = genz_add_os_subnet(genz_gcid_sid(gcid), f);
-	if (s == NULL) {
-		pr_debug("genz_add_subnet failed\n");
-		return -ENOMEM;
-	}
-	zcomp = genz_add_os_comp(s, genz_gcid_cid(gcid));
-	if (zcomp == NULL) {
-		pr_debug("genz_add_os_comp failed\n");
-		return -ENOMEM;
+	zcomp = genz_add_os_subnet_comp(f, genz_gcid_sid(gcid), genz_gcid_cid(gcid));
+	if (IS_ERR(zcomp)) {
+		pr_debug("genz_add_os_subnet_comp failed\n");
+		return PTR_ERR(zcomp);
 	}
 /*
 	ret = genz_create_gcid_file(&(zcomp->kobj));
@@ -585,7 +579,6 @@ struct genz_fab_comp_info {
 	struct genz_fabric    *f;
 	union {
 		struct genz_subnet    *zsub;
-		struct genz_os_subnet *osub;
 	};
 	union {
 		struct genz_comp      *zcomp;
@@ -729,18 +722,12 @@ static int parse_fabric_component(struct genl_info *info,
 	}
 	os = (*scenario == 1);
 	if (os) {
-		fci->osub = genz_add_os_subnet(genz_gcid_sid(fci->gcid),
-					       fci->f);
-		if (fci->osub == NULL) {
-			pr_debug("genz_add_os_subnet failed\n");
-			ret = -EINVAL;
-			goto err;
-		}
-		fci->ocomp = genz_add_os_comp(fci->osub,
-					      genz_gcid_cid(fci->gcid));
-		if (fci->ocomp == NULL) {
-			pr_debug("genz_add_os_comp failed\n");
-			ret = -EINVAL;
+		fci->ocomp = genz_add_os_subnet_comp(fci->f,
+						     genz_gcid_sid(fci->gcid),
+						     genz_gcid_cid(fci->gcid));
+		if (IS_ERR(fci->ocomp)) {
+			pr_debug("genz_add_os_subnet_comp failed\n");
+			ret = PTR_ERR(fci->ocomp);
 			goto err;
 		}
 	} else {
@@ -798,21 +785,9 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 			ret = -EINVAL;
 			goto err;
 		}
-		/* Revisit: can we use kobject_move instead? */
-		/* copy over values from old zbdev */
-		fci.ocomp->comp.cclass = zbdev->zdev.zcomp->comp.cclass;
-		fci.ocomp->comp.serial = zbdev->zdev.zcomp->comp.serial;
-		fci.ocomp->comp.c_uuid = zbdev->zdev.zcomp->comp.c_uuid;
-		fci.ocomp->comp.fru_uuid = zbdev->zdev.zcomp->comp.fru_uuid;
-		/* remove old zbdev stuff */
-		genz_bridge_remove_control_files(zbdev);
-		genz_remove_zbdev_from_fabric(zbdev);
-		/* add new zbdev stuff */
-		genz_add_zbdev_to_fabric(zbdev, fci.f);
-		zbdev->zdev.zcomp = fci.ocomp;
-		ret = genz_bridge_create_control_files(zbdev);
+		ret = genz_move_fabric_bridge(zbdev, fci.ocomp, fci.f);
 		if (ret < 0) {
-			pr_debug("genz_bridge_create_control_files failed, ret=%d\n", ret);
+			pr_debug("genz_move_fabric_bridge failed, ret=%d\n", ret);
 			goto err;
 		}
 	} else if (scenario == 2) {
