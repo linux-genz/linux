@@ -2233,7 +2233,7 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 
 	/* Populate native device/genzN/control directory */
 	/* Revisit: error handling */
-	pr_debug("calling start_core_structure\n");
+	pr_debug("calling start_core_structure for local bridge\n");
 	ret = start_core_structure(zbdev, NULL,
 			&zdev->zcomp->comp.root_control_info,
 			&genz_struct_type_to_ptrs[GENZ_CORE_STRUCTURE],
@@ -2285,6 +2285,7 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 	uint32_t                 rkey;
 	int                      ret;
 	bool                     br_is_dr;
+	char                     gcstr[GCID_STRING_LEN+1];
 
 	mdata = alloc_mdata(zbdev, mgr_uuid);
 	if (!mdata) {
@@ -2322,7 +2323,8 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 		pr_debug("genz_rmr_import error ret=%d\n", ret);
 		goto err_kobj;
 	}
-	pr_debug("calling start_core_structure\n");
+	pr_debug("calling start_core_structure via DR %s.%u\n",
+		 genz_gcid_str(gcid, gcstr, sizeof(gcstr)), dr_iface);
 	ret = start_core_structure(zbdev, dr_rmri,
 			&f_comp->root_control_info,
 			&genz_struct_type_to_ptrs[GENZ_CORE_STRUCTURE],
@@ -2383,6 +2385,7 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 	uint64_t                 access;
 	uint32_t                 rkey;
 	int                      ret;
+	char                     gcstr[GCID_STRING_LEN+1];
 
 	rmri = &f_comp->ctl_rmr_info;
 	mdata = alloc_mdata(zbdev, mgr_uuid);
@@ -2449,7 +2452,8 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 		pr_debug("genz_create_fab_files error ret=%d\n", ret);
 		goto err_rmr;
 	}
-	pr_debug("calling start_core_structure\n");
+	pr_debug("calling start_core_structure for %s\n",
+		 genz_gcid_str(gcid, gcstr, sizeof(gcstr)));
 	ret = start_core_structure(zbdev, rmri,
 			&f_comp->root_control_info,
 			&genz_struct_type_to_ptrs[GENZ_CORE_STRUCTURE],
