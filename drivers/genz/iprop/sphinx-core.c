@@ -173,8 +173,9 @@ static int sphinx_local_control_write(struct sphinx_bridge *sbr,
 		data++;
 		offset++;
 		size--;
+		csr_align = (uint)offset & 7u;
 	}
-	if ((size > 0) && (csr_align & 0x2)) {  /* do 2-byte write */
+	if ((size >= 2) && (csr_align & 0x2)) {  /* do 2-byte write */
 		val2 = *((uint16_t *)data);  /* Revisit: endianness */
 		dev_dbg(dev, "val2=0x%x, offset=0x%llx\n",
 			val2, offset);
@@ -182,8 +183,9 @@ static int sphinx_local_control_write(struct sphinx_bridge *sbr,
 		data += 2;
 		offset += 2;
 		size -= 2;
+		csr_align = (uint)offset & 7u;
 	}
-	if ((size > 0) && (csr_align & 0x4)) {  /* do 4-byte write */
+	if ((size >= 4) && (csr_align & 0x4)) {  /* do 4-byte write */
 		val4 = *((uint32_t *)data);  /* Revisit: endianness */
 		dev_dbg(dev, "val4=0x%x, offset=0x%llx\n",
 			val4, offset);
