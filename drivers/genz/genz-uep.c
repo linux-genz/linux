@@ -97,7 +97,7 @@ static int genz_notify_uep(struct genz_bridge_dev *zbdev,
 err:
 	if (ret)
 		dev_dbg(zbdev->bridge_dev,
-			"error (%x) sending UEP event message\n", ret);
+			"error (%d) sending UEP event message\n", ret);
 	return ret;
 
 free:
@@ -117,11 +117,14 @@ int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 	unsigned long flags;
 	int ret;
 
-	dev_dbg(zbdev->bridge_dev, "version=%u, local=%u\n",
-		uepi->version, uepi->local);
-
-	if (uepi->version != GENZ_UEP_INFO_VERS) /* only v1 supported */
+	if (uepi->version != GENZ_UEP_INFO_VERS) { /* only v1 supported */
+		dev_dbg(zbdev->bridge_dev, "unsupported version %u\n",
+			uepi->version);
 		return -EINVAL;
+	}
+
+	dev_dbg(zbdev->bridge_dev, "version=%u, local=%u, ts_valid=%u\n",
+		uepi->version, uepi->local, uepi->ts_valid);
 
 	if (!uepi->ts_valid)
 		genz_set_uep_timestamp(uepi);
@@ -129,6 +132,8 @@ int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 	if (!uepi->local) {
 		sgcid = uep_sgcid(zbdev, uep);
 		event_id = uep_event_id(uep);
+		dev_dbg(zbdev->bridge_dev, "sgcid=%s, event_id=%u\n",
+			genz_gcid_str(sgcid, str, sizeof(str)), event_id);
 		comp = genz_lookup_gcid(zbdev->fabric, sgcid);
 		if (!comp) {
 			pr_debug("genz_lookup_gcid failed\n");
@@ -168,7 +173,6 @@ int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 
 	/* send UEP to userspace via generic netlink */
 	ret = genz_notify_uep(zbdev, uepi);
-
 	return ret;
 
 unlock:
