@@ -20,6 +20,12 @@ static uint16_t uep_event_id(struct genz_uep_pkt *uep)
 	return (uep->GC) ? uep->u.u01.EventID : uep->u.u00.EventID;
 }
 
+static inline uint16_t uep_pkt_len(struct genz_uep_pkt *uep)
+{
+	/* length in bytes */
+	return ((uep->LENh << 3) | uep->LENl) * 4;
+}
+
 static int genz_notify_uep(struct genz_bridge_dev *zbdev,
 			   struct genz_uep_info *uepi)
 {
@@ -92,12 +98,12 @@ static int genz_notify_uep(struct genz_bridge_dev *zbdev,
 	ret = genlmsg_multicast(&genz_gnl_family, skb, 0, 0, GFP_ATOMIC);
 
 	/* If there are no listeners, genlmsg_multicast may return non-zero
-	 * value.
+	 * value (-ESRCH).
 	 */
 err:
 	if (ret)
 		dev_dbg(zbdev->bridge_dev,
-			"error (%d) sending UEP event message\n", ret);
+			"error (%d) sending UEP event message to userspace\n", ret);
 	return ret;
 
 free:
@@ -111,7 +117,7 @@ int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 	char str[GCID_STRING_LEN+1];
 	struct genz_rmr_info *rmri;
 	struct genz_comp *comp;
-	uint16_t event_id;
+	uint16_t event_id, pkt_len;
 	uint32_t sgcid;
 	union genz_c_control c_control;
 	unsigned long flags;
@@ -123,8 +129,9 @@ int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 		return -EINVAL;
 	}
 
-	dev_dbg(zbdev->bridge_dev, "version=%u, local=%u, ts_valid=%u\n",
-		uepi->version, uepi->local, uepi->ts_valid);
+	pkt_len = uep_pkt_len(&uepi->uep);
+	dev_dbg(zbdev->bridge_dev, "version=%u, local=%u, ts_valid=%u, pkt_len=%u\n",
+		uepi->version, uepi->local, uepi->ts_valid, pkt_len);
 
 	if (!uepi->ts_valid)
 		genz_set_uep_timestamp(uepi);
@@ -171,6 +178,11 @@ int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 		spin_unlock_irqrestore(&comp->uep_lock, flags);
 	}
 
+	/* clear uepi->uep beyond pkt length (to avoid kernel mem leak) */
+	memset((void *)&uepi->uep + pkt_len, 0,
+	       sizeof(struct genz_uep_pkt) - pkt_len);
+	/* same for unused uepi->flags */
+	uepi->rv = 0;
 	/* send UEP to userspace via generic netlink */
 	ret = genz_notify_uep(zbdev, uepi);
 	return ret;
