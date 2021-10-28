@@ -724,7 +724,7 @@ enum genz_pfn_mode {
 };
 
 struct genz_uep_pkt {  /* UEP: Unsolicited Event Packet */
-	uint32_t DCIDl:     5;
+	uint32_t DCIDl:     5; /* Byte 0 */
 	uint32_t LENl:      3;
 	uint32_t DCIDm:     4;
 	uint32_t LENh:      4;
@@ -732,11 +732,11 @@ struct genz_uep_pkt {  /* UEP: Unsolicited Event Packet */
 	uint32_t VC:        5;
 	uint32_t OpCodel:   2;
 	uint32_t PCRC:      6;
-	uint32_t OpCodeh:   3;
+	uint32_t OpCodeh:   3; /* Byte 4 */
 	uint32_t OCL:       5;
 	uint32_t R0:       12;
 	uint32_t SCID:     12;
-	uint32_t AKey:      6;
+	uint32_t AKey:      6; /* Byte 8 */
 	uint32_t Deadline: 10;
 	uint32_t ECN:       1;
 	uint32_t GC:        1;
@@ -749,59 +749,59 @@ struct genz_uep_pkt {  /* UEP: Unsolicited Event Packet */
 	uint32_t R1:        1;
 	union {
 		struct {  /* NH=0, GC=0 */
-			uint32_t RCCID:    12;
+			uint32_t RCCID:    12; /* Byte 12 */
 			uint32_t IfaceID:  12;
 			uint32_t RCSIDl:    8;
-			uint32_t RCSIDh:    8;
+			uint32_t RCSIDh:    8; /* Byte 16 */
 			uint32_t R2:        8;
 			uint32_t EventID:  16;
-			uint32_t ES:       32;
-			uint32_t R3:        8;
+			uint32_t ES:       32; /* Byte 20 */
+			uint32_t R3:        8; /* Byte 24 */
 			uint32_t ECRC:     24;
 		} u00;
 		struct {  /* NH=0, GC=1 */
-			uint32_t DSID:     16;
+			uint32_t DSID:     16; /* Byte 12 */
 			uint32_t SSID:     16;
-			uint32_t RCCID:    12;
+			uint32_t RCCID:    12; /* Byte 16 */
 			uint32_t IfaceID:  12;
 			uint32_t RCSIDl:    8;
-			uint32_t RCSIDh:    8;
+			uint32_t RCSIDh:    8; /* Byte 20 */
 			uint32_t R2:        8;
 			uint32_t EventID:  16;
-			uint32_t ES:       32;
-			uint32_t R3:        8;
+			uint32_t ES:       32; /* Byte 24 */
+			uint32_t R3:        8; /* Byte 28 */
 			uint32_t ECRC:     24;
 		} u01;
 		struct {  /* NH=1, GC=0 */
-			uint32_t RCCID:    12;
+			uint32_t RCCID:    12; /* Byte 12 */
 			uint32_t IfaceID:  12;
 			uint32_t RCSIDl:    8;
-			uint32_t RCSIDh:    8;
+			uint32_t RCSIDh:    8; /* Byte 16 */
 			uint32_t R2:        8;
 			uint32_t EventID:  16;
-			uint32_t ES:       32;
-			uint32_t NextHdr0: 32;
-			uint32_t NextHdr1: 32;
-			uint32_t NextHdr2: 32;
-			uint32_t NextHdr3: 32;
-			uint32_t R3:        8;
+			uint32_t ES:       32; /* Byte 20 */
+			uint32_t NextHdr0: 32; /* Byte 24 */
+			uint32_t NextHdr1: 32; /* Byte 28 */
+			uint32_t NextHdr2: 32; /* Byte 32 */
+			uint32_t NextHdr3: 32; /* Byte 36 */
+			uint32_t R3:        8; /* Byte 40 */
 			uint32_t ECRC:     24;
 		} u10;
 		struct {  /* NH=1, GC=1 */
-			uint32_t DSID:     16;
+			uint32_t DSID:     16; /* Byte 12 */
 			uint32_t SSID:     16;
-			uint32_t RCCID:    12;
+			uint32_t RCCID:    12; /* Byte 16 */
 			uint32_t IfaceID:  12;
 			uint32_t RCSIDl:    8;
-			uint32_t RCSIDh:    8;
+			uint32_t RCSIDh:    8; /* Byte 20 */
 			uint32_t R2:        8;
 			uint32_t EventID:  16;
-			uint32_t ES:       32;
-			uint32_t NextHdr0: 32;
-			uint32_t NextHdr1: 32;
-			uint32_t NextHdr2: 32;
-			uint32_t NextHdr3: 32;
-			uint32_t R3:        8;
+			uint32_t ES:       32; /* Byte 24 */
+			uint32_t NextHdr0: 32; /* Byte 28 */
+			uint32_t NextHdr1: 32; /* Byte 32 */
+			uint32_t NextHdr2: 32; /* Byte 36 */
+			uint32_t NextHdr3: 32; /* Byte 40 */
+			uint32_t R3:        8; /* Byte 44 */
 			uint32_t ECRC:     24;
 		} u11;
 	} u;
