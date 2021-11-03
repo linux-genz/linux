@@ -833,6 +833,19 @@ struct genz_comp *genz_add_comp(struct genz_subnet *s,
 	return found;
 }
 
+void genz_remove_comp(struct genz_comp *zcomp)
+{
+	struct genz_subnet *s = zcomp->subnet;
+	unsigned long flags;
+
+	/* undo extra ref that genz_lookup_comp got */
+	kobject_put(&zcomp->kobj);
+	spin_lock_irqsave(&s->fabric->components_lock, flags);
+	list_del(&zcomp->fab_comp_node);
+	spin_unlock_irqrestore(&s->fabric->components_lock, flags);
+	kobject_put(&zcomp->kobj);
+}
+
 struct genz_os_comp *genz_add_os_comp(struct genz_os_subnet *s,
 				   uint32_t cid)
 {
