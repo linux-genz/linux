@@ -65,11 +65,17 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 				 struct genz_comp *f_comp,
 				 struct genz_comp *dr_comp,
 				 uint16_t dr_iface, uuid_t *mgr_uuid);
+int genz_dr_remove_control_files(struct genz_bridge_dev *zbdev,
+				 struct genz_comp *f_comp,
+				 struct genz_comp *dr_comp,
+				 uint16_t dr_iface);
 int genz_comp_read_attrs(struct genz_bridge_dev *zbdev,
 			 struct genz_rmr_info *rmri, struct genz_comp *comp);
 int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 				  struct genz_comp *f_comp,
 				  uint16_t dr_iface, uuid_t *mgr_uuid);
+int genz_fab_remove_control_files(struct genz_bridge_dev *zbdev,
+				  struct genz_comp *f_comp);
 void genz_remove_uuid_file(struct genz_dev *zdev);
 int genz_control_read_structure(struct genz_bridge_dev *zbdev,
 		struct genz_rmr_info *rmri,
