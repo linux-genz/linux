@@ -733,6 +733,7 @@ static void rmr_free(struct kref *ref)
 	kfree(rmr);
 }
 
+/* decrement the refcount on the rmr and rmr_free() when 0 */
 void genz_rmr_remove(struct genz_rmr *rmr, bool lock)
 {
 	struct genz_mem_data *mdata = rmr->mdata;
@@ -1044,6 +1045,7 @@ int genz_rmr_import(
 }
 EXPORT_SYMBOL(genz_rmr_import);
 
+/* lookup the rmr based on rmri and genz_rmr_remove() it */
 int genz_rmr_free(struct genz_rmr_info *rmri)
 {
 	int                     status = 0;
