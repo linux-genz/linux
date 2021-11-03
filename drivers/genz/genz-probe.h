@@ -42,6 +42,7 @@ struct genz_comp *genz_lookup_comp(struct genz_subnet *s, uint32_t cid);
 struct genz_os_comp *genz_lookup_os_comp(struct genz_os_subnet *s, uint32_t cid);
 struct genz_comp *genz_add_comp(struct genz_subnet *s, uint32_t cid,
 				bool add_kobj);
+void genz_remove_comp(struct genz_comp *zcomp);
 struct genz_os_comp *genz_add_os_comp(struct genz_os_subnet *s, uint32_t cid);
 struct genz_os_comp *genz_add_os_subnet_comp(struct genz_fabric *fabric,
 					     uint16_t sid, uint16_t cid);
