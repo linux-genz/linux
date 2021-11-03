@@ -764,7 +764,7 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 	if (ret < 0)
 		goto err;
 
-	ret = parse_fabric_component(info, &fci, false, &scenario);
+	ret = parse_fabric_component(info, &fci, /*dr*/false, &scenario);
 	if (ret < 0)
 		goto err;
 	/*
@@ -775,7 +775,6 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 	 * 2. A new, directly-attached component.
 	 * 3. An existing directed-relay component being moved to its
 	 *    permanent GCID.
-
 	 */
 	if (scenario == 1) {
 		zbdev = genz_lookup_zbdev(genz_temp_fabric, fci.tmp_gcid);
@@ -833,50 +832,97 @@ err:
 
 static int genz_remove_fabric_component(struct sk_buff *skb, struct genl_info *info)
 {
-	int ret = 0;
+	struct genz_fab_comp_info fci;
+	struct genz_bridge_dev *zbdev;
+	uint scenario;
+	int ret;
 
 	pr_debug("entered\n");
 	ret = check_netlink_perm();
 	if (ret < 0)
 		goto err;
-	/* Revisit: finish this */
+
+	ret = parse_fabric_component(info, &fci, /*dr*/false, &scenario);
+	if (ret < 0)
+		goto err;
+	/*
+	 * There are 3 scenarios possible here.  See parse_fabric_component()
+	 * for details. Only 1 of them (scenario 2) is actually handled.
+	 * 1. A local bridge being removed from its temporary subsystem-assigned
+	 *    fabric/GCID. Should never happen.
+	 * 2. Removing a fabric component.
+	 * 3. An existing directed-relay component being removed. This
+	 *    is handled by genz_remove_fabric_dr_component(), not here.
+	 */
+	if (scenario == 2) {
+		zbdev = genz_lookup_zbdev(fci.f, fci.br_gcid);
+		if (zbdev == NULL) {
+			pr_debug("scenario 2, br_gcid (%d) not found\n",
+				 fci.br_gcid);
+			ret = -EINVAL;
+			goto err;
+		}
+		ret = genz_fab_remove_control_files(zbdev, fci.zcomp);
+		if (ret < 0) {
+			pr_debug("genz_fab_remove_control_files failed, ret=%d\n", ret);
+			goto err;
+		}
+		genz_remove_comp(fci.zcomp);
+	} else {
+		pr_debug("invalid combination of GCIDs\n");
+		ret = -EINVAL;
+		goto err;
+	}
+err:
+	return ret;
+}
+
+static int genz_check_fabric_dr_gcids(struct genz_fab_comp_info *fci)
+{
+	int ret = 0;
+
+	if (genz_valid_gcid(fci->tmp_gcid)) {
+		pr_debug("tmp_gcid(%d) != INVALID\n", fci->tmp_gcid);
+		ret = -EINVAL;
+		goto err;
+	}
+	if (!genz_valid_gcid(fci->br_gcid) || !genz_valid_gcid(fci->dr_gcid)) {
+		pr_debug("br_gcid (%d) or dr_gcid(%d) == INVALID\n",
+			 fci->br_gcid, fci->dr_gcid);
+		ret = -EINVAL;
+		goto err;
+	}
+	if (fci->dr_iface == GENZ_DR_IFACE_NONE) {
+		pr_debug("dr_iface is invalid\n");
+		ret = -EINVAL;
+		goto err;
+	}
 err:
 	return ret;
 }
 
 static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *info)
 {
-	int ret = 0;
 	struct genz_fab_comp_info fci;
 	struct genz_bridge_dev *zbdev;
 	struct genz_comp *dr_comp;
 	uint scenario;
+	int ret;
 
 	pr_debug("entered\n");
 	ret = check_netlink_perm();
 	if (ret < 0)
 		goto err;
-	ret = parse_fabric_component(info, &fci, true, &scenario);
+	ret = parse_fabric_component(info, &fci, /*dr*/true, &scenario);
+	if (ret < 0)
+		goto err;
+	ret = genz_check_fabric_dr_gcids(&fci);
+	if (ret < 0)
+		goto err;
 	/* Two scenarios.  See parse_fabric_component() for details.
 	 * 4. A direct-attached component is to be accessed via directed relay
 	 * 5. A switch-attached component is to be accessed via directed relay
 	 */
-	if (genz_valid_gcid(fci.tmp_gcid)) {
-		pr_debug("tmp_gcid(%d) != INVALID\n", fci.tmp_gcid);
-		ret = -EINVAL;
-		goto err;
-	}
-	if (!genz_valid_gcid(fci.br_gcid) || !genz_valid_gcid(fci.dr_gcid)) {
-		pr_debug("br_gcid (%d) or dr_gcid(%d) == INVALID\n",
-			 fci.br_gcid, fci.dr_gcid);
-		ret = -EINVAL;
-		goto err;
-	}
-	if (fci.dr_iface == GENZ_DR_IFACE_NONE) {
-		pr_debug("dr_iface is invalid\n");
-		ret = -EINVAL;
-		goto err;
-	}
 	if (scenario == 4) {
 		zbdev = genz_lookup_zbdev(fci.f, fci.br_gcid);
 		if (zbdev == NULL) {
@@ -926,13 +972,69 @@ err:
 
 static int genz_remove_fabric_dr_component(struct sk_buff *skb, struct genl_info *info)
 {
-	int ret = 0;
+	struct genz_fab_comp_info fci;
+	struct genz_bridge_dev *zbdev;
+	struct genz_comp *dr_comp;
+	uint scenario;
+	int ret;
 
 	pr_debug("entered\n");
 	ret = check_netlink_perm();
 	if (ret < 0)
 		goto err;
-	/* Revisit: finish this */
+
+	ret = parse_fabric_component(info, &fci, /*dr*/true, &scenario);
+	if (ret < 0)
+		goto err;
+	ret = genz_check_fabric_dr_gcids(&fci);
+	if (ret < 0)
+		goto err;
+	/* Two scenarios.  See parse_fabric_component() for details.
+	 * 4. A direct-attached DR component is being removed
+	 * 5. A switch-attached DR component is being removed
+	 */
+	if (scenario == 4) {
+		zbdev = genz_lookup_zbdev(fci.f, fci.br_gcid);
+		if (zbdev == NULL) {
+			pr_debug("scenario 4, br_gcid (%d) not found\n",
+				 fci.br_gcid);
+			ret = -EINVAL;
+			goto err;
+		}
+		dr_comp = &zbdev->zdev.zcomp->comp;
+		ret = genz_dr_remove_control_files(zbdev, fci.zcomp, dr_comp,
+						   fci.dr_iface);
+		if (ret < 0) {
+			pr_debug("genz_dr_remove_control_files failed, ret=%d\n", ret);
+			goto err;
+		}
+		/* Revisit: genz_remove_comp()? */
+	} else if (scenario == 5) {
+		zbdev = genz_lookup_zbdev(fci.f, fci.br_gcid);
+		if (zbdev == NULL) {
+			pr_debug("scenario 5, br_gcid (%d) not found\n",
+				 fci.br_gcid);
+			ret = -EINVAL;
+			goto err;
+		}
+		/* Revisit: refactor this - almost the same as scenario 4 */
+		dr_comp = genz_lookup_gcid(fci.f, fci.dr_gcid);
+		if (!dr_comp) {
+			pr_debug("genz_lookup_gcid failed\n");
+			goto err;
+		}
+		ret = genz_dr_remove_control_files(zbdev, fci.zcomp, dr_comp,
+						   fci.dr_iface);
+		if (ret < 0) {
+			pr_debug("genz_dr_remove_control_files failed, ret=%d\n", ret);
+			goto err;
+		}
+		/* Revisit: genz_remove_comp()? */
+	} else {
+		pr_debug("invalid combination of GCIDs\n");
+		ret = -EINVAL;
+		goto err;
+	}
 err:
 	return ret;
 }

@@ -177,10 +177,6 @@ static void control_info_release(struct kobject *kobj)
 	struct genz_control_info *ci = to_genz_control_info(kobj);
 
 	pr_debug("kobj %s, ci=%px\n", kobject_name(kobj), ci);
-	if (ci->battr.private) {
-		pr_debug("sysfs_remove_bin_file for %s\n", ci->battr.attr.name);
-		sysfs_remove_bin_file(&ci->kobj, &ci->battr);
-	}
 	kfree(ci);
 }
 
@@ -1398,11 +1394,20 @@ static int genz_control_create_bin_file(struct genz_control_info *ci,
 
 	ret = sysfs_create_bin_file(&ci->kobj, &ci->battr);
 	if (ret) {
+		ci->battr.private = NULL;
 		pr_debug("sysfs_create_bin_file failed with %d for file %s\n",
 				ret, ci->battr.attr.name);
 	}
 
 	return ret;
+}
+
+static void genz_control_remove_bin_file(struct genz_control_info *ci)
+{
+	if (ci->battr.private) { /* valid battr - see genz_control_create_bin_file() */
+		pr_debug("sysfs_remove_bin_file for %s\n", ci->battr.attr.name);
+		sysfs_remove_bin_file(&ci->kobj, &ci->battr);
+	}
 }
 
 static int traverse_table(struct genz_bridge_dev *zbdev,
@@ -1577,6 +1582,12 @@ static int chain_container_dir(struct genz_control_info *ci, const char *name,
 	}
 
 	return ret;
+}
+
+static void remove_chain_container_dir(struct genz_control_info *ci)
+{
+	if (ci->cont_dir)
+		kobject_put(ci->cont_dir);
 }
 
 /*
@@ -2344,6 +2355,60 @@ err_mdata:
 	return ret;
 }
 
+#define first_sibling(ci) (ci->parent && (ci->parent->child == ci))
+
+static void genz_remove_control_info_hierarchy(struct genz_control_info *ci)
+{
+	struct genz_control_info *sibling;
+
+	if (ci->child)
+		genz_remove_control_info_hierarchy(ci->child);
+	if (first_sibling(ci)) {
+		for (sibling = ci->sibling; sibling; sibling = sibling->sibling)
+			genz_remove_control_info_hierarchy(sibling);
+	}
+	genz_control_remove_bin_file(ci);
+	remove_chain_container_dir(ci);
+	kobject_put(&ci->kobj);
+}
+
+/**
+ * genz_dr_remove_control_files() - remove control space for a DR fabric component
+ */
+int genz_dr_remove_control_files(struct genz_bridge_dev *zbdev,
+				 struct genz_comp *f_comp,
+				 struct genz_comp *dr_comp,
+				 uint16_t dr_iface)
+{
+	uint32_t                 gcid;
+	struct kobject           *dr_dir, *iface_dir;
+	struct genz_rmr_info     *dr_rmri;
+	char                     gcstr[GCID_STRING_LEN+1];
+	bool                     br_is_dr;
+	int                      ret;
+
+	br_is_dr = (dr_comp == &zbdev->zdev.zcomp->comp);
+	gcid = genz_comp_gcid((br_is_dr) ? f_comp : dr_comp);
+	dr_dir = &f_comp->ctl_kobj;
+	dr_rmri = &f_comp->ctl_rmr_info;
+	iface_dir = genz_comp_iface_dir(dr_comp, dr_iface);
+	if (!iface_dir) {
+		pr_debug("dr_iface %u not found\n", dr_iface);
+		return -EINVAL;
+	}
+	/* Remove the dr directory under interfaceN */
+	kobject_put(dr_dir);
+
+	pr_debug("calling genz_rmr_free for %s.%u dr\n",
+		 genz_gcid_str(gcid, gcstr, sizeof(gcstr)), dr_iface);
+	ret = genz_rmr_free(dr_rmri);
+	if (ret < 0) {
+		pr_debug("genz_rmr_free error ret=%d\n", ret);
+	}
+	genz_remove_control_info_hierarchy(f_comp->root_control_info);
+	return ret;
+}
+
 int genz_comp_read_attrs(struct genz_bridge_dev *zbdev,
 			 struct genz_rmr_info *rmri, struct genz_comp *comp)
 {
@@ -2447,7 +2512,7 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 		pr_debug("genz_comp_read_attrs error ret=%d\n", ret);
 		goto err_rmr;
 	}
-	ret = genz_create_fab_files(&f_comp->kobj);
+	ret = genz_create_fab_files(&f_comp->kobj); /* gcid/cclass/etc. */
 	if (ret < 0) {
 		pr_debug("genz_create_fab_files error ret=%d\n", ret);
 		goto err_rmr;
@@ -2472,6 +2537,32 @@ err_kobj:
 	kobject_put(&f_comp->ctl_kobj);
 err_mdata:
 	remove_mdata(zbdev);
+	return ret;
+}
+
+/**
+ * genz_fab_remove_control_files() - remove control space for a "normal" fabric component
+ */
+int genz_fab_remove_control_files(struct genz_bridge_dev *zbdev,
+				  struct genz_comp *f_comp)
+{
+	uint32_t                 gcid = genz_comp_gcid(f_comp);
+	char                     gcstr[GCID_STRING_LEN+1];
+	struct genz_rmr_info     *rmri;
+	int                      ret;
+
+	rmri = &f_comp->ctl_rmr_info;
+	/* Remove the control directory under the component */
+	kobject_put(&f_comp->ctl_kobj);
+
+	pr_debug("calling genz_rmr_free for %s control\n",
+		 genz_gcid_str(gcid, gcstr, sizeof(gcstr)));
+	ret = genz_rmr_free(rmri);
+	if (ret < 0) {
+		pr_debug("genz_rmr_free error ret=%d\n", ret);
+	}
+	genz_remove_fab_files(&f_comp->kobj); /* gcid/cclass/etc. */
+	genz_remove_control_info_hierarchy(f_comp->root_control_info);
 	return ret;
 }
 
