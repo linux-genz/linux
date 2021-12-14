@@ -50,10 +50,13 @@
 
 /* Netlink Generic Attribute Policy */
 const static struct nla_policy genz_genl_os_comp_policy[GENZ_A_MAX + 1] = {
+	[GENZ_A_BRIDGE_GCID] = { .type = NLA_U32 },
 	[GENZ_A_GCID] = { .type = NLA_U32 },
 	[GENZ_A_CCLASS] = { .type = NLA_U16 },
 	[GENZ_A_FRU_UUID] = { .len = UUID_LEN },
 	[GENZ_A_MGR_UUID] = { .len = UUID_LEN },
+	[GENZ_A_CUUID] = { .len = UUID_LEN },
+	[GENZ_A_SERIAL] = { .type = NLA_U64 },
 	[GENZ_A_RESOURCE_LIST] = { .type = NLA_NESTED },
 };
 
@@ -65,7 +68,6 @@ const static struct nla_policy genz_genl_resource_policy[GENZ_A_U_MAX + 1] = {
 	[GENZ_A_U_CLASS_UUID] = { .len = UUID_LEN },
 	[GENZ_A_U_INSTANCE_UUID] = { .len = UUID_LEN },
 	[GENZ_A_U_FLAGS] = { .type = NLA_U64 },
-	/* Revisit: add serial number? */
 	[GENZ_A_U_CLASS] = { .type = NLA_U16 },
 	[GENZ_A_U_MRL] = { .type = NLA_NESTED },
 };
@@ -450,10 +452,24 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		ret = -EINVAL;
 		goto err;
 	}
-/*
-	ret = genz_create_cclass_file(&(zcomp->kobj));
-*/
-
+	if (info->attrs[GENZ_A_SERIAL]) {
+		zcomp->comp.serial = nla_get_u64(info->attrs[GENZ_A_SERIAL]);
+		pr_debug("\tSerial = %016llx\n",
+			(uint64_t) zcomp->comp.serial);
+	} else {
+		pr_debug("missing required SERIAL\n");
+		ret = -EINVAL;
+		goto err;
+	}
+	if (info->attrs[GENZ_A_CUUID]) {
+		bytes_to_uuid(&zcomp->comp.c_uuid,
+			      nla_data(info->attrs[GENZ_A_CUUID]));
+		pr_debug("\tCUUID: %pUb\n", &zcomp->comp.c_uuid);
+	} else {
+		pr_debug("missing required CUUID\n");
+		ret = -EINVAL;
+		goto err;
+	}
 	if (info->attrs[GENZ_A_FRU_UUID]) {
 		bytes_to_uuid(&zcomp->comp.fru_uuid,
 			      nla_data(info->attrs[GENZ_A_FRU_UUID]));
