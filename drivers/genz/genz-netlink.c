@@ -435,14 +435,6 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		pr_debug("genz_add_os_subnet_comp failed\n");
 		return PTR_ERR(zcomp);
 	}
-/*
-	ret = genz_create_gcid_file(&(zcomp->kobj));
-	if (ret) {
-		pr_debug("genz_create_gcid_file failed\n");
-		return -EINVAL;
-	}
-*/
-
 	if (info->attrs[GENZ_A_CCLASS]) {
 		zcomp->comp.cclass = nla_get_u16(info->attrs[GENZ_A_CCLASS]);
 		pr_debug("\tC-Class = %d\n",
@@ -471,17 +463,6 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 		ret = -EINVAL;
 		goto err;
 	}
-/*
-	ret = genz_create_fru_uuid_file(&(zcomp->kobj));
-*/
-
-	/*
-	ret = genz_create_mgr_uuid_file(&f->dev);
-	if (ret) {
-		pr_debug("genz_create_mgr_uuid_file failed\n");
-		return -EINVAL;
-	}
-	*/
 	if (info->attrs[GENZ_A_RESOURCE_LIST]) {
 		ret = add_resource_list(info->attrs[GENZ_A_RESOURCE_LIST],
 			zcomp);
@@ -497,6 +478,58 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 err:
 	if (zcomp)
 		device_unregister(&zcomp->dev);
+	return ret;
+}
+
+static int remove_resource_list(const struct nlattr *resource_list,
+				struct genz_os_comp *zcomp)
+{
+	struct nlattr *nested_attr;
+	struct nlattr *u_attrs[GENZ_A_U_MAX + 1];
+	uuid_t instance_uuid;
+	int ret = 0;
+	int rem;
+	struct netlink_ext_ack extack;
+	struct genz_fabric *fabric;
+	struct uuid_tracker *uu;
+	struct genz_dev *zdev;
+
+	/* Revisit: keep this fabric check? */
+	fabric = zcomp->subnet->subnet.fabric;
+	if (!fabric)  {
+		pr_debug("zcomp->subnet doesn't have a fabric yet\n");
+		return -ENOENT;
+	}
+	pr_debug("\tRESOURCE_LIST:\n");
+	/* Go through the nested list of UUID structures */
+	nla_for_each_nested(nested_attr, resource_list, rem) {
+		/* Extract the nested UUID structure */
+		ret = nla_parse_nested_deprecated(u_attrs, GENZ_A_U_MAX,
+			nested_attr, genz_genl_resource_policy, &extack);
+		if (ret < 0) {
+			pr_debug("nla_parse_nested of UUID list returned %d\n",
+				 ret);
+			goto err;
+		}
+		if (u_attrs[GENZ_A_U_INSTANCE_UUID]) {
+			bytes_to_uuid(&instance_uuid,
+				      nla_data(u_attrs[GENZ_A_U_INSTANCE_UUID]));
+			pr_debug("\t\tINSTANCE_UUID: %pUb\n", &instance_uuid);
+		}
+		uu = genz_uuid_search(&instance_uuid);
+		if (!uu) {
+			pr_debug("did not find matching INSTANCE_UUID\n");
+			ret = -EINVAL;
+			continue;
+		}
+		zdev = uu->zdev->zdev;
+		/* The device del triggers the driver unbind/remove. */
+		device_del(&zdev->dev);
+	}
+	pr_debug("\tend of RESOURCE_LIST\n");
+	return ret;
+err:
+	/* Revisit: cleanup  */
 	return ret;
 }
 
@@ -526,6 +559,7 @@ static int genz_remove_os_component(struct sk_buff *skb, struct genl_info *info)
 	uu = genz_uuid_search(&mgr_uuid);
 	if (!uu) {
 		pr_debug("did not find matching MGR_UUID\n");
+		ret = -EINVAL;
 		goto err;
 	}
 	f = uu->fabric->fabric;
@@ -555,8 +589,21 @@ static int genz_remove_os_component(struct sk_buff *skb, struct genl_info *info)
 		ret = -EINVAL;
 		goto mgr_uuid;
 	}
+	if (info->attrs[GENZ_A_RESOURCE_LIST]) {
+		ret = remove_resource_list(info->attrs[GENZ_A_RESOURCE_LIST],
+					   zcomp);
+		if (ret < 0)
+			goto mgr_uuid;
+	} else {
+		pr_debug("Must supply at least one resource\n");
+		ret = -EINVAL;
+		goto mgr_uuid;
+	}
+#ifdef REVISIT
+	/* this is wrong - need to lookup instance_uuid and remove that device */
 	/* remove the component */
 	device_unregister(&zcomp->dev);
+#endif
 mgr_uuid:
 	/* genz_uuid_search takes a refcount. decrement it here */
 	genz_uuid_remove(uu);
