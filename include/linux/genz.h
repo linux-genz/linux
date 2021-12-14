@@ -570,7 +570,8 @@ enum uuid_type {
 	UUID_TYPE_REMOTE   = 0x2,
 	UUID_TYPE_LOOPBACK = (UUID_TYPE_LOCAL | UUID_TYPE_REMOTE),
 	UUID_TYPE_ZBRIDGE  = 0x4,
-	UUID_TYPE_FABRIC   = 0x8
+	UUID_TYPE_FABRIC   = 0x8,
+	UUID_TYPE_ZDEV     = 0x10
 };
 
 #define UUID_TYPE_REMOTE_LOCAL (UUID_TYPE_REMOTE | UUID_TYPE_LOCAL)
@@ -598,6 +599,10 @@ struct uuid_tracker_fabric {
 	struct genz_fabric *fabric;
 };
 
+struct uuid_tracker_zdev {
+	struct genz_dev *zdev;
+};
+
 struct uuid_tracker {
 	uuid_t                      uuid;
 	struct rb_node              node;
@@ -605,7 +610,10 @@ struct uuid_tracker {
 	enum uuid_type		uutype;
 	struct uuid_tracker_remote  *remote;
 	struct uuid_tracker_local   *local;
-	struct uuid_tracker_fabric	*fabric;
+	union {
+		struct uuid_tracker_fabric  *fabric;
+		struct uuid_tracker_zdev    *zdev;
+	};
 	struct list_head 		*zbr_list;
 };
 
@@ -961,6 +969,9 @@ struct uuid_tracker *genz_uuid_tracker_alloc_and_insert(
 	gfp_t alloc_flags, int *status);
 struct uuid_tracker *genz_fabric_uuid_tracker_alloc_and_insert(uuid_t *uuid);
 void genz_fabric_uuid_tracker_free(uuid_t *uuid);
+struct uuid_tracker *genz_zdev_uuid_tracker_alloc_and_insert(
+	uuid_t *uuid, struct genz_dev *zdev);
+void genz_zdev_uuid_tracker_free(uuid_t *uuid);
 struct uuid_node *genz_remote_uuid_alloc_and_insert(
 	struct uuid_tracker *uu, spinlock_t *lock, struct rb_root *root,
 	gfp_t alloc_flags, int *status);

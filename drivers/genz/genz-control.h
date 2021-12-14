@@ -39,7 +39,7 @@
 
 int genz_create_gcid_file(struct kobject *kobj);
 int genz_create_cclass_file(struct kobject *kobj);
-int genz_create_uuid_file(struct genz_dev *zdev);
+int genz_create_uuid_files(struct genz_dev *zdev);
 int genz_create_fru_uuid_file(struct kobject *kobj);
 int genz_create_mgr_uuid_file(struct device *dev);
 int genz_create_sid_file(struct genz_subnet *s);
@@ -76,7 +76,7 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 				  uint16_t dr_iface, uuid_t *mgr_uuid);
 int genz_fab_remove_control_files(struct genz_bridge_dev *zbdev,
 				  struct genz_comp *f_comp);
-void genz_remove_uuid_file(struct genz_dev *zdev);
+void genz_remove_uuid_files(struct genz_dev *zdev);
 int genz_control_read_structure(struct genz_bridge_dev *zbdev,
 		struct genz_rmr_info *rmri,
 		void *buf, off_t cs_offset,

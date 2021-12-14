@@ -126,8 +126,10 @@ static inline void _uuid_tracker_free(struct uuid_tracker *uu)
 		kfree(uu->remote);
 	if (uu->zbr_list)
 		kfree(uu->zbr_list);
-	if (uu->fabric)
+	if ((uu->uutype & UUID_TYPE_FABRIC) && uu->fabric)
 		kfree(uu->fabric);
+	else if ((uu->uutype & UUID_TYPE_ZDEV) && uu->zdev)
+		kfree(uu->zdev);
 	kfree(uu);
 }
 
@@ -178,6 +180,14 @@ struct uuid_tracker *genz_uuid_tracker_alloc(uuid_t *uuid,
 		uu->fabric = kzalloc(sizeof(struct uuid_tracker_fabric),
 				     alloc_flags);
 		if (!uu->fabric) {
+			ret = -ENOMEM;
+			goto error;
+		}
+	}
+	if (type & UUID_TYPE_ZDEV) { /* Revisit: zdev/fabric mutually exclusive */
+		uu->zdev = kzalloc(sizeof(struct uuid_tracker_zdev),
+				     alloc_flags);
+		if (!uu->zdev) {
 			ret = -ENOMEM;
 			goto error;
 		}
@@ -617,6 +627,49 @@ void genz_fabric_uuid_tracker_free(uuid_t *uuid)
 		pr_debug("freed uuid=%pUb\n", &uu->uuid);
 	else
 		pr_debug("removed uuid=%pUb, refcount=%u\n", &uu->uuid,
+			 kref_read(&uu->refcount));
+	genz_uuid_remove(uu);
+}
+
+struct uuid_tracker *genz_zdev_uuid_tracker_alloc_and_insert(
+				uuid_t *uuid, struct genz_dev *zdev)
+{
+	int status;
+	struct uuid_tracker *uu;
+
+	uu = genz_uuid_tracker_alloc(uuid, UUID_TYPE_ZDEV, GFP_KERNEL,
+				     &status);
+	if (!uu)
+		return uu;
+	uu = genz_uuid_tracker_insert(uu, &status);
+	if (status == 0) { /* New uuid_tracker */
+		uu->zdev->zdev = zdev;
+		pr_debug("tracker insert new zdev instance_uuid\n");
+	} else { /* -EEXIST */
+		pr_debug("zdev uu already in the tracker instance_uuid\n");
+	}
+	pr_debug("zdev=%px\n", uu->zdev->zdev);
+	return uu;
+}
+
+void genz_zdev_uuid_tracker_free(uuid_t *uuid)
+{
+	struct uuid_tracker *uu;
+	int gone;
+
+	/* Revisit: other than debug messages, identical to genz_fabric_uuid_tracker_free */
+	pr_debug("tracker free of zdev instance_uuid %pUb\n", uuid);
+	uu = genz_uuid_search(uuid);
+	if (uu == NULL) {
+		pr_debug("genz_uuid_search returned NULL meaning it was already freed\n");
+		return;
+	}
+	/* genz_uuid_search gets the refcount, so we need to put it */
+	gone = kref_put(&uu->refcount, genz_uuid_tracker_free);
+	if (gone)
+		pr_debug("freed instance_uuid=%pUb\n", &uu->uuid);
+	else
+		pr_debug("removed instance_uuid=%pUb, refcount=%u\n", &uu->uuid,
 			 kref_read(&uu->refcount));
 	genz_uuid_remove(uu);
 }

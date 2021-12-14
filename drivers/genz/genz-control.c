@@ -44,7 +44,7 @@
 #include "genz-netlink.h"
 #include "genz-sysfs.h"
 
-static ssize_t uuid_show(struct kobject *kobj,
+static ssize_t class_uuid_show(struct kobject *kobj,
 		struct kobj_attribute *attr,
 		char *buf)
 {
@@ -60,20 +60,43 @@ static ssize_t uuid_show(struct kobject *kobj,
 	return snprintf(buf, PAGE_SIZE, "%pUb\n", &zdev->class_uuid);
 }
 
-static struct kobj_attribute uuid_attribute =
-	__ATTR(uuid, (0444), uuid_show, NULL);
+static ssize_t instance_uuid_show(struct kobject *kobj,
+		struct kobj_attribute *attr,
+		char *buf)
+{
+	struct device *dev;
+	struct genz_dev *zdev;
 
-int genz_create_uuid_file(struct genz_dev *zdev)
+	dev = kobj_to_dev(kobj);
+	zdev = to_genz_dev(dev);
+	if (zdev == NULL) {
+		pr_debug("zdev is NULL\n");
+		return snprintf(buf, PAGE_SIZE, "bad zdev\n");
+	}
+	return snprintf(buf, PAGE_SIZE, "%pUb\n", &zdev->instance_uuid);
+}
+
+static struct kobj_attribute class_uuid_attribute =
+	__ATTR(class_uuid, (0444), class_uuid_show, NULL);
+
+static struct kobj_attribute instance_uuid_attribute =
+	__ATTR(instance_uuid, (0444), instance_uuid_show, NULL);
+
+int genz_create_uuid_files(struct genz_dev *zdev)
 {
 	int ret = 0;
 
-	ret = sysfs_create_file(&zdev->dev.kobj, &uuid_attribute.attr);
+	ret = sysfs_create_file(&zdev->dev.kobj, &class_uuid_attribute.attr);
+	if (ret)
+		return ret;
+	ret = sysfs_create_file(&zdev->dev.kobj, &instance_uuid_attribute.attr);
 	return ret;
 }
 
-void genz_remove_uuid_file(struct genz_dev *zdev)
+void genz_remove_uuid_files(struct genz_dev *zdev)
 {
-	sysfs_remove_file(&zdev->dev.kobj, &uuid_attribute.attr);
+	sysfs_remove_file(&zdev->dev.kobj, &class_uuid_attribute.attr);
+	sysfs_remove_file(&zdev->dev.kobj, &instance_uuid_attribute.attr);
 }
 
 static ssize_t mgr_uuid_show(struct device *dev,
