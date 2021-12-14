@@ -1650,14 +1650,14 @@
    clock-names = "s_axi_aclk";
    clocks = <&misc_clk_0>;
    compatible = "xlnx,axi-bram-ctrl-4.1";
-   reg = <0x0 0x80100000 0x0 0x100000>;
-   xlnx,bram-addr-width = <0xf>;
+   reg = <0x0 0x80100000 0x0 0x8000>;
+   xlnx,bram-addr-width = <0xa>;
    xlnx,bram-inst-mode = "EXTERNAL";
    xlnx,ecc = <0x0>;
    xlnx,ecc-onoff-reset-value = <0x0>;
    xlnx,ecc-type = <0x0>;
    xlnx,fault-inject = <0x0>;
-   xlnx,memory-depth = <0x8000>;
+   xlnx,memory-depth = <0x400>;
    xlnx,rd-cmd-optimization = <0x0>;
    xlnx,read-latency = <0x1>;
    xlnx,s-axi-ctrl-addr-width = <0x20>;
@@ -1897,13 +1897,28 @@
         compatible = "numa-distance-map-v1";
         distance-matrix = <0 0 10>,
                           <0 1 70>,
+                          <0 2 90>,
                           <1 0 70>,
-                          <1 1 10>;
+                          <1 1 10>,
+                          <1 2 70>,
+                          <2 0 90>,
+                          <2 1 70>,
+                          <2 2 10>;
     };
-    memory {
+    memory0 {
         device_type = "memory";
         reg = <0x0 0x0 0x0 0x7ff00000>, <0x00000008 0x00000000 0x0 0x80000000>;
         numa-node-id = <0>;
+    };
+    memory1 {
+        device_type = "memory";
+        reg = <0x0 0x0 0x0 0x0>;
+        numa-node-id = <1>;
+    };
+    memory2 {
+        device_type = "memory";
+        reg = <0x0 0x0 0x0 0x0>;
+        numa-node-id = <2>;
     };
 };
 &gem0 {
