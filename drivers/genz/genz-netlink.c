@@ -257,8 +257,8 @@ static inline void bytes_to_uuid(uuid_t *uuid, uint8_t *ub)
 	memcpy(&uuid->b, ub, UUID_SIZE);
 }
 
-static int parse_resource_list(const struct nlattr *resource_list,
-			       struct genz_os_comp *zcomp)
+static int add_resource_list(const struct nlattr *resource_list,
+			     struct genz_os_comp *zcomp)
 {
 	struct nlattr *nested_attr;
 	struct nlattr *u_attrs[GENZ_A_U_MAX + 1];
@@ -266,6 +266,7 @@ static int parse_resource_list(const struct nlattr *resource_list,
 	int rem;
 	struct netlink_ext_ack extack;
 	struct genz_fabric *fabric;
+	struct uuid_tracker *uu;
 	struct genz_dev *zdev;
 	char gcstr[GCID_STRING_LEN+1];
 
@@ -337,6 +338,12 @@ static int parse_resource_list(const struct nlattr *resource_list,
 				atomic_inc_return(
 				     &zcomp->res_count[condensed_class]) - 1);
 		}
+		uu = genz_zdev_uuid_tracker_alloc_and_insert(
+			&zdev->instance_uuid, zdev);
+		if (!uu) {
+			return -ENOMEM;
+			goto err;
+		}
 		genz_device_initialize(zdev);
 		if (u_attrs[GENZ_A_U_MRL]) {
 			ret = parse_mr_list(zdev, u_attrs[GENZ_A_U_MRL]);
@@ -352,12 +359,13 @@ static int parse_resource_list(const struct nlattr *resource_list,
 		 */
 		ret = device_add(&zdev->dev);
 		if (ret) {
+			put_device(&zdev->dev);
 			pr_debug("device_add failed with %d\n", ret);
 			goto err;
 		}
-		ret = genz_create_uuid_file(zdev);
+		ret = genz_create_uuid_files(zdev);
 		if (ret) {
-			pr_debug("\tgenz_create_uuid_file failed with %d\n", ret);
+			pr_debug("\tgenz_create_uuid_files failed with %d\n", ret);
 			goto err;
 		}
 		ret = genz_create_attrs(zdev);
@@ -475,7 +483,7 @@ static int genz_add_os_component(struct sk_buff *skb, struct genl_info *info)
 	}
 	*/
 	if (info->attrs[GENZ_A_RESOURCE_LIST]) {
-		ret = parse_resource_list(info->attrs[GENZ_A_RESOURCE_LIST],
+		ret = add_resource_list(info->attrs[GENZ_A_RESOURCE_LIST],
 			zcomp);
 		if (ret < 0)
 			goto err;
