@@ -123,6 +123,10 @@ int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 	unsigned long flags;
 	int ret;
 
+	if (!zbdev) /* ignore UEPs that arrive before genz_register_bridge()
+		       completes */
+		return -EINVAL;
+
 	if (uepi->version != GENZ_UEP_INFO_VERS) { /* only v1 supported */
 		dev_dbg(zbdev->bridge_dev, "unsupported version %u\n",
 			uepi->version);
