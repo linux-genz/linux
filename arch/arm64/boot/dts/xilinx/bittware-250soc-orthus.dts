@@ -1486,54 +1486,31 @@
   #size-cells = <2>;
   compatible = "simple-bus";
   ranges ;
-  GenZReqrSS_iprop_genz_802_3_phy_0: iprop_genz_802_3_phy_layer@80040000 {
-   clock-names = "reference_clock";
+  ddr4_0: ddr4@80200000 {
+   compatible = "xlnx,ddr4-2.2";
+   reg = <0x0 0x80200000 0x0 0x100000>;
+  };
+  genz_complex_genz_intf_0_iprop_genz_802_3_phy_0: iprop_genz_802_3_phy_layer@80040000 {
    compatible = "xlnx,iprop-genz-802-3-phy-layer-1.0";
    reg = <0x0 0x80040000 0x0 0x10000>;
    xlnx,s-axi-byte-width = <0x4>;
   };
-  GenZReqrSS_iprop_genz_802_3_phy_1: iprop_genz_802_3_phy_layer@80050000 {
-   clock-names = "reference_clock";
-   compatible = "xlnx,iprop-genz-802-3-phy-layer-1.0";
-   reg = <0x0 0x80050000 0x0 0x10000>;
-   xlnx,s-axi-byte-width = <0x4>;
-  };
-  GenZReqrSS_iprop_genz_link_layer_0: iprop_genz_link_layer@80020000 {
+  genz_complex_genz_intf_0_iprop_genz_link_layer_0: iprop_genz_link_layer@80020000 {
    compatible = "xlnx,iprop-genz-link-layer-1.0";
    reg = <0x0 0x80020000 0x0 0x10000>;
    xlnx,s-axi-byte-width = <0x4>;
   };
-  GenZReqrSS_iprop_genz_link_layer_1: iprop_genz_link_layer@80030000 {
+  genz_complex_genz_intf_1_iprop_genz_802_3_phy_0: iprop_genz_802_3_phy_layer@80050000 {
+   compatible = "xlnx,iprop-genz-802-3-phy-layer-1.0";
+   reg = <0x0 0x80050000 0x0 0x10000>;
+   xlnx,s-axi-byte-width = <0x4>;
+  };
+  genz_complex_genz_intf_1_iprop_genz_link_layer_0: iprop_genz_link_layer@80030000 {
    compatible = "xlnx,iprop-genz-link-layer-1.0";
    reg = <0x0 0x80030000 0x0 0x10000>;
    xlnx,s-axi-byte-width = <0x4>;
   };
-  GenZReqrSS_iprop_genz_raw_cb_la_0: iprop_genz_raw_cb_layer@80070000 {
-   compatible = "xlnx,iprop-genz-raw-cb-layer-1.0";
-   interrupt-names = "core_irq";
-   interrupt-parent = <&gic>;
-   interrupts = <0 89 4>;
-   reg = <0x0 0x80070000 0x0 0x8000>;
-   xlnx,s-axi-byte-width = <0x4>;
-  };
-  GenZReqrSS_iprop_genz_reqr_zmmu_0: iprop_genz_requester_zmmu@80060000 {
-   clock-names = "s_axi_mm_aclk";
-   clocks = <&zynqmp_clk 71>;
-   compatible = "xlnx,iprop-genz-requester-zmmu-1.0";
-   reg = <0x0 0x80060000 0x0 0x8000 0x00000020 0x00000000 0x00000020 0x00000000>;
-   xlnx,s-axi-byte-width = <0x4>;
-  };
-  GenZReqrSS_iprop_genz_requester_0: iprop_genz_requester_layer@80068000 {
-   compatible = "xlnx,iprop-genz-requester-layer-1.0";
-   reg = <0x0 0x80068000 0x0 0x8000>;
-   xlnx,s-axi-byte-width = <0x4>;
-  };
-  GenZReqrSS_iprop_genz_standard_0: iprop_genz_standard_switch_layer@80000000 {
-   compatible = "xlnx,iprop-genz-standard-switch-layer-1.0";
-   reg = <0x0 0x80000000 0x0 0x20000>;
-   xlnx,s-axi-byte-width = <0x4>;
-  };
-  GenZReqrSS_pte_table_cntrl: axi_bram_ctrl@80080000 {
+  genz_complex_genz_reqr_axi_bram_ctrl_0: axi_bram_ctrl@80080000 {
    clock-names = "s_axi_aclk";
    clocks = <&zynqmp_clk 71>;
    compatible = "xlnx,axi-bram-ctrl-4.1";
@@ -1553,34 +1530,53 @@
    xlnx,s-axi-supports-narrow-burst = <0x1>;
    xlnx,single-port-bram = <0x1>;
   };
-  GenZReqrSS_raw_cb_ctrl: axi_bram_ctrl@80100000 {
-   clock-names = "s_axi_aclk";
-   clocks = <&misc_clk_0>;
-   compatible = "xlnx,axi-bram-ctrl-4.1";
-   reg = <0x0 0x80100000 0x0 0x100000>;
-   xlnx,bram-addr-width = <0xf>;
-   xlnx,bram-inst-mode = "EXTERNAL";
-   xlnx,ecc = <0x0>;
-   xlnx,ecc-onoff-reset-value = <0x0>;
-   xlnx,ecc-type = <0x0>;
-   xlnx,fault-inject = <0x0>;
-   xlnx,memory-depth = <0x8000>;
-   xlnx,rd-cmd-optimization = <0x0>;
-   xlnx,read-latency = <0x1>;
-   xlnx,s-axi-ctrl-addr-width = <0x20>;
-   xlnx,s-axi-ctrl-data-width = <0x20>;
-   xlnx,s-axi-id-width = <0x7>;
-   xlnx,s-axi-supports-narrow-burst = <0x1>;
-   xlnx,single-port-bram = <0x1>;
+  genz_complex_genz_reqr_iprop_genz_raw_cb_la_0: iprop_genz_raw_cb_layer@80070000 {
+   compatible = "xlnx,iprop-genz-raw-cb-layer-1.0";
+   interrupt-names = "core_irq";
+   interrupt-parent = <&gic>;
+   interrupts = <0 89 4>;
+   reg = <0x0 0x80070000 0x0 0x8000>;
+   xlnx,s-axi-byte-width = <0x4>;
   };
-  misc_clk_0: misc_clk_0 {
-   #clock-cells = <0>;
-   clock-frequency = <100708007>;
-   compatible = "fixed-clock";
+  genz_complex_genz_reqr_iprop_genz_requester_0: iprop_genz_requester_layer@80068000 {
+   compatible = "xlnx,iprop-genz-requester-layer-1.0";
+   reg = <0x0 0x80068000 0x0 0x8000>;
+   xlnx,s-axi-byte-width = <0x4>;
   };
-  ddr4_0: ddr4@80200000 {
-   compatible = "xlnx,ddr4-2.2";
-   reg = <0x0 0x80200000 0x0 0x100000>;
+  genz_complex_genz_reqr_iprop_genz_requester_zmmu_0: iprop_genz_requester_zmmu@80060000 {
+   clock-names = "s_axi_mm_aclk";
+   clocks = <&zynqmp_clk 71>;
+   compatible = "xlnx,iprop-genz-requester-zmmu-1.0";
+   reg = <0x0 0x80060000 0x0 0x8000 0x00000020 0x00000000 0x00000020 0x00000000>;
+   xlnx,s-axi-byte-width = <0x4>;
+  };
+  genz_complex_genz_resp_iprop_genz_raw_cb_la_0: iprop_genz_raw_cb_layer@80340000 {
+   compatible = "xlnx,iprop-genz-raw-cb-layer-1.0";
+   interrupt-names = "core_irq";
+   interrupt-parent = <&gic>;
+   interrupts = <0 94 4>;
+   reg = <0x0 0x80340000 0x0 0x10000>;
+   xlnx,s-axi-byte-width = <0x4>;
+  };
+  genz_complex_genz_resp_iprop_genz_resp_mm_0: iprop_genz_responder_mm_layer@80330000 {
+   compatible = "xlnx,iprop-genz-responder-mm-layer-1.0";
+   reg = <0x0 0x80330000 0x0 0x10000>;
+   xlnx,s-axi-byte-width = <0x4>;
+  };
+  genz_complex_genz_resp_iprop_genz_resp_zmmu_0: iprop_genz_responder_zmmu_layer@80300000 {
+   compatible = "xlnx,iprop-genz-responder-zmmu-layer-1.0";
+   reg = <0x0 0x80300000 0x0 0x20000>;
+   xlnx,s-axi-byte-width = <0x4>;
+  };
+  genz_complex_genz_resp_iprop_genz_responder_0: iprop_genz_responder_layer@80320000 {
+   compatible = "xlnx,iprop-genz-responder-layer-1.0";
+   reg = <0x0 0x80320000 0x0 0x10000>;
+   xlnx,s-axi-byte-width = <0x4>;
+  };
+  genz_complex_iprop_genz_standard_0: iprop_genz_standard_switch_layer@80000000 {
+   compatible = "xlnx,iprop-genz-standard-switch-layer-1.0";
+   reg = <0x0 0x80000000 0x0 0x20000>;
+   xlnx,s-axi-byte-width = <0x4>;
   };
   iprop_cdma_0: iprop_cdma@80078000 {
    clock-names = "S_AXI_ACLK", "M_AXI_ACLK", "M_AXI_AUX_ACLK";
@@ -1649,6 +1645,31 @@
    xlnx,slv-awidth = <0x20>;
    xlnx,slv-dwidth = <0x20>;
    xlnx,use-wstrb = <0x1>;
+  };
+  raw_cb_ram_cntrl1: axi_bram_ctrl@80100000 {
+   clock-names = "s_axi_aclk";
+   clocks = <&misc_clk_0>;
+   compatible = "xlnx,axi-bram-ctrl-4.1";
+   reg = <0x0 0x80100000 0x0 0x100000>;
+   xlnx,bram-addr-width = <0xf>;
+   xlnx,bram-inst-mode = "EXTERNAL";
+   xlnx,ecc = <0x0>;
+   xlnx,ecc-onoff-reset-value = <0x0>;
+   xlnx,ecc-type = <0x0>;
+   xlnx,fault-inject = <0x0>;
+   xlnx,memory-depth = <0x8000>;
+   xlnx,rd-cmd-optimization = <0x0>;
+   xlnx,read-latency = <0x1>;
+   xlnx,s-axi-ctrl-addr-width = <0x20>;
+   xlnx,s-axi-ctrl-data-width = <0x20>;
+   xlnx,s-axi-id-width = <0x1>;
+   xlnx,s-axi-supports-narrow-burst = <0x1>;
+   xlnx,single-port-bram = <0x1>;
+  };
+  misc_clk_0: misc_clk_0 {
+   #clock-cells = <0>;
+   clock-frequency = <100708007>;
+   compatible = "fixed-clock";
   };
  };
 };
@@ -1903,11 +1924,17 @@
   reg = <0>;
  };
 };
-&GenZReqrSS_pte_table_cntrl {
+&genz_complex_genz_reqr_axi_bram_ctrl_0 {
  compatible = "xlnx,iprop-genz-pte-table";
 };
-&GenZReqrSS_raw_cb_ctrl {
+&raw_cb_ram_cntrl1 {
  compatible = "xlnx,iprop-genz-raw-cb-table";
+};
+&genz_complex_genz_reqr_iprop_genz_raw_cb_la_0 {
+ compatible = "xlnx,iprop-genz-reqr-raw-cb-layer-1.0";
+};
+&genz_complex_genz_resp_iprop_genz_raw_cb_la_0 {
+ compatible = "xlnx,iprop-genz-resp-raw-cb-layer-1.0";
 };
 &cpu0 {
     numa-node-id = <0>;
