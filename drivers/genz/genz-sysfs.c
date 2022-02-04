@@ -127,7 +127,7 @@ int genz_create_attr(struct genz_dev *zdev, struct genz_zres *zres)
 	res_attr->attr.mode = (S_IRUSR | S_IWUSR);
 	res_attr->size = zres->zres.res.end - zres->zres.res.start + 1;
 	res_attr->private = zres;  /* Revisit: unused */
-	if (zres->zres.res.flags & IORESOURCE_GENZ_CONTROL) {
+	if (genz_is_control_resource(&zres->zres)) {
 		res_attr->read = read_control;
 		res_attr->write = write_control;
 	} else {
