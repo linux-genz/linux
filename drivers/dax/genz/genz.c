@@ -9,6 +9,7 @@
 #include "../bus.h"
 
 #define DAX_GENZ_DRV_NAME "dax-genz"
+#define DAX_GENZ_FL_PEC 0x40000000ull
 
 /* Revisit: why does the numa.h include not work? */
 int numa_add_memblk(int nid, u64 start, u64 end);
@@ -105,12 +106,14 @@ struct dev_dax *__dax_genz_probe(struct genz_dev *zdev,
 	uint32_t gcid = genz_dev_gcid(zdev, 0);
 	uint64_t access;
 	u32 end_trunc;
+	bool pec;
 
 	id = zdev->driver_flags & 0xff;
 	region_id = (zdev->driver_flags >> 8) & 0xff;
 	target_node = (zdev->driver_flags >> 16) & 0xff;
-	dev_dbg(dev, "instance_uuid=%pUb, region_id=%d, id=%d, target_node=%d\n",
-		&zdev->instance_uuid, region_id, id, target_node);
+	pec = zdev->driver_flags & DAX_GENZ_FL_PEC;
+	dev_dbg(dev, "instance_uuid=%pUb, region_id=%d, id=%d, target_node=%d, pec=%u\n",
+		&zdev->instance_uuid, region_id, id, target_node, pec);
 	uui = devm_genz_uuid_import(zdev, &zdev->instance_uuid,
 				    /* Revisit */0, GFP_KERNEL);
 	if (IS_ERR(uui)) {
@@ -119,6 +122,7 @@ struct dev_dax *__dax_genz_probe(struct genz_dev *zdev,
 		return ERR_PTR(ret);
 	}
 	access = GENZ_MR_WRITE_REMOTE|GENZ_MR_INDIVIDUAL|GENZ_MR_REQ_CPU;
+	access |= pec ? GENZ_MR_PEC : 0;
 	rmri = devm_genz_rmr_import(zdev, uui, gcid,
 				    zres->res.start, resource_size(&zres->res),
 				    access, zres->rw_rkey, GENZ_DR_IFACE_NONE,
