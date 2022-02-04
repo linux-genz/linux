@@ -814,7 +814,7 @@ struct genz_rmr *genz_rmr_get(
 	struct genz_pte_info    *info;
 	struct uuid_node        *unode;
 	struct uuid_tracker     *uu;
-	bool                    writable, indiv_rkeys, control, dr;
+	bool                    writable, indiv_rkeys, control, dr, pec;
 	int                     ret = 0;
 	char                    gcstr[GCID_STRING_LEN+1];
 
@@ -822,6 +822,7 @@ struct genz_rmr *genz_rmr_get(
 	indiv_rkeys = !!(access & GENZ_MR_INDIV_RKEYS);
 	control = !!(access & GENZ_MR_CONTROL);
 	dr = control && (dr_iface != GENZ_DR_IFACE_NONE);
+	pec = control || !!(access & GENZ_MR_PEC);
 	rmr = kzalloc(sizeof(*rmr), GFP_KERNEL);
 	if (!rmr) {
 		ret = -ENOMEM;
@@ -860,7 +861,6 @@ struct genz_rmr *genz_rmr_get(
 	info->dr_iface      = dr_iface;
 	info->pte.req.st    = (control) ? GENZ_CONTROL : GENZ_DATA;
 	if (control) {
-		info->pte.req.pec = 1;
 		info->pte.req.control.addr = rsp_zaddr;
 		info->pte.req.drc = dr;
 		if (dr)
@@ -868,6 +868,7 @@ struct genz_rmr *genz_rmr_get(
 	} else {
 		info->pte.req.data.addr = rsp_zaddr;
 	}
+	info->pte.req.pec        = pec;
 	info->pte.req.pasid      = pasid;
 	info->pte.req.rkey       = rkey;
 	info->pte.req.dgcid      = dgcid;

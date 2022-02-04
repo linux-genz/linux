@@ -511,6 +511,7 @@ static inline bool genz_valid_gcid(uint32_t gcid)
 #define GENZ_MR_FLAG1           ((uint32_t)1 << 5)
 #define GENZ_MR_FLAG2           ((uint32_t)1 << 6)
 #define GENZ_MR_FLAG3           ((uint32_t)1 << 7)
+#define GENZ_MR_PEC             ((uint32_t)1 << 15) /* proc exception ctl */
 #define GENZ_MR_REQ             ((uint32_t)1 << 16) /* subsystem internal */
 #define GENZ_MR_RSP             ((uint32_t)1 << 17) /* subsystem internal */
 #define GENZ_MR_MAPPED          ((uint32_t)1 << 18) /* subsystem internal */
