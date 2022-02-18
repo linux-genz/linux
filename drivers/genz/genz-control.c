@@ -451,21 +451,6 @@ static struct kobj_type genz_dir_ktype = {
 	.release = genz_dir_release
 };
 
-static void control_dir_release(struct kobject *kobj)
-{
-	/* Revisit: Is this just a debug function? It doesn't do anything */
-	if (kobj == NULL) {
-		pr_debug("NULL kobj\n");
-		return;
-	}
-	pr_debug("kobj %s\n", kobject_name(kobj));
-}
-
-static struct kobj_type control_dir_ktype = {
-	.sysfs_ops = &kobj_sysfs_ops,
-	.release = control_dir_release
-};
-
 static void chain_dir_release(struct kobject *kobj)
 {
 	if (kobj == NULL) {
@@ -2250,11 +2235,10 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 
 	/* Make control directory under genzN */
 	/* Revisit: error handling */
-	//zdev->root_control_info->kobj.kset = zbdev->genz_kset; /* Revisit */
-	ret = kobject_init_and_add(&zdev->zcomp->comp.ctl_kobj,
-				   &control_dir_ktype, genz_dir, "control");
-	if (ret < 0) {
+	zdev->zcomp->comp.ctl_kobj = kobject_create_and_add("control", genz_dir);
+	if (zdev->zcomp->comp.ctl_kobj == NULL) {
 		pr_debug("unable to create bridge control directory\n");
+		ret = -ENOMEM;
 		goto err_control;
 	}
 
@@ -2271,7 +2255,7 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	ret = start_core_structure(zbdev, NULL,
 			&zdev->zcomp->comp.root_control_info,
 			&genz_struct_type_to_ptrs[GENZ_CORE_STRUCTURE],
-			&zdev->zcomp->comp.ctl_kobj); /* control dir */
+			zdev->zcomp->comp.ctl_kobj); /* control dir */
 	return 0;
 
 err_control:
@@ -2328,7 +2312,6 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 	}
 	br_is_dr = (dr_comp == &zbdev->zdev.zcomp->comp);
 	gcid = genz_comp_gcid((br_is_dr) ? f_comp : dr_comp);
-	dr_dir = &f_comp->ctl_kobj;
 	dr_rmri = &f_comp->ctl_rmr_info;
 	iface_dir = genz_comp_iface_dir(dr_comp, dr_iface);
 	if (!iface_dir) {
@@ -2337,11 +2320,13 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 		goto err_mdata;
 	}
 	/* Make the dr directory under interfaceN of the relaying component */
-	ret = kobject_init_and_add(dr_dir, &control_dir_ktype, iface_dir, "dr");
-	if (ret < 0) {
+	dr_dir = kobject_create_and_add("dr", iface_dir);
+	if (dr_dir == NULL) {
 		pr_debug("unable to create dr directory\n");
-		goto err_kobj;
+		ret = -ENOMEM;
+		goto err_mdata;
 	}
+	f_comp->ctl_kobj = dr_dir;
 
 	access = GENZ_MR_READ_REMOTE|GENZ_MR_WRITE_REMOTE|
 		 GENZ_MR_INDIVIDUAL|GENZ_MR_CONTROL;
@@ -2412,7 +2397,7 @@ int genz_dr_remove_control_files(struct genz_bridge_dev *zbdev,
 
 	br_is_dr = (dr_comp == &zbdev->zdev.zcomp->comp);
 	gcid = genz_comp_gcid((br_is_dr) ? f_comp : dr_comp);
-	dr_dir = &f_comp->ctl_kobj;
+	dr_dir = f_comp->ctl_kobj;
 	dr_rmri = &f_comp->ctl_rmr_info;
 	iface_dir = genz_comp_iface_dir(dr_comp, dr_iface);
 	if (!iface_dir) {
@@ -2483,12 +2468,12 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 	}
 	if (dr_iface != GENZ_DR_IFACE_NONE) {
 		/* we already have (dr) control space - move/update it */
-		ret = kobject_move(&f_comp->ctl_kobj, &f_comp->kobj);
+		ret = kobject_move(f_comp->ctl_kobj, &f_comp->kobj);
 		if (ret < 0) {
 			pr_debug("genz_kobject_move error ret=%d\n", ret);
 			goto err_mdata;
 		}
-		ret = kobject_rename(&f_comp->ctl_kobj, "control");
+		ret = kobject_rename(f_comp->ctl_kobj, "control");
 		if (ret < 0) {
 			pr_debug("genz_kobject_rename error ret=%d\n", ret);
 			goto err_mdata;
@@ -2509,10 +2494,10 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 		return ret;
 	}
 	/* Make the control directory under the component */
-	ret = kobject_init_and_add(&f_comp->ctl_kobj, &control_dir_ktype,
-				   &f_comp->kobj, "control");
-	if (ret < 0) {
-		pr_debug("unable to create control directory\n");
+	f_comp->ctl_kobj = kobject_create_and_add("control", &f_comp->kobj);
+	if (f_comp->ctl_kobj == NULL) {
+		pr_debug("unable to create component control directory\n");
+		ret = -ENOMEM;
 		goto err_mdata;
 	}
 
@@ -2545,7 +2530,7 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 	ret = start_core_structure(zbdev, rmri,
 			&f_comp->root_control_info,
 			&genz_struct_type_to_ptrs[GENZ_CORE_STRUCTURE],
-			&f_comp->ctl_kobj);
+			f_comp->ctl_kobj);
 	if (ret < 0) {
 		pr_debug("start_core_structure error ret=%d\n", ret);
 		goto err_fab_files;
@@ -2557,7 +2542,7 @@ err_fab_files:
 err_rmr:
 	genz_rmr_free(rmri);
 err_kobj:
-	kobject_put(&f_comp->ctl_kobj);
+	kobject_put(f_comp->ctl_kobj);
 err_mdata:
 	remove_mdata(zbdev);
 	return ret;
@@ -2576,7 +2561,7 @@ int genz_fab_remove_control_files(struct genz_bridge_dev *zbdev,
 
 	rmri = &f_comp->ctl_rmr_info;
 	/* Remove the control directory under the component */
-	kobject_put(&f_comp->ctl_kobj);
+	kobject_put(f_comp->ctl_kobj);
 
 	pr_debug("calling genz_rmr_free for %s control\n",
 		 genz_gcid_str(gcid, gcstr, sizeof(gcstr)));
@@ -2671,8 +2656,8 @@ int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev)
 	/* remove the genzN/{gcid,cclass,serial,fru_uuid,c_uuid} files */
 	genz_remove_bridge_files(&zbdev->genzN_dir);
 	/* remove the control directory */
-	kobject_del(&zdev->zcomp->comp.ctl_kobj);
-	kobject_put(&zdev->zcomp->comp.ctl_kobj);
+	kobject_del(zdev->zcomp->comp.ctl_kobj);
+	kobject_put(zdev->zcomp->comp.ctl_kobj);
 	/* remove the symlink associated with this genzN directory */
 	dir = &zbdev->zdev.zcomp->comp.subnet->fabric->dev.kobj;
 	snprintf(bridgeN, MAX_GENZ_NAME, "bridge%d", zbdev->bridge_num);

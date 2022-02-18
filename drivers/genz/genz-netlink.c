@@ -866,13 +866,13 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 			pr_debug("scenario 2, br_gcid (%d) not found\n",
 				 fci.br_gcid);
 			ret = -EINVAL;
-			goto err;
+			goto err_put;
 		}
 		ret = genz_fab_create_control_files(zbdev, fci.zcomp,
 						    GENZ_DR_IFACE_NONE, &fci.mgr_uuid);
 		if (ret < 0) {
 			pr_debug("genz_fab_create_control_files failed, ret=%d\n", ret);
-			goto err;
+			goto err_put;
 		}
 	} else if (scenario == 3) {
 		zbdev = genz_lookup_zbdev(fci.f, fci.br_gcid);
@@ -880,13 +880,13 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 			pr_debug("scenario 3, br_gcid (%d) not found\n",
 				 fci.br_gcid);
 			ret = -EINVAL;
-			goto err;
+			goto err_put;
 		}
 		ret = genz_fab_create_control_files(zbdev, fci.zcomp,
 						    fci.dr_iface, &fci.mgr_uuid);
 		if (ret < 0) {
 			pr_debug("genz_fab_create_control_files failed, ret=%d\n", ret);
-			goto err;
+			goto err_put;
 		}
 	} else {
 		pr_debug("invalid combination of GCIDs\n");
@@ -894,10 +894,10 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 		goto err;
 	}
 	return ret;
-err:
-	/* Revisit: need scenario-dependent error cleanup */
-	if (fci.zcomp)
+err_put:
+	if (fci.zcomp && fci.zcomp->add_kobj)
 		kobject_put(&fci.zcomp->kobj);
+err:
 	return ret;
 }
 
@@ -976,7 +976,7 @@ static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *i
 {
 	struct genz_fab_comp_info fci;
 	struct genz_bridge_dev *zbdev;
-	struct genz_comp *dr_comp;
+	struct genz_comp *dr_comp = NULL;
 	uint scenario;
 	int ret;
 
@@ -1027,7 +1027,7 @@ static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *i
 						   fci.dr_iface, &fci.mgr_uuid);
 		if (ret < 0) {
 			pr_debug("genz_dr_create_control_files failed, ret=%d\n", ret);
-			goto err;
+			goto err_put;
 		}
 	} else {
 		pr_debug("invalid combination of GCIDs\n");
@@ -1035,9 +1035,10 @@ static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *i
 		goto err;
 	}
 	return ret;
+err_put:
+	if (dr_comp && dr_comp->add_kobj)
+		kobject_put(&dr_comp->kobj);
 err:
-	if (fci.zcomp)
-		kobject_put(&fci.zcomp->kobj);
 	return ret;
 }
 
