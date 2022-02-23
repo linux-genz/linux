@@ -99,7 +99,6 @@ struct genz_bdev {  /* one per genz_resource == genz_bdev_probe */
 	uint                   bindex;
 	uint64_t               base_zaddr;
 	struct genz_rmr_info   rmr_info;
-	struct request_queue   *queue;
 	struct gendisk         *gd;
 	struct genz_blk_state  *bstate;
 	struct genz_resource   *zres;
@@ -609,7 +608,7 @@ static const struct dax_operations genz_blk_dax_ops = {
 static void genz_blk_pagemap_cleanup(struct dev_pagemap *pgmap)
 {
 	struct genz_bdev *const zbd = container_of(pgmap, struct genz_bdev, pgmap);
-	struct request_queue *q = zbd->queue;
+	struct request_queue *q = zbd->gd->queue;
 	struct device *dev = disk_to_dev(zbd->gd);
 
 	dev_dbg(dev, "q=%px\n", q);
@@ -619,7 +618,7 @@ static void genz_blk_pagemap_cleanup(struct dev_pagemap *pgmap)
 static void genz_blk_pagemap_kill(struct dev_pagemap *pgmap)
 {
 	struct genz_bdev *const zbd = container_of(pgmap, struct genz_bdev, pgmap);
-	struct request_queue *q = zbd->queue;
+	struct request_queue *q = zbd->gd->queue;
 	struct device *dev = disk_to_dev(zbd->gd);
 
 	dev_dbg(dev, "q=%px\n", q);
@@ -659,7 +658,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 {
 	struct genz_blk_state   *bstate = zbd->bstate;
 	struct genz_dev         *zdev = bstate->zdev;
-	struct gendisk *gd;
+	struct gendisk *gd = zbd->gd;
 	struct dax_device *dax_dev;
 	unsigned long dax_flags = 0;
 	void *addr;
@@ -667,13 +666,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	int ret = 0;
 
 	dev_dbg(&zdev->dev, "entered\n");
-	zbd->gd = gd = alloc_disk(0); // Revisit: use alloc_disk_node
-	if (!gd) {
-		ret = -ENOMEM;
-		goto out;
-	}
 	gd->fops = &genz_bdev_ops;
-	gd->queue = zbd->queue;
 	gd->private_data = zbd;
 	gd->flags = GENHD_FL_EXT_DEVT;
 	scnprintf(gd->disk_name, 32, GENZ_BDEV_NAME "%u", zbd->bindex);
@@ -682,7 +675,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	set_capacity(gd, zbd->size/KERNEL_SECTOR_SIZE);
 	pr_info("%s: set capacity to %zu 512 byte sectors\n",
 		gd->disk_name, zbd->size/KERNEL_SECTOR_SIZE);
-	if (blk_queue_dax(zbd->queue)) {
+	if (blk_queue_dax(gd->queue)) {
 		dev = disk_to_dev(zbd->gd);
 		dev_dbg(&zdev->dev, "Enable DAX on %s\n", gd->disk_name);
 		dax_dev = alloc_dax(zbd, gd->disk_name,
@@ -690,7 +683,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		if (!dax_dev) {
 			dev_dbg(dev, "alloc_dax failed\n");
 			ret = -ENOMEM;
-			goto put_disk;
+			goto cleanup_disk;
 		}
 		zbd->dax_dev = dax_dev;
 		/* fsdax setup */
@@ -713,8 +706,8 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	dev_dbg(&zdev->dev, "ret=%d\n", ret);
 	return ret;
 
-put_disk:
-	put_disk(gd);
+cleanup_disk:
+	blk_cleanup_disk(gd);
 	goto out;
 }
 
@@ -726,32 +719,33 @@ static int genz_blk_construct_bdev(struct genz_bdev *zbd,
 	struct genz_dev         *zdev = bstate->zdev;
 	struct genz_bridge_dev  *zbdev = zdev->zbdev;
 	struct genz_bridge_info *br_info = &zbdev->br_info;
+	struct gendisk *gd;
 	int err = 0;
 
 	dev_dbg(&zdev->dev, "entered\n");
-	zbd->queue = blk_mq_init_queue(bbr->tag_set);
-	if (IS_ERR(zbd->queue)) {
-		err = PTR_ERR(zbd->queue);
-		dev_dbg(&zdev->dev, "blk_mq_init_queue failed, ret=%d\n", err);
+	gd = blk_mq_alloc_disk(bbr->tag_set, zbd);
+	if (IS_ERR(gd)) {
+		err = PTR_ERR(gd);
+		dev_dbg(&zdev->dev, "blk_mq_alloc_disk failed, ret=%d\n", err);
 		return err;
 	}
-	zbd->queue->queuedata = zbd;
-	blk_queue_physical_block_size(zbd->queue, PAGE_SIZE);
-	blk_queue_logical_block_size(zbd->queue, GENZ_BLOCK_SIZE);
-	blk_queue_max_segments(zbd->queue, GENZ_BLK_MAX_SG);
-	blk_queue_max_hw_sectors(zbd->queue,
+	zbd->gd = gd;
+	blk_queue_physical_block_size(gd->queue, PAGE_SIZE);
+	blk_queue_logical_block_size(gd->queue, GENZ_BLOCK_SIZE);
+	blk_queue_max_segments(gd->queue, GENZ_BLK_MAX_SG);
+	blk_queue_max_hw_sectors(gd->queue,
 			 bbr->zbdev->br_info.block_max_xfer/KERNEL_SECTOR_SIZE);
-	blk_queue_max_segment_size(zbd->queue,
+	blk_queue_max_segment_size(gd->queue,
 				   bbr->zbdev->br_info.block_max_xfer);
-	blk_queue_write_cache(zbd->queue, false, false);
+	blk_queue_write_cache(gd->queue, false, false);
 
 	/* Tell the block layer that this is not a rotational device */
-	blk_queue_flag_set(QUEUE_FLAG_NONROT, zbd->queue);
-	blk_queue_flag_clear(QUEUE_FLAG_ADD_RANDOM, zbd->queue);
+	blk_queue_flag_set(QUEUE_FLAG_NONROT, gd->queue);
+	blk_queue_flag_clear(QUEUE_FLAG_ADD_RANDOM, gd->queue);
 
 	/* enable DAX support */
 	if (br_info->load_store) {
-		blk_queue_flag_set(QUEUE_FLAG_DAX, zbd->queue);
+		blk_queue_flag_set(QUEUE_FLAG_DAX, gd->queue);
 	}
 
 	return genz_blk_register_gendisk(zbd);
@@ -764,9 +758,7 @@ static void genz_blk_destroy_bdev(struct genz_bdev *zbd)
 		put_dax(zbd->dax_dev);
 	}
 	del_gendisk(zbd->gd);
-	put_disk(zbd->gd);
-	if (!blk_queue_dax(zbd->queue))
-		blk_cleanup_queue(zbd->queue);
+	blk_cleanup_disk(zbd->gd);
 }
 
 static int genz_blk_init_tag_set(struct genz_blk_bridge *bbr)

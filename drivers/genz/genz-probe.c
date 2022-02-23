@@ -194,7 +194,7 @@ int genz_device_probe(struct device *dev)
 	return ret;
 }
 
-int genz_device_remove(struct device *dev)
+void genz_device_remove(struct device *dev)
 {
 	struct genz_dev *zdev = to_genz_dev(dev);
 	struct genz_driver *zdrv = to_genz_driver(dev->driver);
@@ -207,7 +207,6 @@ int genz_device_remove(struct device *dev)
 	}
 
 	genz_dev_put(zdev);
-	return 0;
 }
 
 static struct genz_fabric *genz_alloc_fabric(uint32_t fabric_num)
