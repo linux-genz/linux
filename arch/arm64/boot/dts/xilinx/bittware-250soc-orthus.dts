@@ -1547,7 +1547,7 @@
    clock-names = "s_axi_mm_aclk";
    clocks = <&zynqmp_clk 71>;
    compatible = "xlnx,iprop-genz-requester-zmmu-1.0";
-   reg = <0x0 0x80060000 0x0 0x8000 0x00000020 0x00000000 0x00000020 0x00000000>;
+   reg = <0x0 0x80060000 0x0 0x8000>;
    xlnx,s-axi-byte-width = <0x4>;
   };
   genz_complex_genz_resp_iprop_genz_raw_cb_la_0: iprop_genz_raw_cb_layer@80340000 {
@@ -1578,6 +1578,12 @@
    reg = <0x0 0x80000000 0x0 0x20000>;
    xlnx,s-axi-byte-width = <0x4>;
   };
+  iprop_axixbar_0: iprop_axixbar@1000000000 {
+   clock-names = "axi_aclk", "m_axi_0_aclk", "s_axi_0_aclk", "s_axi_1_aclk";
+   clocks = <&zynqmp_clk 71>, <&zynqmp_clk 71>, <&zynqmp_clk 71>, <&zynqmp_clk 71>;
+   compatible = "xlnx,iprop-axixbar-1.0";
+   reg = <0x00000010 0x00000000 0x00000038 0x00000000 0x00000048 0x00000000 0x00000038 0x00000000>;
+  };
   iprop_cdma_0: iprop_cdma@80078000 {
    clock-names = "S_AXI_ACLK", "M_AXI_ACLK", "M_AXI_AUX_ACLK";
    clocks = <&zynqmp_clk 71>, <&zynqmp_clk 71>, <&zynqmp_clk 71>;
@@ -1586,7 +1592,7 @@
    xlnx,addr-pipe-depth = <0x1>;
    xlnx,dphase-timeout = <0x8>;
    xlnx,length-width = <0xc>;
-   xlnx,max-burst-len = <0x8>;
+   xlnx,max-burst-len = <0x4>;
    xlnx,native-data-width = <0x80>;
    xlnx,num-mem = <0x1>;
    xlnx,num-reg = <0x0>;
@@ -1603,7 +1609,7 @@
    xlnx,addr-pipe-depth = <0x1>;
    xlnx,dphase-timeout = <0x8>;
    xlnx,length-width = <0xc>;
-   xlnx,max-burst-len = <0x8>;
+   xlnx,max-burst-len = <0x4>;
    xlnx,native-data-width = <0x80>;
    xlnx,num-mem = <0x1>;
    xlnx,num-reg = <0x0>;
@@ -1620,7 +1626,7 @@
    xlnx,addr-pipe-depth = <0x1>;
    xlnx,dphase-timeout = <0x8>;
    xlnx,length-width = <0xc>;
-   xlnx,max-burst-len = <0x8>;
+   xlnx,max-burst-len = <0x4>;
    xlnx,native-data-width = <0x80>;
    xlnx,num-mem = <0x1>;
    xlnx,num-reg = <0x0>;
@@ -1637,7 +1643,7 @@
    xlnx,addr-pipe-depth = <0x1>;
    xlnx,dphase-timeout = <0x8>;
    xlnx,length-width = <0xc>;
-   xlnx,max-burst-len = <0x8>;
+   xlnx,max-burst-len = <0x4>;
    xlnx,native-data-width = <0x80>;
    xlnx,num-mem = <0x1>;
    xlnx,num-reg = <0x0>;
