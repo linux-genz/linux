@@ -62,7 +62,7 @@ struct genz_os_subnet *genz_lookup_os_subnet(uint32_t sid, struct genz_fabric *f
 struct genz_subnet *genz_add_subnet(uint32_t sid, struct genz_fabric *f);
 struct genz_os_subnet *genz_add_os_subnet(uint32_t sid, struct genz_fabric *f);
 int genz_device_probe(struct device *dev);
-int genz_device_remove(struct device *dev);
+void genz_device_remove(struct device *dev);
 const struct genz_device_id *genz_match_device(struct genz_driver *zdrv,
 					       struct genz_dev *zdev);
 void print_components(struct genz_fabric *f);
