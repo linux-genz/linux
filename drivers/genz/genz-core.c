@@ -360,7 +360,7 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 		}
 	}
 	if (uninit) {
-		cid = 0;  /* Revisit: MultiBridge */
+		cid = zbdev->bridge_num;
 	} else {
 		ret = genz_control_read_cid0(zbdev, NULL, &cid);
 		if (ret) {
