@@ -1795,38 +1795,46 @@ static int start_core_structure(struct genz_bridge_dev *zbdev,
 			"%s@0x%lx", genz_structure_name(core.type), ci->start);
 	if (ret < 0) {
 		pr_debug("kobject_add failed with %d\n", ret);
-		kobject_put(&ci->kobj);
-		return ret;
+		goto err_kobj;
 	}
 	*root = ci;
 
 	ret = genz_control_create_bin_file(ci, genz_structure_name(core.type));
 	if (ret) {
-		/* Revisit: handle error */
 		pr_debug("genz_control_create_bin_file failed with %d for file %s\n",
 			 ret, ci->battr.attr.name);
-		return ret;
+		goto err_kobj;
 	}
-	/* Revisit: temporary hack to workaround incorrect mamba value */
-	max_ctl = max((uint64_t)core.max_ctl, 0xd0000ull);
+	max_ctl = (uint64_t)core.max_ctl;
+	if (!IS_ALIGNED(max_ctl, SZ_4K)) {
+		pr_err("MaxCTL (0x%llx) is not 4K aligned", max_ctl);
+		ret = -EINVAL;
+		goto err_kobj;
+	}
 	/* Resize the requester ZMMU mapping to cover all of control space */
 	ret = genz_rmr_resize(&zbdev->fabric->mgr_uuid, max_ctl, rmri);
 	if (ret < 0) {
-		/* Revisit: handle error */
 		pr_debug("genz_rmr_resize for %s failed with %d\n",
 			 ci->battr.attr.name, ret);
-		return ret;
+		goto err_rmr;
 	}
 	/* Recursively traverse any pointers in this structure */
 	ret = traverse_control_pointers(zbdev, rmri, ci, core.type, core.vers,
 					con_dir, core_ptr_order);
 	if (ret < 0) {
-		/* Revisit: handle error */
 		pr_debug("traverse_control_pointers for %s failed with %d\n",
 			 ci->battr.attr.name, ret);
-		return ret;
+		goto err_ptrs;
 	}
 	return 0;
+
+err_ptrs:
+	/* Revisit: undo genz_rmr_resize? */
+err_rmr:
+	genz_control_remove_bin_file(ci);
+err_kobj:
+	kobject_put(&ci->kobj);
+	return ret;
 }
 
 static int traverse_structure(struct genz_bridge_dev *zbdev,
