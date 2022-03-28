@@ -566,6 +566,31 @@ static ssize_t fru_uuid_br_show(struct kobject *kobj,
 static struct kobj_attribute fru_uuid_br_attribute =
 	__ATTR(fru_uuid, (0444), fru_uuid_br_show, NULL);
 
+static ssize_t mgr_uuid_br_show(struct kobject *kobj,
+		struct kobj_attribute *attr,
+		char *buf)
+{
+	struct genz_bridge_dev *zbdev;
+	uuid_t mgr_uuid;
+	int ret;
+
+	zbdev = kobj_to_zbdev(kobj);
+	if (zbdev == NULL) {
+		pr_debug("zbdev is NULL\n");
+		return snprintf(buf, PAGE_SIZE, "bad zbdev\n");
+	}
+	/* read the current mgr_uuid value */
+	ret = genz_control_read_mgr_uuid(zbdev, NULL, &mgr_uuid);
+	if (ret < 0) {
+		pr_debug("genz_control_read_mgr_uuid error, ret=%d\n", ret);
+		return snprintf(buf, PAGE_SIZE, "bad mgr_uuid %d\n", ret);
+	}
+	return snprintf(buf, PAGE_SIZE, "%pUb\n", &mgr_uuid);
+}
+
+static struct kobj_attribute mgr_uuid_br_attribute =
+	__ATTR(mgr_uuid, (0444), mgr_uuid_br_show, NULL);
+
 static int genz_create_bridge_files(struct kobject *genz_dir)
 {
 	int ret;
@@ -575,6 +600,7 @@ static int genz_create_bridge_files(struct kobject *genz_dir)
 	ret |= sysfs_create_file(genz_dir, &serial_br_attribute.attr);
 	ret |= sysfs_create_file(genz_dir, &fru_uuid_br_attribute.attr);
 	ret |= sysfs_create_file(genz_dir, &cuuid_br_attribute.attr);
+	ret |= sysfs_create_file(genz_dir, &mgr_uuid_br_attribute.attr);
 	return ret;
 }
 
@@ -585,6 +611,7 @@ static void genz_remove_bridge_files(struct kobject *genz_dir)
 	sysfs_remove_file(genz_dir, &serial_br_attribute.attr);
 	sysfs_remove_file(genz_dir, &fru_uuid_br_attribute.attr);
 	sysfs_remove_file(genz_dir, &cuuid_br_attribute.attr);
+	sysfs_remove_file(genz_dir, &mgr_uuid_br_attribute.attr);
 }
 
 static ssize_t gcid_fab_show(struct kobject *kobj,
