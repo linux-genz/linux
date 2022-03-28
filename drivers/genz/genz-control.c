@@ -1151,6 +1151,15 @@ static int read_pointer_at_offset(struct genz_bridge_dev *zbdev,
 	return ret;
 }
 
+static int check_all_ones_header(struct genz_control_structure_header *hdr)
+{
+	bool all_ones;
+
+	all_ones = (hdr->type == 0xfff) && (hdr->vers == 0xf) &&
+		   (hdr->size == 0xffff);
+	return all_ones ? -ENODATA : 0;
+}
+
 static int read_header_at_offset(struct genz_bridge_dev *zbdev,
 			struct genz_rmr_info *rmri,
 			off_t start,
@@ -1173,6 +1182,11 @@ static int read_header_at_offset(struct genz_bridge_dev *zbdev,
 	if (ret) {
 		pr_debug("genz_control_read of structure header failed with %d\n",
 			ret);
+		return ret;
+	}
+	ret = check_all_ones_header(hdr);
+	if (ret) {
+		pr_debug("structure header is all ones\n");
 		return ret;
 	}
 	pr_debug("hdr->type=0x%x, hdr->vers=%d, hdr->size=0x%x\n",
@@ -1795,6 +1809,11 @@ static int start_core_structure(struct genz_bridge_dev *zbdev,
 	}
 
 	/* Validate the header is as expected */
+	ret = check_all_ones_header(hdr);
+	if (ret) {
+		pr_debug("core structure header is all ones\n");
+		return ret;
+	}
 	if (core.type != GENZ_CORE_STRUCTURE) {
 		pr_debug("expected type 0 but found %u\n", core.type);
 		return -EINVAL;
