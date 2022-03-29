@@ -526,43 +526,6 @@ static long genz_blk_dax_direct_access(struct dax_device *dax_dev,
 	return PHYS_PFN(zbd->size - offset);
 }
 
-static bool genz_blk_dax_supported(struct dax_device *dax_dev,
-                struct block_device *bdev, int blocksize, sector_t start,
-                sector_t sectors)
-{
-	struct genz_bdev        *zbd = dax_get_private(dax_dev);
-	/* Revisit: simplify this long chain of pointers somehow */
-	struct genz_blk_state   *bstate = zbd->bstate;
-	struct genz_dev         *zdev = bstate->zdev;
-	struct genz_bridge_dev  *zbdev = zdev->zbdev;
-	struct genz_bridge_info *br_info = &zbdev->br_info;
-
-	if (!br_info->load_store) { /* does bridge support load/store? */
-		dev_dbg(&zdev->dev, "bridge does not support load/store\n");
-		return false;
-	}
-	return generic_fsdax_supported(dax_dev, bdev, blocksize,
-				       start, sectors);
-}
-
-/*
- * Use the 'no check' versions of copy_from_iter_flushcache() and
- * copy_mc_to_iter() to bypass HARDENED_USERCOPY overhead. Bounds
- * checking, both file offset and device offset, is handled by
- * dax_iomap_actor()
- */
-static size_t genz_blk_copy_from_iter(struct dax_device *dax_dev, pgoff_t pgoff,
-		void *addr, size_t bytes, struct iov_iter *i)
-{
-	return _copy_from_iter_flushcache(addr, bytes, i);
-}
-
-static size_t genz_blk_copy_to_iter(struct dax_device *dax_dev, pgoff_t pgoff,
-		void *addr, size_t bytes, struct iov_iter *i)
-{
-	return _copy_mc_to_iter(addr, bytes, i);
-}
-
 static int genz_blk_zero_page_range(struct dax_device *dax_dev, pgoff_t pgoff,
                                     size_t nr_pages)
 {
@@ -597,9 +560,6 @@ static int genz_blk_zero_page_range(struct dax_device *dax_dev, pgoff_t pgoff,
 
 static const struct dax_operations genz_blk_dax_ops = {
 	.direct_access   = genz_blk_dax_direct_access,
-	.dax_supported   = genz_blk_dax_supported,
-	.copy_from_iter  = genz_blk_copy_from_iter,
-	.copy_to_iter    = genz_blk_copy_to_iter,
 	.zero_page_range = genz_blk_zero_page_range,
 };
 
@@ -660,7 +620,6 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	struct genz_dev         *zdev = bstate->zdev;
 	struct gendisk *gd = zbd->gd;
 	struct dax_device *dax_dev;
-	unsigned long dax_flags = 0;
 	void *addr;
 	struct device *dev;
 	int ret = 0;
@@ -668,7 +627,6 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	dev_dbg(&zdev->dev, "entered\n");
 	gd->fops = &genz_bdev_ops;
 	gd->private_data = zbd;
-	gd->flags = GENHD_FL_EXT_DEVT;
 	scnprintf(gd->disk_name, 32, GENZ_BDEV_NAME "%u", zbd->bindex);
 	pr_info("%s: first_minor=%d, base_zaddr=0x%llx\n",
 		gd->disk_name, gd->first_minor, zbd->base_zaddr);
@@ -678,12 +636,18 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	if (blk_queue_dax(gd->queue)) {
 		dev = disk_to_dev(zbd->gd);
 		dev_dbg(&zdev->dev, "Enable DAX on %s\n", gd->disk_name);
-		dax_dev = alloc_dax(zbd, gd->disk_name,
-				    &genz_blk_dax_ops, dax_flags);
-		if (!dax_dev) {
-			dev_dbg(dev, "alloc_dax failed\n");
-			ret = -ENOMEM;
+		dax_dev = alloc_dax(zbd, &genz_blk_dax_ops);
+		if (IS_ERR(dax_dev)) {
+			ret = PTR_ERR(dax_dev);
+			dev_dbg(dev, "alloc_dax failed, ret=%d\n", ret);
 			goto cleanup_disk;
+		}
+		set_dax_nocache(dax_dev);
+		set_dax_nomc(dax_dev);
+		ret = dax_add_host(dax_dev, gd);
+		if (ret) {
+			dev_dbg(dev, "dax_add_host failed, ret=%d\n", ret);
+			goto cleanup_dax;
 		}
 		zbd->dax_dev = dax_dev;
 		/* fsdax setup */
@@ -700,12 +664,21 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		zbd->rmr_info.cpu_addr = addr;
 		dev_dbg(&zdev->dev, "cpu_addr=%px\n", addr);
 	}
-	device_add_disk(&zdev->dev, gd, NULL);
+	ret = device_add_disk(&zdev->dev, gd, NULL);
+	if (ret) {
+		dev_dbg(dev, "device_add_disk failed, ret=%d\n", ret);
+		goto remove_host;
+	}
 
  out:
 	dev_dbg(&zdev->dev, "ret=%d\n", ret);
 	return ret;
 
+remove_host:
+	dax_remove_host(gd);
+cleanup_dax:
+	kill_dax(dax_dev);
+	put_dax(dax_dev);
 cleanup_disk:
 	blk_cleanup_disk(gd);
 	goto out;
