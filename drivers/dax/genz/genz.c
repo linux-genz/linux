@@ -89,8 +89,7 @@ static int __dax_genz_setup_pfn(struct genz_dev *zdev, struct genz_resource *zre
 }
 
 struct dev_dax *__dax_genz_probe(struct genz_dev *zdev,
-				 struct genz_resource *zres,
-				 enum dev_dax_subsys subsys)
+				 struct genz_resource *zres)
 {
 	struct range range;
 	int ret, id, region_id, target_node;
@@ -163,7 +162,6 @@ struct dev_dax *__dax_genz_probe(struct genz_dev *zdev,
 		.dax_region = dax_region,
 		.id = id,
 		.pgmap = &pgmap,
-		.subsys = subsys,
 		.size = range_len(&range),
 	};
 	dev_dax = devm_create_dev_dax(&dax_data);
@@ -198,7 +196,7 @@ static int dax_genz_probe(struct genz_dev *zdev,
 			break;
 		}
 		if (genz_is_data_resource(zres)) {
-			dax = __dax_genz_probe(zdev, zres, DEV_DAX_BUS);
+			dax = __dax_genz_probe(zdev, zres);
 		} else {
 			dev_warn(&zdev->dev, "ignoring unexpected control resource %s\n", zres->res.name);
 		}
