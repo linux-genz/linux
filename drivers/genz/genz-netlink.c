@@ -1030,6 +1030,7 @@ static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *i
 			pr_debug("genz_dr_create_control_files failed, ret=%d\n", ret);
 			goto err_put;
 		}
+		genz_comp_put(dr_comp);
 	} else {
 		pr_debug("invalid combination of GCIDs\n");
 		ret = -EINVAL;
@@ -1102,6 +1103,7 @@ static int genz_remove_fabric_dr_component(struct sk_buff *skb, struct genl_info
 			pr_debug("genz_dr_remove_control_files failed, ret=%d\n", ret);
 			goto err;
 		}
+		genz_comp_put(dr_comp);
 		/* Revisit: genz_remove_comp()? */
 	} else {
 		pr_debug("invalid combination of GCIDs\n");
