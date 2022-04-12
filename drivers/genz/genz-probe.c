@@ -688,10 +688,9 @@ void genz_release_os_comp(struct device *dev)
 
 static void genz_release_comp(struct kobject *kobj)
 {
-	struct genz_comp *c;
+	struct genz_comp *c = kobj_to_genz_comp(kobj);
 
-	pr_debug("entered\n");
-	c = container_of(kobj, struct genz_comp, kobj);
+	pr_debug("comp=%px, kobj->refcount=%u\n", c, kref_read(&kobj->kref));
 	kfree(c);
 }
 
@@ -711,10 +710,12 @@ int genz_init_comp(struct genz_comp *zcomp,
 	if (add_kobj && !zcomp->add_kobj) {
 		ret = kobject_init_and_add(&zcomp->kobj, &genz_comp_ktype,
 			 &s->kobj, "%u:%04x:%03x", f->number, s->sid, cid);
-		if (ret == 0)
+		if (ret == 0) {
 			zcomp->add_kobj = true;  /* Revisit: locking */
-		else
+			pr_debug("zcomp=%px, kobj->refcount=%u\n", zcomp, kref_read(&zcomp->kobj.kref));
+		} else {
 			kobject_put(&zcomp->kobj);
+		}
 	}
 	return ret;
 }
@@ -767,8 +768,10 @@ struct genz_comp *genz_lookup_comp(struct genz_subnet *s, uint32_t cid)
 	list_for_each_entry(c, &s->fabric->components, fab_comp_node) {
 		if (c->cid == cid && s->sid == c->subnet->sid) {
 			found = c;
-			if (c->add_kobj)
-				kobject_get(&c->kobj);
+			if (found->add_kobj) {
+				kobject_get(&found->kobj);
+				pr_debug("after get, found=%px, cid=%03x, found->cid=%03x, kobj->refcount=%u\n", found, cid, found->cid, kref_read(&found->kobj.kref));
+			}
 			break;
 		}
 	}
@@ -800,10 +803,10 @@ struct genz_comp *genz_add_comp(struct genz_subnet *s,
 	int ret = 0;
 	unsigned long flags;
 
-	pr_debug("cid=%u, add_kobj=%u\n", cid, add_kobj);
+	pr_debug("cid=%03x, add_kobj=%u\n", cid, add_kobj);
 	found = genz_lookup_comp(s, cid);
 	if (!found) {
-		pr_debug("cid %d is not in the components list yet\n", cid);
+		pr_debug("cid %03x is not in the components list yet\n", cid);
 		/* Allocate a new genz_comp and add to list */
 		found = genz_alloc_comp();
 		if (!found) {
@@ -820,9 +823,9 @@ struct genz_comp *genz_add_comp(struct genz_subnet *s,
 		spin_lock_irqsave(&s->fabric->components_lock, flags);
 		list_add_tail(&found->fab_comp_node, &s->fabric->components);
 		spin_unlock_irqrestore(&s->fabric->components_lock, flags);
-		pr_debug("added component %px to the component list\n", found);
+		pr_debug("added component %px, cid=%03x, to the component list, kobj->refcount=%u\n", found, found->cid, kref_read(&found->kobj.kref));
 	} else {
-		pr_debug("cid %d found in the components list, %px\n", cid, found);
+		pr_debug("cid %03x found in the components list, %px, kobj->refcount=%u\n", found->cid, found, kref_read(&found->kobj.kref));
 		if (add_kobj && !found->add_kobj) {
 			ret = genz_init_comp(found, s, cid, add_kobj);
 			if (ret) {
@@ -838,11 +841,13 @@ void genz_remove_comp(struct genz_comp *zcomp)
 	struct genz_subnet *s = zcomp->subnet;
 	unsigned long flags;
 
+	pr_debug("before first put, zcomp=%px, kobj->refcount=%u\n", zcomp, kref_read(&zcomp->kobj.kref));
 	/* undo extra ref that genz_lookup_comp got */
 	kobject_put(&zcomp->kobj);
 	spin_lock_irqsave(&s->fabric->components_lock, flags);
 	list_del(&zcomp->fab_comp_node);
 	spin_unlock_irqrestore(&s->fabric->components_lock, flags);
+	pr_debug("before final put, zcomp=%px, kobj->refcount=%u\n", zcomp, kref_read(&zcomp->kobj.kref));
 	kobject_put(&zcomp->kobj);
 }
 
@@ -855,7 +860,7 @@ struct genz_os_comp *genz_add_os_comp(struct genz_os_subnet *s,
 
 	found = genz_lookup_os_comp(s, cid);
 	if (!found) {
-		pr_debug("cid %d is not in the os_comp list yet\n", cid);
+		pr_debug("cid %03x is not in the os_comp list yet\n", cid);
 		/* Allocate a new genz_os_comp and add to list */
 		found = genz_alloc_os_comp();
 		if (!found) {
@@ -896,11 +901,15 @@ struct genz_os_comp *genz_add_os_subnet_comp(struct genz_fabric *fabric,
 	return ocomp;
 }
 
+/* this gets a reference to the genz_comp kobj which must be put later */
 struct genz_comp *genz_lookup_gcid(struct genz_fabric *f, uint32_t gcid)
 {
 	struct genz_subnet *s;
 	struct genz_comp   *c = NULL;
+	char gcstr[GCID_STRING_LEN+1];
 
+	pr_debug("f->number=%u, gcid=%s\n", f->number,
+		 genz_gcid_str(gcid, gcstr, sizeof(gcstr)));
 	s = genz_lookup_subnet(genz_gcid_sid(gcid), f);
 	if (s != NULL)
 		c = genz_lookup_comp(s, genz_gcid_cid(gcid));
