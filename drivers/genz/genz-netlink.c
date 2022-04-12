@@ -666,6 +666,7 @@ static int parse_fabric_component(struct genl_info *info,
 	bool os = false;
 	bool add_kobj;
 	bool valid_dr_iface;
+	char gcstr[GCID_STRING_LEN+1];
 	int ret = 0;
 
 	*scenario = 0;  /* illegal scenario */
@@ -687,7 +688,7 @@ static int parse_fabric_component(struct genl_info *info,
 	fci->f = fci->uu->fabric->fabric;
 	if (info->attrs[GENZ_A_FC_GCID]) {
 		fci->gcid = nla_get_u32(info->attrs[GENZ_A_FC_GCID]);
-		pr_debug("\tGCID: %u ", fci->gcid);
+		pr_debug("\tGCID: %s\n", genz_gcid_str(fci->gcid, gcstr, sizeof(gcstr)));
 	} else {
 		pr_debug("missing required GCID\n");
 		ret = -EINVAL;
@@ -695,7 +696,7 @@ static int parse_fabric_component(struct genl_info *info,
 	}
 	if (info->attrs[GENZ_A_FC_BRIDGE_GCID]) {
 		fci->br_gcid = nla_get_u32(info->attrs[GENZ_A_FC_BRIDGE_GCID]);
-		pr_debug("\tBRIDGE_GCID: %d ", fci->br_gcid);
+		pr_debug("\tBRIDGE_GCID: %s\n", genz_gcid_str(fci->br_gcid, gcstr, sizeof(gcstr)));
 	} else {
 		pr_debug("missing required BRIDGE_GCID\n");
 		ret = -EINVAL;
@@ -703,7 +704,7 @@ static int parse_fabric_component(struct genl_info *info,
 	}
 	if (info->attrs[GENZ_A_FC_TEMP_GCID]) {
 		fci->tmp_gcid = nla_get_u32(info->attrs[GENZ_A_FC_TEMP_GCID]);
-		pr_debug("\tTEMP_GCID: %d ", fci->tmp_gcid);
+		pr_debug("\tTEMP_GCID: %s\n", genz_gcid_str(fci->tmp_gcid, gcstr, sizeof(gcstr)));
 	} else {
 		pr_debug("missing required TEMP_GCID\n");
 		ret = -EINVAL;
@@ -711,7 +712,7 @@ static int parse_fabric_component(struct genl_info *info,
 	}
 	if (info->attrs[GENZ_A_FC_DR_GCID]) {
 		fci->dr_gcid = nla_get_u32(info->attrs[GENZ_A_FC_DR_GCID]);
-		pr_debug("\tDR_GCID: %d ", fci->dr_gcid);
+		pr_debug("\tDR_GCID: %s\n", genz_gcid_str(fci->dr_gcid, gcstr, sizeof(gcstr)));
 	} else {
 		pr_debug("missing required DR_GCID\n");
 		ret = -EINVAL;
@@ -719,7 +720,7 @@ static int parse_fabric_component(struct genl_info *info,
 	}
 	if (info->attrs[GENZ_A_FC_DR_INTERFACE]) {
 		fci->dr_iface = nla_get_u16(info->attrs[GENZ_A_FC_DR_INTERFACE]);
-		pr_debug("\tDR_INTERFACE: %d ", fci->dr_iface);
+		pr_debug("\tDR_INTERFACE: %d\n", fci->dr_iface);
 		valid_dr_iface = (fci->dr_iface != GENZ_DR_IFACE_NONE);
 	} else {
 		pr_debug("missing required DR_INTERFACE\n");
