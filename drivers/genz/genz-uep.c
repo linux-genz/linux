@@ -175,7 +175,7 @@ int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 		ret = genz_control_write_c_control(zbdev, rmri, c_control.val);
 		if (ret < 0) {
 			dev_dbg(zbdev->bridge_dev,
-				"genz_control_read_c_control failed, ret=%d\n",
+				"genz_control_write_c_control failed, ret=%d\n",
 				ret);
 			goto unlock;
 		}
