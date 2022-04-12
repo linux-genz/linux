@@ -766,7 +766,7 @@ struct genz_comp *genz_lookup_comp(struct genz_subnet *s, uint32_t cid)
 
 	spin_lock_irqsave(&s->fabric->components_lock, flags);
 	list_for_each_entry(c, &s->fabric->components, fab_comp_node) {
-		if (c->cid == cid && s->sid == c->subnet->sid) {
+		if (c->cid == cid && s == c->subnet) {
 			found = c;
 			if (found->add_kobj) {
 				kobject_get(&found->kobj);
@@ -799,7 +799,7 @@ struct genz_os_comp *genz_lookup_os_comp(struct genz_os_subnet *s,
 struct genz_comp *genz_add_comp(struct genz_subnet *s,
 				uint32_t cid, bool add_kobj)
 {
-	struct genz_comp *found = NULL;
+	struct genz_comp *found;
 	int ret = 0;
 	unsigned long flags;
 
@@ -843,12 +843,12 @@ void genz_remove_comp(struct genz_comp *zcomp)
 
 	pr_debug("before first put, zcomp=%px, kobj->refcount=%u\n", zcomp, kref_read(&zcomp->kobj.kref));
 	/* undo extra ref that genz_lookup_comp got */
-	kobject_put(&zcomp->kobj);
+	genz_comp_put(zcomp);
 	spin_lock_irqsave(&s->fabric->components_lock, flags);
 	list_del(&zcomp->fab_comp_node);
 	spin_unlock_irqrestore(&s->fabric->components_lock, flags);
 	pr_debug("before final put, zcomp=%px, kobj->refcount=%u\n", zcomp, kref_read(&zcomp->kobj.kref));
-	kobject_put(&zcomp->kobj);
+	genz_comp_put(zcomp);
 }
 
 struct genz_os_comp *genz_add_os_comp(struct genz_os_subnet *s,

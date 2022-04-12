@@ -180,6 +180,7 @@ int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 			goto unlock;
 		}
 		spin_unlock_irqrestore(&comp->uep_lock, flags);
+		genz_comp_put(comp);
 	}
 
 	/* clear uepi->uep beyond pkt length (to avoid kernel mem leak) */
@@ -193,6 +194,7 @@ int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 
 unlock:
 	spin_unlock_irqrestore(&comp->uep_lock, flags);
+	genz_comp_put(comp);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(genz_handle_uep);

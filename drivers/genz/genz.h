@@ -198,6 +198,12 @@ static inline uuid_t genz_br_mgr_uuid(struct genz_bridge_dev *zbdev)
 	return zbdev->zdev.zcomp->comp.subnet->fabric->mgr_uuid;
 }
 
+static inline void genz_comp_put(struct genz_comp *zcomp)
+{
+	pr_debug("before put, zcomp=%px, kobj->refcount=%u\n", zcomp, kref_read(&zcomp->kobj.kref));
+	kobject_put(&zcomp->kobj);
+}
+
 struct genz_component_attribute {
 	struct attribute attr;
 	ssize_t (*show)(struct genz_comp *c,
