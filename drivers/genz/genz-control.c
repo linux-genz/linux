@@ -704,21 +704,25 @@ static int genz_create_fab_files(struct kobject *comp_dir)
 {
 	int ret;
 
+	pr_debug("before: comp_dir=%px, kobj->refcount=%u\n", comp_dir, kref_read(&comp_dir->kref));
 	ret  = sysfs_create_file(comp_dir, &gcid_fab_attribute.attr);
 	ret |= sysfs_create_file(comp_dir, &cclass_fab_attribute.attr);
 	ret |= sysfs_create_file(comp_dir, &serial_fab_attribute.attr);
 	ret |= sysfs_create_file(comp_dir, &fru_uuid_fab_attribute.attr);
 	ret |= sysfs_create_file(comp_dir, &cuuid_fab_attribute.attr);
+	pr_debug("after: comp_dir=%px, kobj->refcount=%u\n", comp_dir, kref_read(&comp_dir->kref));
 	return ret;
 }
 
 static void genz_remove_fab_files(struct kobject *comp_dir)
 {
+	pr_debug("before: comp_dir=%px, kobj->refcount=%u\n", comp_dir, kref_read(&comp_dir->kref));
 	sysfs_remove_file(comp_dir, &gcid_fab_attribute.attr);
 	sysfs_remove_file(comp_dir, &cclass_fab_attribute.attr);
 	sysfs_remove_file(comp_dir, &serial_fab_attribute.attr);
 	sysfs_remove_file(comp_dir, &fru_uuid_fab_attribute.attr);
 	sysfs_remove_file(comp_dir, &cuuid_fab_attribute.attr);
+	pr_debug("after: comp_dir=%px, kobj->refcount=%u\n", comp_dir, kref_read(&comp_dir->kref));
 }
 
 #ifdef NOT_YET
@@ -2522,16 +2526,19 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 	}
 	if (dr_iface != GENZ_DR_IFACE_NONE) {
 		/* we already have (dr) control space - move/update it */
+		pr_debug("before move: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
 		ret = kobject_move(f_comp->ctl_kobj, &f_comp->kobj);
 		if (ret < 0) {
 			pr_debug("genz_kobject_move error ret=%d\n", ret);
 			goto err_mdata;
 		}
+		pr_debug("before rename: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
 		ret = kobject_rename(f_comp->ctl_kobj, "control");
 		if (ret < 0) {
 			pr_debug("genz_kobject_rename error ret=%d\n", ret);
 			goto err_mdata;
 		}
+		pr_debug("after rename: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
 		/* update rmr to disable DR */
 		ret = genz_rmr_change_dr(&zbdev->fabric->mgr_uuid, gcid,
 					 GENZ_DR_IFACE_NONE, rmri);
@@ -2548,12 +2555,14 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 		return ret;
 	}
 	/* Make the control directory under the component */
+	pr_debug("before add: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
 	f_comp->ctl_kobj = kobject_create_and_add("control", &f_comp->kobj);
 	if (f_comp->ctl_kobj == NULL) {
 		pr_debug("unable to create component control directory\n");
 		ret = -ENOMEM;
 		goto err_mdata;
 	}
+	pr_debug("after add: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
 
 	access = GENZ_MR_READ_REMOTE|GENZ_MR_WRITE_REMOTE|
 		 GENZ_MR_INDIVIDUAL|GENZ_MR_CONTROL;
@@ -2710,7 +2719,7 @@ int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev)
 	/* remove the genzN/{gcid,cclass,serial,fru_uuid,c_uuid} files */
 	genz_remove_bridge_files(&zbdev->genzN_dir);
 	/* remove the control directory */
-	kobject_del(zdev->zcomp->comp.ctl_kobj);
+	kobject_del(zdev->zcomp->comp.ctl_kobj); /* Revisit: unneeded */
 	kobject_put(zdev->zcomp->comp.ctl_kobj);
 	/* remove the symlink associated with this genzN directory */
 	dir = &zbdev->zdev.zcomp->comp.subnet->fabric->dev.kobj;
@@ -2719,7 +2728,7 @@ int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev)
 		bridgeN, kobject_name(dir));
 	sysfs_remove_link(dir, bridgeN);
 	/* remove the genzN directory */
-	kobject_del(&zbdev->genzN_dir);
+	kobject_del(&zbdev->genzN_dir); /* Revisit: unneeded */
 #ifdef BROKEN
 	pr_debug("kset_unregister %s\n", kobject_name(&zbdev->genz_control_kset->kobj));
 	kset_unregister(zbdev->genz_control_kset);
