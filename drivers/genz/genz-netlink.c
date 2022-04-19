@@ -849,6 +849,11 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 	 *    permanent GCID.
 	 */
 	if (scenario == 1) {
+		if (!genz_temp_fabric) {
+			pr_debug("genz_temp_fabric is NULL\n");
+			ret = -ENODEV;
+			goto err;
+		}
 		zbdev = genz_lookup_zbdev(genz_temp_fabric, fci.tmp_gcid);
 		if (zbdev == NULL) {
 			pr_debug("scenario 1, tmp_gcid (%d) not found\n",
