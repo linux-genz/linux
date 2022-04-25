@@ -1050,5 +1050,7 @@ int genz_control_write(struct genz_bridge_dev *br, loff_t offset,
 		       size_t size, void *data,
 		       struct genz_rmr_info *rmri, uint flags);
 int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi);
+void genz_dev_put(struct genz_dev *zdev);
+struct genz_dev *genz_dev_get(struct genz_dev *zdev);
 
 #endif /* LINUX_GENZ_H */
