@@ -526,8 +526,24 @@ struct genz_bridge_dev *genz_find_bridge(struct device *dev)
 }
 EXPORT_SYMBOL(genz_find_bridge);
 
+static void _genz_unregister_bridge(struct genz_bridge_dev *zbdev)
+{
+	list_del(&zbdev->bridge_node);
+	genz_fabric_uuid_tracker_free(&zbdev->fabric->mgr_uuid);
+	genz_bridge_remove_control_files(zbdev);
+	genz_bridge_zmmu_clear(zbdev);
+	remove_resource(&zbdev->ld_st_res);
+	if (zbdev->ld_st_res.name)
+		kfree(zbdev->ld_st_res.name);
+	if (zbdev->control_mdata)
+		kfree(zbdev->control_mdata);
+	dev_dbg(&zbdev->zdev.dev, "before put, kobj->refcount=%u\n",
+		kref_read(&zbdev->zdev.dev.kobj.kref));
+	genz_dev_put(&zbdev->zdev);
+}
+
 /**
- * genz_unregister_bridge - unregister a Gen-Z bridge driver
+ * genz_unregister_bridge - unregister a Gen-Z bridge device
  * @struct device *dev: the native device originally passed to
  *		genz_register_bridge
  *
@@ -549,24 +565,10 @@ int genz_unregister_bridge(struct device *dev)
 	/* dev is the native bridge dev - find corresponding genz_bridge_dev */
 	/* Revisit: locking */
 	zbdev = genz_find_bridge(dev);
-	if (zbdev) {
-		genz_bridge_zmmu_clear(zbdev);
-		list_del(&zbdev->bridge_node);
-		list_del(&zbdev->zdev.fab_dev_node);
-		genz_fabric_uuid_tracker_free(&zbdev->fabric->mgr_uuid);
-		genz_bridge_remove_control_files(zbdev);
-		genz_bridge_zmmu_clear(zbdev);
-		remove_resource(&zbdev->ld_st_res);
-		if (zbdev->ld_st_res.name)
-			kfree(zbdev->ld_st_res.name);
-		if (zbdev->control_mdata)
-			kfree(zbdev->control_mdata);
-		pr_debug("free genz_bridge_dev %px\n", zbdev);
-		kfree(zbdev);
-	} else {
+	if (zbdev)
+		_genz_unregister_bridge(zbdev);
+	else
 		ret = -ENODEV;
-	}
-
 	return ret;
 }
 EXPORT_SYMBOL(genz_unregister_bridge);
@@ -602,6 +604,7 @@ int genz_move_fabric_bridge(struct genz_bridge_dev *zbdev,
 			    struct genz_os_comp *ocomp,
 			    struct genz_fabric *fabric)
 {
+	const char *res_name;
 	int ret;
 
 	/* Revisit: can we use kobject_move instead? */
@@ -616,6 +619,11 @@ int genz_move_fabric_bridge(struct genz_bridge_dev *zbdev,
 	/* add new zbdev stuff */
 	genz_add_zbdev_to_fabric(zbdev, fabric);
 	zbdev->zdev.zcomp = ocomp;
+	/* update zbdev resource name */
+	res_name = zbdev->ld_st_res.name;
+	zbdev->ld_st_res.name = genz_bridge_res_name(zbdev);
+	if (res_name != NULL)
+		kfree(res_name);
 	ret = genz_bridge_create_control_files(zbdev);
 	if (ret < 0) {
 		pr_debug("genz_bridge_create_control_files failed, ret=%d\n", ret);
@@ -741,6 +749,8 @@ static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br)
 
 static int genz_bridge_zmmu_clear(struct genz_bridge_dev *br)
 {
+	genz_release_page_grid_res_all(br);
+
 	if ((br->br_info.req_zmmu && br->br_info.nr_req_page_grids) ||
 	    (br->br_info.rsp_zmmu && br->br_info.nr_rsp_page_grids))
 		genz_zmmu_clear_all(br, true);
@@ -849,16 +859,8 @@ static void force_dev_cleanup(void)
 	}
 	/* go through each bridge */
 	list_for_each_entry_safe(b, b_tmp, &genz_bridge_list, bridge_node) {
-		if (b->fabric)
-			genz_fabric_uuid_tracker_free(&b->fabric->mgr_uuid);
-		genz_bridge_remove_control_files(b);
-		genz_bridge_zmmu_clear(b);
-		/* Revisit: is this done twice?
-		device_unregister(&b->zdev.dev);
-		*/
-		list_del(&b->bridge_node);
-		pr_debug("free genz_bridge_dev %px\n", b);
-		kfree(b);
+		pr_debug("non-empty genz_bridge_list, b=%px\n", b);
+		_genz_unregister_bridge(b);
 	}
 }
 

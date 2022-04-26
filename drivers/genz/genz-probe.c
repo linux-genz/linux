@@ -916,6 +916,26 @@ struct genz_comp *genz_lookup_gcid(struct genz_fabric *f, uint32_t gcid)
 	return c;
 }
 
+static void _genz_release_dev(struct genz_dev *zdev)
+{
+	unsigned long flags;
+	struct genz_fabric *f;
+
+	pr_debug("%s\n", dev_name(&zdev->dev));
+	f = zdev->zcomp->subnet->subnet.fabric;
+	if (f == NULL) {
+		pr_debug("zdev->zcomp->subnet->fabric is NULL\n");
+		return;
+	}
+
+	/* remove from the list of devices in the genz_fabric */
+	pr_debug("f=%px\n", f); // Revisit: temp debug
+	spin_lock_irqsave(&f->devices_lock, flags);
+	pr_debug("before list_del of %px, prev=%px, next=%px\n", &zdev->fab_dev_node, zdev->fab_dev_node.prev, zdev->fab_dev_node.next);
+	list_del(&zdev->fab_dev_node);
+	spin_unlock_irqrestore(&f->devices_lock, flags);
+}
+
 /**
  * genz_release_dev - Free a Gen-Z device structure when all users of it are
  *                   finished
@@ -927,22 +947,24 @@ struct genz_comp *genz_lookup_gcid(struct genz_fabric *f, uint32_t gcid)
 static void genz_release_dev(struct device *dev)
 {
 	struct genz_dev *zdev = to_genz_dev(dev);
-	unsigned long flags;
-	struct genz_fabric *f;
 
 	pr_debug("%s\n", dev_name(dev));
-	f = zdev->zcomp->subnet->subnet.fabric;
-	if (f == NULL) {
-		pr_debug("zdev->zcomp->subnet->fabric is NULL\n");
-		return;
-	}
-
-	/* remove from the list of devices in the genz_fabric */
-	spin_lock_irqsave(&f->devices_lock, flags);
-	list_del(&zdev->fab_dev_node);
-	spin_unlock_irqrestore(&f->devices_lock, flags);
-	/* Revisit: this free's the dev and causes NULL pointer defererence? */
+	_genz_release_dev(zdev);
+	pr_debug("freeing zdev=%px\n", zdev);
 	kfree(zdev);
+	pr_debug("returning\n");
+}
+
+/* special release function for zdev embedded in zbdev */
+static void genz_release_zbdev(struct device *dev)
+{
+	struct genz_dev *zdev = to_genz_dev(dev);
+	struct genz_bridge_dev *zbdev = to_zbdev(zdev);
+
+	pr_debug("%s\n", dev_name(dev));
+	_genz_release_dev(zdev);
+	pr_debug("freeing zbdev=%px\n", zbdev);
+	kfree(zbdev);
 	pr_debug("returning\n");
 }
 
@@ -981,13 +1003,14 @@ struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric)
 
 void genz_device_initialize(struct genz_dev *zdev)
 {
-	zdev->dev.bus = &genz_bus_type;
-	zdev->dev.parent = &zdev->zcomp->dev;
-	zdev->dev.release = genz_release_dev;
 	zdev->zbdev = genz_zdev_bridge(zdev);
 	if (zdev->zbdev == NULL) {
 		pr_debug("genz_device_initialize failed to find a bridge\n");
 	}
+	zdev->dev.bus = &genz_bus_type;
+	zdev->dev.parent = &zdev->zcomp->dev;
+	zdev->dev.release = (zdev->zbdev == to_zbdev(zdev)) ?
+		genz_release_zbdev : genz_release_dev;
 	device_initialize(&zdev->dev);
 }
 

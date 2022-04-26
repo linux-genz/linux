@@ -327,5 +327,6 @@ void genz_add_zbdev_to_fabric(struct genz_bridge_dev *zbdev,
 			      struct genz_fabric *f);
 void genz_remove_zbdev_from_fabric(struct genz_bridge_dev *zbdev);
 struct genz_bridge_dev *genz_lookup_zbdev(struct genz_fabric *f, uint32_t gcid);
+void genz_release_page_grid_res_all(struct genz_bridge_dev *br);
 
 #endif /* DRIVERS_GENZ_H */
