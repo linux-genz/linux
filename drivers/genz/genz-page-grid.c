@@ -488,6 +488,22 @@ void genz_release_page_grid_res(struct genz_page_grid_info *pgi, uint pg_index)
 	struct genz_page_grid   *pg = &pgi->pg[pg_index];
 
 	remove_resource(&pg->res);
+	/* Revisit: free res.name */
+}
+
+void genz_release_page_grid_res_all(struct genz_bridge_dev *br)
+{
+	uint entries = br->br_info.nr_req_page_grids;
+	struct genz_page_grid_info *pgi = &br->zmmu_info.req_zmmu_pg;
+	uint pg_index;
+
+	if (!(br->br_info.req_zmmu && entries > 0))
+		return;
+
+	for_each_set_bit(pg_index,
+			 br->zmmu_info.req_zmmu_pg.pg_bitmap, entries) {
+		genz_release_page_grid_res(pgi, pg_index);
+	}
 }
 
 int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
