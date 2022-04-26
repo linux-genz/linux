@@ -9,7 +9,8 @@
 #include "../bus.h"
 
 #define DAX_GENZ_DRV_NAME "dax-genz"
-#define DAX_GENZ_FL_PEC 0x40000000ull
+#define DAX_GENZ_FL_PEC    0x40000000ull
+#define DAX_GENZ_FL_ALTMAP 0x80000000ull
 
 /* Revisit: why does the numa.h include not work? */
 int numa_add_memblk(int nid, u64 start, u64 end);
@@ -26,20 +27,20 @@ static inline void __dax_genz_pfn_size(struct genz_dev *zdev,
 			 unsigned long *align_p, u32 *end_trunc_p,
 			 phys_addr_t *offset_p, unsigned long *npfns_p)
 {
+	bool use_altmap = (zdev->driver_flags & DAX_GENZ_FL_ALTMAP) != 0;
 	resource_size_t start, size;
 	unsigned long npfns, align;
 	phys_addr_t offset;
 	u32 end_trunc;
 
-	/* Revisit: use zdev->driver_flags to choose PFN_MODE */
 	start = zres->res.start;
 	size = resource_size(&zres->res);
-	npfns = PHYS_PFN(size);
+	npfns = use_altmap ? PHYS_PFN(size) : 0;
 	align = (1UL << SUBSECTION_SHIFT);
 	end_trunc = start + size - ALIGN_DOWN(start + size, align);
 
 	offset = ALIGN(start + sizeof(struct page) * npfns, align) - start;
-	npfns = PHYS_PFN(size - offset - end_trunc);
+	npfns = use_altmap ? PHYS_PFN(size - offset - end_trunc) : 0;
 	*align_p = align;
 	*end_trunc_p = end_trunc;
 	*offset_p = offset;
@@ -67,6 +68,7 @@ static int __dax_genz_setup_pfn(struct genz_dev *zdev, struct genz_resource *zre
 				phys_addr_t offset, unsigned long npfns,
 				struct dev_pagemap *pgmap)
 {
+	bool use_altmap = (zdev->driver_flags & DAX_GENZ_FL_ALTMAP) != 0;
 	struct range *rng = &pgmap->range;
 	struct vmem_altmap *altmap = &pgmap->altmap;
 	resource_size_t base = zres->res.start;
@@ -77,14 +79,16 @@ static int __dax_genz_setup_pfn(struct genz_dev *zdev, struct genz_resource *zre
 		.end_pfn = PHYS_PFN(end),
 	};
 
-	/* Revisit: add support for PFN_MODEs */
+	dev_dbg(&zdev->dev, "use_altmap=%u, align=0x%lx, end_trunc=%u, offset=0x%llx, npfns=%lu\n",
+		use_altmap, align, end_trunc, offset, npfns);
 	rng->start = base;
 	rng->end = end;
 	memcpy(altmap, &__altmap, sizeof(*altmap));
 	altmap->free = PHYS_PFN(offset);
 	altmap->alloc = 0;
 	pgmap->nr_range = 1;
-	pgmap->flags |= PGMAP_ALTMAP_VALID;
+	if (use_altmap)
+		pgmap->flags |= PGMAP_ALTMAP_VALID;
 	return 0;
 }
 
@@ -133,8 +137,6 @@ struct dev_dax *__dax_genz_probe(struct genz_dev *zdev,
 		return ERR_PTR(ret);
 	}
 	__dax_genz_pfn_size(zdev, &rmri->zres, &align, &end_trunc, &offset, &npfns);
-	dev_dbg(dev, "align=0x%lx, end_trunc=%u, offset=0x%llx, npfns=%lu\n",
-		align, end_trunc, offset, npfns);
 	ret = __dax_genz_setup_pfn(zdev, &rmri->zres, align, end_trunc, offset,
 				   npfns, &pgmap);
 	if (ret < 0)

@@ -108,6 +108,7 @@ struct genz_bdev {  /* one per genz_resource == genz_bdev_probe */
 };
 
 #define GENZ_BLK_MAX_SG  256  /* Revisit */
+#define GENZ_BLK_FL_ALTMAP 0x80000000ull
 
 struct genz_blk_cmd {  /* one per request */
 	struct scatterlist sg[GENZ_BLK_MAX_SG];
@@ -664,6 +665,79 @@ static int genz_blk_bdev_start_size(struct genz_resource *zres,
 	return ret;
 }
 
+/* Revisit: copied from dax-genz - make genz subsystem utils? */
+static inline void __genz_blk_pfn_size(struct genz_dev *zdev,
+			 struct genz_resource *zres,
+			 unsigned long *align_p, u32 *end_trunc_p,
+			 phys_addr_t *offset_p, unsigned long *npfns_p)
+{
+	bool use_altmap = (zdev->driver_flags & GENZ_BLK_FL_ALTMAP) != 0;
+	resource_size_t start, size;
+	unsigned long npfns, align;
+	phys_addr_t offset;
+	u32 end_trunc;
+
+	start = zres->res.start;
+	size = resource_size(&zres->res);
+	npfns = use_altmap ? PHYS_PFN(size) : 0;
+	align = (1UL << SUBSECTION_SHIFT);
+	end_trunc = start + size - ALIGN_DOWN(start + size, align);
+
+	offset = ALIGN(start + sizeof(struct page) * npfns, align) - start;
+	npfns = use_altmap ? PHYS_PFN(size - offset - end_trunc) : 0;
+	*align_p = align;
+	*end_trunc_p = end_trunc;
+	*offset_p = offset;
+	*npfns_p = npfns;
+}
+
+static unsigned long init_altmap_base(resource_size_t base)
+{
+	unsigned long base_pfn = PHYS_PFN(base);
+
+	return SUBSECTION_ALIGN_DOWN(base_pfn);
+}
+
+static unsigned long init_altmap_reserve(resource_size_t base)
+{
+	unsigned long reserve = 0;
+	unsigned long base_pfn = PHYS_PFN(base);
+
+	reserve += base_pfn - SUBSECTION_ALIGN_DOWN(base_pfn);
+	return reserve;
+}
+
+static int __genz_blk_setup_pfn(struct genz_dev *zdev, struct genz_resource *zres,
+				unsigned long align, u32 end_trunc,
+				phys_addr_t offset, unsigned long npfns,
+				struct dev_pagemap *pgmap)
+{
+	bool use_altmap = (zdev->driver_flags & GENZ_BLK_FL_ALTMAP) != 0;
+	struct range *rng = &pgmap->range;
+	struct vmem_altmap *altmap = &pgmap->altmap;
+	resource_size_t base = zres->res.start;
+	resource_size_t end = zres->res.end - end_trunc;
+	struct vmem_altmap __altmap = {
+		.base_pfn = init_altmap_base(base),
+		.reserve = init_altmap_reserve(base),
+		.end_pfn = PHYS_PFN(end),
+	};
+
+	dev_dbg(&zdev->dev, "use_altmap=%u, align=0x%lx, end_trunc=%u, offset=0x%llx, npfns=%lu\n",
+		use_altmap, align, end_trunc, offset, npfns);
+	/* Revisit: add support for PFN_MODEs */
+	rng->start = base;
+	rng->end = end;
+	memcpy(altmap, &__altmap, sizeof(*altmap));
+	altmap->free = PHYS_PFN(offset);
+	altmap->alloc = 0;
+	pgmap->nr_range = 1;
+	if (use_altmap)
+		pgmap->flags |= PGMAP_ALTMAP_VALID;
+	return 0;
+}
+/* Revisit: end copied from dax-genz */
+
 static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 {
 	struct genz_blk_state   *bstate = zbd->bstate;
@@ -671,6 +745,9 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	struct gendisk *gd;
 	struct dax_device *dax_dev;
 	unsigned long dax_flags = 0;
+	unsigned long align, npfns;
+	resource_size_t offset;
+	u32 end_trunc;
 	void *addr;
 	struct device *dev;
 	int ret = 0;
@@ -706,11 +783,16 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		// Revisit: this causes multi-genz-blk hang
 		//zbd->pgmap.ref = &zbd->queue->q_usage_counter;
 		zbd->pgmap.type = MEMORY_DEVICE_FS_DAX;
-		zbd->pgmap.range.start = zbd->rmr_info.zres.res.start;
-		zbd->pgmap.range.end = zbd->rmr_info.zres.res.end;
-		zbd->pgmap.nr_range = 1;
+		__genz_blk_pfn_size(zdev, &zbd->rmr_info.zres, &align,
+				    &end_trunc, &offset, &npfns);
+		ret = __genz_blk_setup_pfn(zdev, &zbd->rmr_info.zres,
+					   align, end_trunc, offset,
+					   npfns, &zbd->pgmap);
+		if (ret < 0) {
+			dev_dbg(dev, "__genz_blk_setup_pfn failed\n");
+			goto cleanup_dax;
+		}
 		zbd->pgmap.ops = &genz_blk_fsdax_pagemap_ops;
-		/* Revisit: support struct pages on device with pgmap->altmap */
 		addr = devm_memremap_pages(dev, &zbd->pgmap);
 		/* Revisit: error handling */
 		zbd->rmr_info.cpu_addr = addr;
@@ -722,6 +804,9 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	dev_dbg(&zdev->dev, "ret=%d\n", ret);
 	return ret;
 
+cleanup_dax:
+	kill_dax(dax_dev);
+	put_dax(dax_dev);
 put_disk:
 	put_disk(gd);
 	goto out;
