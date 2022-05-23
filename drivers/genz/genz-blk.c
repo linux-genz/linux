@@ -738,7 +738,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 					   npfns, &zbd->pgmap);
 		if (ret < 0) {
 			dev_dbg(dev, "__genz_blk_setup_pfn failed\n");
-			goto cleanup_disk;
+			goto remove_host;
 		}
 		zbd->pgmap.ops = &genz_blk_fsdax_pagemap_ops;
 		addr = devm_memremap_pages(dev, &zbd->pgmap);
