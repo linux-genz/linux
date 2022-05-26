@@ -35,6 +35,7 @@
 #include <linux/ratelimit.h>
 #include <linux/dma-direction.h>
 #include <linux/dax.h>
+#include <linux/memremap.h>
 #include <linux/pfn_t.h>
 #include <linux/uio.h>
 #include <linux/genz.h>
