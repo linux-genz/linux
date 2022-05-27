@@ -95,6 +95,7 @@ struct genz_bdev {  /* one per genz_resource == genz_bdev_probe */
 	struct list_head       bdev_node;
 	spinlock_t             lock;
 	size_t                 size;  /* block device size (bytes) */
+	resource_size_t        data_offset; /* above PFNs */
 	uint32_t               gcid;  /* Revisit: move elsewhere? */
 	uint                   bindex;
 	uint64_t               base_zaddr;
@@ -328,7 +329,7 @@ static blk_status_t genz_blk_queue_rq(struct blk_mq_hw_ctx *hctx,
 	cmd->sgli.xdmi = br_info->xdm ? &bctx->xdmi : NULL;
 	cmd->sgli.data_dir = data_dir;
 	cmd->sgli.tag = tag;
-	cmd->sgli.offset = (loff_t)lba * KERNEL_SECTOR_SIZE;
+	cmd->sgli.offset = ((loff_t)lba * KERNEL_SECTOR_SIZE) + zbd->data_offset;
 	cmd->sgli.len = (size_t)count * KERNEL_SECTOR_SIZE;
 	cmd->sgli.sgl = cmd->sg;
 	atomic_set(&cmd->sgli.nr_cmpls, 0);
@@ -526,7 +527,7 @@ static long genz_blk_dax_direct_access(struct dax_device *dax_dev,
 {
 	struct genz_bdev *zbd = dax_get_private(dax_dev);
 	struct genz_rmr_info *rmri = &zbd->rmr_info;
-	resource_size_t offset = PFN_PHYS(pgoff);
+	resource_size_t offset = PFN_PHYS(pgoff) + zbd->data_offset;
 	u64 pfn_flags = PFN_DEV|PFN_MAP;
 
 	if (kaddr)
@@ -584,7 +585,7 @@ static int genz_blk_zero_page_range(struct dax_device *dax_dev, pgoff_t pgoff,
 	struct genz_dev         *zdev = bstate->zdev;
 	struct genz_bridge_dev  *zbdev = zdev->zbdev;
 	void                    *zero_page;
-	loff_t                  offset = PFN_PHYS(pgoff);
+	loff_t                  offset = PFN_PHYS(pgoff) + zbd->data_offset;
 	int                     ret = 0;
 
 	/* Revisit: use media component SE Fast Zero Range Media, if avail */
@@ -765,9 +766,6 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	scnprintf(gd->disk_name, 32, GENZ_BDEV_NAME "%u", zbd->bindex);
 	pr_info("%s: first_minor=%d, base_zaddr=0x%llx\n",
 		gd->disk_name, gd->first_minor, zbd->base_zaddr);
-	set_capacity(gd, zbd->size/KERNEL_SECTOR_SIZE);
-	pr_info("%s: set capacity to %zu 512 byte sectors\n",
-		gd->disk_name, zbd->size/KERNEL_SECTOR_SIZE);
 	if (blk_queue_dax(zbd->queue)) {
 		dev = disk_to_dev(zbd->gd);
 		dev_dbg(&zdev->dev, "Enable DAX on %s\n", gd->disk_name);
@@ -792,12 +790,16 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 			dev_dbg(dev, "__genz_blk_setup_pfn failed\n");
 			goto cleanup_dax;
 		}
+		zbd->data_offset = offset;
 		zbd->pgmap.ops = &genz_blk_fsdax_pagemap_ops;
 		addr = devm_memremap_pages(dev, &zbd->pgmap);
 		/* Revisit: error handling */
 		zbd->rmr_info.cpu_addr = addr;
 		dev_dbg(&zdev->dev, "cpu_addr=%px\n", addr);
 	}
+	set_capacity(gd, (zbd->size-zbd->data_offset)/KERNEL_SECTOR_SIZE);
+	pr_info("%s: set capacity to %zu 512 byte sectors\n",
+		gd->disk_name, (zbd->size-zbd->data_offset)/KERNEL_SECTOR_SIZE);
 	device_add_disk(&zdev->dev, gd, NULL);
 
  out:
