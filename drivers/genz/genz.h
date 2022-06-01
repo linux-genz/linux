@@ -169,6 +169,7 @@ struct genz_comp {
 	struct genz_control_info *root_control_info;
 	struct kobject		kobj;          /* kobj for component */
 	struct kobject		*ctl_kobj;     /* kobj ptr for control space */
+	char                    *ctl_rmr_name; /* control space name */
 	uint16_t                uep_id;        /* last processed UEP EventID */
 	spinlock_t              uep_lock;      /* Revisit: mutex? */
 };
