@@ -721,13 +721,14 @@ out:
 static struct genz_page_grid *zmmu_pg_page_size(struct genz_pte_info *ptei,
 						struct genz_page_grid_info *pgi)
 {
-	uint64_t addr_aligned, length_adjusted;
+	uint64_t addr_aligned, length_adjusted, len_ps;
 	struct genz_page_grid *gz_pg;
-	int ps;
+	int ps, ps8;
 	unsigned long key;
 	bool cpu_visible = !!(ptei->access & GENZ_MR_REQ_CPU);
+	const unsigned long *bm = (cpu_visible) ?
+		pgi->pg_cpu_visible_ps_bitmap : pgi->pg_non_visible_ps_bitmap;
 
-	/* Revisit: make this more general */
 	if (ptei->humongous) {
 		gz_pg = pgi->humongous_pg;
 		ps = gz_pg->page_grid.page_size;
@@ -738,19 +739,19 @@ static struct genz_page_grid *zmmu_pg_page_size(struct genz_pte_info *ptei,
 		addr_aligned = ROUND_DOWN_PAGE(ptei->addr, length_adjusted);
 		if (addr_aligned != ptei->addr)
 			length_adjusted <<= 1;
-		ps = clamp(ilog2(length_adjusted),
-			   GENZ_PAGE_GRID_MIN_PAGESIZE,
-			   GENZ_PAGE_GRID_MAX_PAGESIZE);
-		/* try to find a page that fits the (adjusted) length */
-		ps = find_next_bit(
-			(cpu_visible) ? pgi->pg_cpu_visible_ps_bitmap :
-			pgi->pg_non_visible_ps_bitmap, PAGE_GRID_PS_BITS, ps);
+		len_ps = clamp(ilog2(length_adjusted),
+			       GENZ_PAGE_GRID_MIN_PAGESIZE,
+			       GENZ_PAGE_GRID_MAX_PAGESIZE);
+		/* try to find a page that exactly fits the (adjusted) length */
+		ps = find_next_bit(bm, PAGE_GRID_PS_BITS, len_ps);
+		if (ps > len_ps) {
+			/* or a (smaller) page size requiring <= 8 PTEs */
+			ps8 = find_next_bit(bm, PAGE_GRID_PS_BITS, len_ps - 3);
+			ps = (ps8 < ps) ? ps8 : ps;
+		}
 		/* if that fails, then the largest available */
 		if (ps == PAGE_GRID_PS_BITS)
-			ps = find_last_bit((cpu_visible) ?
-					   pgi->pg_cpu_visible_ps_bitmap :
-					   pgi->pg_non_visible_ps_bitmap,
-					   PAGE_GRID_PS_BITS);
+			ps = find_last_bit(bm, PAGE_GRID_PS_BITS);
 		key = ps + ((cpu_visible) ? GENZ_PAGE_GRID_MAX_PAGESIZE : 0);
 		gz_pg = radix_tree_lookup(&pgi->pg_pagesize_tree, key);
 	}

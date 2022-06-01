@@ -2259,6 +2259,21 @@ int genz_control_write_c_control(struct genz_bridge_dev *zbdev,
 	return ret;
 }
 
+static char *genz_ctl_rmr_name(struct genz_comp *zcomp)
+{
+	char *name;
+	struct genz_fabric *fabric = zcomp->subnet->fabric;
+	size_t name_len = 4 + get_uint_len(fabric->number) + GCID_STRING_LEN + 10;
+	char gcstr[GCID_STRING_LEN+1];
+
+	name = kmalloc(name_len, GFP_KERNEL);
+	if (name) {
+		sprintf(name, "genz%u:%s control", fabric->number,
+			genz_gcid_str(genz_comp_gcid(zcomp), gcstr, sizeof(gcstr)));
+	}
+	return name;
+}
+
 /**
  * genz_bridge_create_control_files() - read control space for a local bridge
  */
@@ -2391,14 +2406,18 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 	access |= (zbdev->br_info.load_store) ?
 		(GENZ_MR_REQ_CPU|GENZ_MR_KERN_MAP) : 0;
 	rkey = 0;  /* Revisit */
-	pr_debug("calling genz_rmr_import\n");
+	f_comp->ctl_rmr_name = genz_ctl_rmr_name(f_comp);
+	if (f_comp->ctl_rmr_name == NULL) {
+		pr_debug("genz_ctl_rmr_name returned NULL\n");
+		goto err_kobj;
+	}
+	pr_debug("calling genz_rmr_import for %s\n", f_comp->ctl_rmr_name);
 	/* initial mapping is for one 4KiB page covering the core struct */
-	/* Revisit: change fixed "control" rmr_name to something with GCID */
-	ret = genz_rmr_import(mdata, mgr_uuid, gcid, 0, 4096,
-			      access, rkey, dr_iface, "control", dr_rmri);
+	ret = genz_rmr_import(mdata, mgr_uuid, gcid, 0, 4096, access,
+			      rkey, dr_iface, f_comp->ctl_rmr_name, dr_rmri);
 	if (ret < 0) {
 		pr_debug("genz_rmr_import error ret=%d\n", ret);
-		goto err_kobj;
+		goto err_rmr_name;
 	}
 	pr_debug("calling start_core_structure via DR %s.%u\n",
 		 genz_gcid_str(gcid, gcstr, sizeof(gcstr)), dr_iface);
@@ -2414,6 +2433,8 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 
 err_rmr:
 	genz_rmr_free(dr_rmri);
+err_rmr_name:
+	kfree(f_comp->ctl_rmr_name);
 err_kobj:
 	kobject_put(dr_dir);
 err_mdata:
@@ -2471,6 +2492,8 @@ int genz_dr_remove_control_files(struct genz_bridge_dev *zbdev,
 	if (ret < 0) {
 		pr_debug("genz_rmr_free error ret=%d\n", ret);
 	}
+	if (f_comp->ctl_rmr_name)
+		kfree(f_comp->ctl_rmr_name);
 	genz_remove_control_info_hierarchy(f_comp->root_control_info);
 	return ret;
 }
@@ -2569,14 +2592,18 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 	access |= (zbdev->br_info.load_store) ?
 		(GENZ_MR_REQ_CPU|GENZ_MR_KERN_MAP) : 0;
 	rkey = 0;  /* Revisit */
-	pr_debug("calling genz_rmr_import\n");
+	f_comp->ctl_rmr_name = genz_ctl_rmr_name(f_comp);
+	if (f_comp->ctl_rmr_name == NULL) {
+		pr_debug("genz_ctl_rmr_name returned NULL\n");
+		goto err_kobj;
+	}
+	pr_debug("calling genz_rmr_import for %s\n", f_comp->ctl_rmr_name);
 	/* initial mapping is for one 4KiB page covering the core struct */
-	/* Revisit: change fixed "control" rmr_name to something with GCID */
-	ret = genz_rmr_import(mdata, mgr_uuid, gcid, 0, 4096,
-			      access, rkey, dr_iface, "control", rmri);
+	ret = genz_rmr_import(mdata, mgr_uuid, gcid, 0, 4096, access,
+			      rkey, dr_iface, f_comp->ctl_rmr_name, rmri);
 	if (ret < 0) {
 		pr_debug("genz_rmr_import error ret=%d\n", ret);
-		goto err_kobj;
+		goto err_rmr_name;
 	}
 	ret = genz_comp_read_attrs(zbdev, rmri, f_comp);
 	if (ret < 0) {
@@ -2604,6 +2631,8 @@ err_fab_files:
 	genz_remove_fab_files(&f_comp->kobj);
 err_rmr:
 	genz_rmr_free(rmri);
+err_rmr_name:
+	kfree(f_comp->ctl_rmr_name);
 err_kobj:
 	kobject_put(f_comp->ctl_kobj);
 err_mdata:
@@ -2632,6 +2661,8 @@ int genz_fab_remove_control_files(struct genz_bridge_dev *zbdev,
 	if (ret < 0) {
 		pr_debug("genz_rmr_free error ret=%d\n", ret);
 	}
+	if (f_comp->ctl_rmr_name)
+		kfree(f_comp->ctl_rmr_name);
 	genz_remove_fab_files(&f_comp->kobj); /* gcid/cclass/etc. */
 	genz_remove_control_info_hierarchy(f_comp->root_control_info);
 	return ret;
