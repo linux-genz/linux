@@ -2282,7 +2282,7 @@ int genz_bridge_create_control_files(struct genz_bridge_dev *zbdev)
 	int                      ret;
 	struct genz_dev          *zdev = &zbdev->zdev;
 	struct device            *bdev = zbdev->bridge_dev;
-	char                     bridgeN[MAX_GENZ_NAME];
+	char                     bridgeN[MAX_GENZ_NAME+1];
 	uint                     fabric_num;
 	struct kobject           *genz_dir;
 
@@ -2735,9 +2735,12 @@ static void remove_all_ci(struct kset *kset)
  */
 int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev)
 {
-	char                   bridgeN[MAX_GENZ_NAME];
+	char                   bridgeN[MAX_GENZ_NAME+1];
 	struct genz_dev        *zdev = &zbdev->zdev;
+	struct genz_subnet     *zsub = zbdev->fab_zsub;
 	struct kobject         *dir;
+	char                   gcstr[GCID_STRING_LEN+1];
+	char                   fab_gcid[MAX_GENZ_NAME+1];
 
 	dev_dbg(zbdev->bridge_dev, "entered\n");
 #ifdef BROKEN
@@ -2753,11 +2756,18 @@ int genz_bridge_remove_control_files(struct genz_bridge_dev *zbdev)
 	kobject_del(zdev->zcomp->comp.ctl_kobj); /* Revisit: unneeded */
 	kobject_put(zdev->zcomp->comp.ctl_kobj);
 	/* remove the symlink associated with this genzN directory */
-	dir = &zbdev->zdev.zcomp->comp.subnet->fabric->dev.kobj;
+	dir = &zdev->zcomp->comp.subnet->fabric->dev.kobj;
 	snprintf(bridgeN, MAX_GENZ_NAME, "bridge%d", zbdev->bridge_num);
 	dev_dbg(zbdev->bridge_dev, "removing %s symlink for kobj %s\n",
 		bridgeN, kobject_name(dir));
 	sysfs_remove_link(dir, bridgeN);
+	if (zsub) {
+		snprintf(fab_gcid, MAX_GENZ_NAME, "%u:%s",
+			 zsub->fabric->number,
+			 genz_gcid_str(genz_gcid(zsub->sid, zdev->zcomp->comp.cid), gcstr, sizeof(gcstr)));
+		sysfs_remove_link(&zsub->kobj, fab_gcid);
+		zbdev->fab_zsub = NULL;
+	}
 	/* remove the genzN directory */
 	kobject_del(&zbdev->genzN_dir); /* Revisit: unneeded */
 #ifdef BROKEN
