@@ -440,6 +440,7 @@ struct genz_bridge_dev {
 	struct kobject		genzN_dir;
 	//struct kset		*genz_control_kset;
 	struct genz_mem_data    *control_mdata;
+	struct genz_subnet      *fab_zsub;
 };
 #define to_zbdev(d) container_of(d, struct genz_bridge_dev, zdev)
 #define kobj_to_zbdev(kobj) container_of(kobj, struct genz_bridge_dev, genzN_dir)
