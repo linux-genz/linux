@@ -602,8 +602,11 @@ static struct genz_bridge_dev *find_fabric0_bridge(void)
 
 int genz_move_fabric_bridge(struct genz_bridge_dev *zbdev,
 			    struct genz_os_comp *ocomp,
-			    struct genz_fabric *fabric)
+			    struct genz_fabric *fabric,
+			    struct genz_subnet *zsub)
 {
+	char gcstr[GCID_STRING_LEN+1];
+	char fab_gcid[MAX_GENZ_NAME+1];
 	const char *res_name;
 	int ret;
 
@@ -627,6 +630,16 @@ int genz_move_fabric_bridge(struct genz_bridge_dev *zbdev,
 	ret = genz_bridge_create_control_files(zbdev);
 	if (ret < 0) {
 		pr_debug("genz_bridge_create_control_files failed, ret=%d\n", ret);
+		return ret;
+	}
+	if (zsub) {
+		/* create symlink in /sys/fabrics/fabricN/FAB:SID/FAB:SID:CID */
+		snprintf(fab_gcid, MAX_GENZ_NAME, "%u:%s", fabric->number,
+			 genz_gcid_str(genz_gcid(zsub->sid, ocomp->comp.cid), gcstr, sizeof(gcstr)));
+		ret = sysfs_create_link(&zsub->kobj,
+					&zbdev->genzN_dir, fab_gcid);
+		if (ret == 0)
+			zbdev->fab_zsub = zsub;
 	}
 
 	return ret;
@@ -677,7 +690,7 @@ struct genz_bridge_dev *genz_zdev_bridge(struct genz_dev *zdev)
 		if (IS_ERR(ocomp)) {
 			goto out;
 		}
-		ret = genz_move_fabric_bridge(zbdev, ocomp, fabric);
+		ret = genz_move_fabric_bridge(zbdev, ocomp, fabric, NULL);
 		if (ret < 0) {
 			goto out;
 		}

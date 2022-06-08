@@ -792,6 +792,12 @@ static int parse_fabric_component(struct genl_info *info,
 		ret = -EINVAL;
 		goto err;
 	}
+	fci->zsub = genz_add_subnet(genz_gcid_sid(fci->gcid), fci->f);
+	if (fci->zsub == NULL) {
+		pr_debug("genz_add_subnet failed\n");
+		ret = -EINVAL;
+		goto err;
+	}
 	os = (*scenario == 1);
 	if (os) {
 		fci->ocomp = genz_add_os_subnet_comp(fci->f,
@@ -803,12 +809,6 @@ static int parse_fabric_component(struct genl_info *info,
 			goto err;
 		}
 	} else {
-		fci->zsub = genz_add_subnet(genz_gcid_sid(fci->gcid), fci->f);
-		if (fci->zsub == NULL) {
-			pr_debug("genz_add_subnet failed\n");
-			ret = -EINVAL;
-			goto err;
-		}
 		add_kobj = (*scenario == 2) || (*scenario == 3);
 		fci->zcomp = genz_add_comp(fci->zsub,
 					   genz_gcid_cid(fci->gcid), add_kobj);
@@ -856,7 +856,7 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 			ret = -EINVAL;
 			goto err;
 		}
-		ret = genz_move_fabric_bridge(zbdev, fci.ocomp, fci.f);
+		ret = genz_move_fabric_bridge(zbdev, fci.ocomp, fci.f, fci.zsub);
 		if (ret < 0) {
 			pr_debug("genz_move_fabric_bridge failed, ret=%d\n", ret);
 			goto err;
