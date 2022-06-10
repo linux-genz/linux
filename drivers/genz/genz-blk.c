@@ -747,7 +747,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		dev_dbg(&zdev->dev, "cpu_addr=%px\n", addr);
 	}
 	set_capacity(gd, (zbd->size-zbd->data_offset)/KERNEL_SECTOR_SIZE);
-	pr_info("%s: set capacity to %zu 512 byte sectors\n",
+	pr_info("%s: set capacity to %llu 512 byte sectors\n",
 		gd->disk_name, (zbd->size-zbd->data_offset)/KERNEL_SECTOR_SIZE);
 	ret = device_add_disk(&zdev->dev, gd, NULL);
 	if (ret) {
