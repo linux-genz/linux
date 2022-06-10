@@ -605,7 +605,6 @@ int genz_move_fabric_bridge(struct genz_bridge_dev *zbdev,
 {
 	char gcstr[GCID_STRING_LEN+1];
 	char fab_gcid[MAX_GENZ_NAME+1];
-	const char *res_name;
 	int ret;
 
 	/* Revisit: can we use kobject_move instead? */
