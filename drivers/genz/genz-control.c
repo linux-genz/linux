@@ -358,12 +358,11 @@ int genz_mmap_resource_range(ulong gz_pgoff, struct vm_area_struct *vma,
 	else
 		vma->vm_page_prot = pgprot_device(vma->vm_page_prot);
 
-	vma->vm_pgoff += gz_pgoff;
 	vma->vm_ops = &genz_phys_vm_ops;
-	pr_debug("vm_start=0x%lx, vm_pgoff=0x%lx, vm_size=0x%lx\n",
+	pr_debug("vm_start=0x%lx, vm_pgoff=0x%lx, vm_size=0x%lx, gz_pgoff=0x%lx\n",
 		 vma->vm_start, vma->vm_pgoff,
-		 vma->vm_end - vma->vm_start);
-	return io_remap_pfn_range(vma, vma->vm_start, vma->vm_pgoff,
+		 vma->vm_end - vma->vm_start, gz_pgoff);
+	return io_remap_pfn_range(vma, vma->vm_start, gz_pgoff,
 				  vma->vm_end - vma->vm_start,
 				  vma->vm_page_prot);
 }
@@ -406,8 +405,8 @@ static int mmap_control_structure(struct file *fd,
 	} else {  /* fabric */
 		if (!is_genz_range_mapped(ci->start, ci->size, rmri))
 			return -ENOSPC;
-		cs_pgoff = PHYS_PFN(rmri->zres.res.start);
-		wc = true;
+		cs_pgoff = PHYS_PFN(rmri->zres.res.start + ci->start);
+		wc = false;
 	}
 
 	/* Revisit: PCI has iomem_is_exclusive check */
@@ -1455,7 +1454,7 @@ static int genz_control_create_bin_file(struct genz_control_info *ci,
 	ci->battr.size = ci->size;
 	ci->battr.read = read_control_structure;
 	ci->battr.write = write_control_structure;
-	//ci->battr.mmap = mmap_control_structure; /* Revisit: not quite ready */
+	ci->battr.mmap = mmap_control_structure;
 	ci->battr.private = ci; /* Used to indicate valid battr */
 
 	ret = sysfs_create_bin_file(&ci->kobj, &ci->battr);
