@@ -124,7 +124,7 @@ enum {
 	GENZ_A_UEP_BRIDGE_GCID,  /* GCID of bridge targeted by UEP */
 	GENZ_A_UEP_TS_SEC,       /* UEP timestamp seconds */
 	GENZ_A_UEP_TS_NSEC,      /* UEP timestamp nanoseconds */
-	GENZ_A_UEP_PKT,          /* the complete UEP packet */
+	GENZ_A_UEP_REC,          /* the UEP event record */
 	__GENZ_A_UEP_MAX,
 };
 #define GENZ_A_UEP_MAX (__GENZ_A_UEP_MAX - 1)
