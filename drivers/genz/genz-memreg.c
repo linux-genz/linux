@@ -1146,6 +1146,8 @@ int genz_rmr_resize(uuid_t *uuid, uint64_t new_len, struct genz_rmr_info *rmri)
 	if (!mdata || genz_is_local_bridge(mdata->bridge, rmri) ||
 	    (new_len == rmri->len))  /* nothing to do */
 		return 0;
+	if (new_len == 0)
+		return -EINVAL;
 
 	prev = *rmri;
 	status = genz_rmr_free(rmri);
