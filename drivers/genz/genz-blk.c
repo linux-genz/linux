@@ -108,7 +108,7 @@ struct genz_bdev {  /* one per genz_resource == genz_bdev_probe */
 	struct dev_pagemap     pgmap;
 };
 
-#define GENZ_BLK_MAX_SG  256  /* Revisit */
+#define GENZ_BLK_MAX_SG  ((ushort)256)  /* Revisit */
 #define GENZ_BLK_FL_ALTMAP 0x80000000ull
 
 struct genz_blk_cmd {  /* one per request */
@@ -778,6 +778,7 @@ static int genz_blk_construct_bdev(struct genz_bdev *zbd,
 	struct genz_bridge_dev  *zbdev = zdev->zbdev;
 	struct genz_bridge_info *br_info = &zbdev->br_info;
 	struct gendisk *gd;
+	unsigned short block_max_sg = bbr->zbdev->br_info.block_max_sg;
 	int err = 0;
 
 	dev_dbg(&zdev->dev, "entered\n");
@@ -790,7 +791,8 @@ static int genz_blk_construct_bdev(struct genz_bdev *zbd,
 	zbd->gd = gd;
 	blk_queue_physical_block_size(gd->queue, PAGE_SIZE);
 	blk_queue_logical_block_size(gd->queue, GENZ_BLOCK_SIZE);
-	blk_queue_max_segments(gd->queue, GENZ_BLK_MAX_SG);
+	blk_queue_max_segments(gd->queue, block_max_sg == 0 ? GENZ_BLK_MAX_SG :
+			       min(block_max_sg, GENZ_BLK_MAX_SG));
 	blk_queue_max_hw_sectors(gd->queue,
 			 bbr->zbdev->br_info.block_max_xfer/KERNEL_SECTOR_SIZE);
 	blk_queue_max_segment_size(gd->queue,
