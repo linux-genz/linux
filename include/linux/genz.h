@@ -818,6 +818,31 @@ struct genz_uep_pkt {  /* UEP: Unsolicited Event Packet */
 	} u;
 };
 
+/* Revisit: why isn't this auto-extracted? */
+struct genz_uep_event_rec {
+	uint32_t A:         1; /* Byte 0x0 */
+	uint32_t Vers:      2;
+	uint32_t CV:        1;
+	uint32_t SV:        1;
+	uint32_t GC:        1;
+	uint32_t IV:        1;
+	uint32_t R0:        1;
+	uint32_t Event:     8;
+	uint32_t R1:        4;
+	uint32_t IfaceID:  12;
+	uint32_t SCID:     12; /* Byte 0x4 */
+	uint32_t SSID:     16;
+	uint32_t R2:        4;
+	uint32_t RCCID:    12; /* Byte 0x8 */
+	uint32_t RCSID:    16;
+	uint32_t R3:        4;
+	uint32_t ES:       32; /* Byte 0xC */
+	uint32_t EventID:  16; /* Byte 0x10 */
+	uint32_t R4:       16;
+};
+
+#define GENZ_UEP_EVENT_REC_VERS 1
+
 struct genz_uep_info {
 	union {
 		uint64_t flags;
@@ -828,8 +853,8 @@ struct genz_uep_info {
 			uint64_t rv:       58;
 		};
 	};
-	struct timespec64 ts;    /* set by br driver or subsys */
-	struct genz_uep_pkt uep; /* set by br driver */
+	struct timespec64 ts;          /* set by br driver or subsys */
+	struct genz_uep_event_rec rec; /* set by br driver */
 };
 
 static inline void genz_set_uep_timestamp(struct genz_uep_info *uepi)
@@ -1051,6 +1076,7 @@ int genz_control_read(struct genz_bridge_dev *br, loff_t offset,
 int genz_control_write(struct genz_bridge_dev *br, loff_t offset,
 		       size_t size, void *data,
 		       struct genz_rmr_info *rmri, uint flags);
+void genz_uep_pkt_to_rec(struct genz_uep_pkt *pkt, struct genz_uep_event_rec *rec);
 int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi);
 void genz_dev_put(struct genz_dev *zdev);
 struct genz_dev *genz_dev_get(struct genz_dev *zdev);
