@@ -1198,6 +1198,18 @@ static int read_header_at_offset(struct genz_bridge_dev *zbdev,
 	return ret;
 }
 
+static bool match_structure_type(struct genz_control_structure_header *hdr,
+				 const struct genz_control_structure_ptr *csp)
+{
+	/* allow exact match or either Vdef or Vdef-with-uuid when either
+	   Vdef or Vdef-with-uuid is required */
+	return (hdr->type == csp->struct_type) ||
+	       ((csp->struct_type == GENZ_VENDOR_DEFINED_STRUCTURE) &&
+		(hdr->type == GENZ_VENDOR_DEFINED_WITH_UUID_STRUCTURE)) ||
+	       ((csp->struct_type == GENZ_VENDOR_DEFINED_WITH_UUID_STRUCTURE) &&
+		(hdr->type == GENZ_VENDOR_DEFINED_STRUCTURE));
+}
+
 static int read_and_validate_header(struct genz_bridge_dev *zbdev,
 			struct genz_rmr_info *rmri,
 			off_t start,
@@ -1220,12 +1232,13 @@ static int read_and_validate_header(struct genz_bridge_dev *zbdev,
 
 	/* Validate the header is as expected */
 	if ((csp->struct_type != GENZ_GENERIC_STRUCTURE) &&
-	    (hdr->type != csp->struct_type)) {
+	    !match_structure_type(hdr, csp)) {
 		pr_debug("expected structure type %d but found %d\n",
 			csp->struct_type, hdr->type);
 		return EINVAL;
 	} else if ((csp->struct_type == GENZ_GENERIC_STRUCTURE) &&
-		   ((hdr->type == GENZ_OPCODE_SET_STRUCTURE) ||
+		   ((hdr->type == GENZ_CORE_STRUCTURE) ||
+		    (hdr->type == GENZ_OPCODE_SET_STRUCTURE) ||
 		    (hdr->type == GENZ_COMPONENT_C_ACCESS_STRUCTURE) ||
 		    (hdr->type == GENZ_COMPONENT_DESTINATION_TABLE_STRUCTURE) ||
 		    (hdr->type == GENZ_INTERFACE_STRUCTURE) ||
@@ -1234,7 +1247,7 @@ static int read_and_validate_header(struct genz_bridge_dev *zbdev,
 		    (hdr->type == GENZ_INTERFACE_STATISTICS_STRUCTURE) ||
 		    (hdr->type == GENZ_COMPONENT_MECHANICAL_STRUCTURE) ||
 		    (hdr->type == GENZ_COMPONENT_EXTENSION_STRUCTURE))) {
-		pr_debug("found structure type %d in generic PTR\n", hdr->type);
+		pr_debug("bad structure type %d in generic PTR\n", hdr->type);
 		return EINVAL;
 	}
 	/* Check if this is a known type */
