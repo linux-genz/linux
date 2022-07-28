@@ -105,7 +105,7 @@ const static struct nla_policy genz_genl_uep_policy[GENZ_A_UEP_MAX + 1] = {
 	[GENZ_A_UEP_BRIDGE_GCID] = { .type = NLA_U32 },
 	[GENZ_A_UEP_TS_SEC]      = { .type = NLA_U64 },
 	[GENZ_A_UEP_TS_NSEC]     = { .type = NLA_U64 },
-	[GENZ_A_UEP_PKT]         = { .len = sizeof(struct genz_uep_pkt) },
+	[GENZ_A_UEP_REC]         = { .len = sizeof(struct genz_uep_event_rec) },
 };
 
 static inline int check_netlink_perm(void)

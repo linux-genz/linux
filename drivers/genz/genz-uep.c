@@ -7,23 +7,18 @@
 #include "genz-netlink.h"
 #include "genz-probe.h"
 
-static uint32_t uep_sgcid(struct genz_bridge_dev *zbdev, struct genz_uep_pkt *uep)
+static uint32_t uep_sgcid(struct genz_bridge_dev *zbdev,
+			  struct genz_uep_event_rec *rec)
 {
 	uint32_t ssid;
 
-	ssid = (uep->GC) ? uep->u.u01.SSID : genz_gcid_sid(genz_br_gcid(zbdev));
-	return genz_gcid(ssid, uep->SCID);
+	ssid = (rec->GC) ? rec->SSID : genz_gcid_sid(genz_br_gcid(zbdev));
+	return genz_gcid(ssid, rec->SCID);
 }
 
-static uint16_t uep_event_id(struct genz_uep_pkt *uep)
+static uint16_t uep_event_id(struct genz_uep_event_rec *rec)
 {
-	return (uep->GC) ? uep->u.u01.EventID : uep->u.u00.EventID;
-}
-
-static inline uint16_t uep_pkt_len(struct genz_uep_pkt *uep)
-{
-	/* length in bytes */
-	return ((uep->LENh << 3) | uep->LENl) * 4;
+	return rec->EventID;
 }
 
 static int genz_notify_uep(struct genz_bridge_dev *zbdev,
@@ -87,9 +82,9 @@ static int genz_notify_uep(struct genz_bridge_dev *zbdev,
 		dev_dbg(zbdev->bridge_dev, "failed to copy UEP ts nsec\n");
 		goto free;
 	}
-	ret = nla_put(skb, GENZ_A_UEP_PKT, sizeof(uepi->uep), &uepi->uep);
+	ret = nla_put(skb, GENZ_A_UEP_REC, sizeof(uepi->rec), &uepi->rec);
 	if (ret) {
-		dev_dbg(zbdev->bridge_dev, "failed to copy UEP pkt\n");
+		dev_dbg(zbdev->bridge_dev, "failed to copy UEP rec\n");
 		goto free;
 	}
 
@@ -111,13 +106,60 @@ free:
 	goto err;
 }
 
+void genz_uep_pkt_to_rec(struct genz_uep_pkt *pkt, struct genz_uep_event_rec *rec)
+{
+	rec->A = 0;
+	rec->Vers = GENZ_UEP_EVENT_REC_VERS;
+	rec->CV = pkt->CV;
+	rec->SV = pkt->SV;
+	rec->GC = pkt->GC;
+	rec->IV = pkt->IV;
+	rec->R0 = 0;
+	rec->Event = pkt->Event;
+	rec->R1 = 0;
+	rec->SCID = pkt->SCID;
+	rec->R2 = 0;
+	rec->R3 = 0;
+	rec->R4 = 0;
+	if (pkt->NH == 0 && pkt->GC == 0) {
+		rec->IfaceID = pkt->u.u00.IfaceID;
+		rec->SSID = 0;
+		rec->RCCID = pkt->u.u00.RCCID;
+		rec->RCSID = (pkt->u.u00.RCSIDh << 8) | pkt->u.u00.RCSIDl;
+		rec->ES = pkt->u.u00.ES;
+		rec->EventID = pkt->u.u00.EventID;
+	} else if (pkt->NH == 0 && pkt->GC == 1) {
+		rec->IfaceID = pkt->u.u01.IfaceID;
+		rec->SSID = pkt->u.u01.SSID;
+		rec->RCCID = pkt->u.u01.RCCID;
+		rec->RCSID = (pkt->u.u01.RCSIDh << 8) | pkt->u.u01.RCSIDl;
+		rec->ES = pkt->u.u01.ES;
+		rec->EventID = pkt->u.u01.EventID;
+	} else if (pkt->NH == 1 && pkt->GC == 0) {
+		rec->IfaceID = pkt->u.u10.IfaceID;
+		rec->SSID = 0;
+		rec->RCCID = pkt->u.u10.RCCID;
+		rec->RCSID = (pkt->u.u10.RCSIDh << 8) | pkt->u.u10.RCSIDl;
+		rec->ES = pkt->u.u10.ES;
+		rec->EventID = pkt->u.u10.EventID;
+	} else { /* pkt->NH == 1 && pkt->GC == 1 */
+		rec->IfaceID = pkt->u.u11.IfaceID;
+		rec->SSID = pkt->u.u11.SSID;
+		rec->RCCID = pkt->u.u11.RCCID;
+		rec->RCSID = (pkt->u.u11.RCSIDh << 8) | pkt->u.u11.RCSIDl;
+		rec->ES = pkt->u.u11.ES;
+		rec->EventID = pkt->u.u11.EventID;
+	}
+}
+EXPORT_SYMBOL_GPL(genz_uep_pkt_to_rec);
+
 int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 {
-	struct genz_uep_pkt *uep = &uepi->uep;
+	struct genz_uep_event_rec *rec = &uepi->rec;
 	char str[GCID_STRING_LEN+1];
 	struct genz_rmr_info *rmri;
 	struct genz_comp *comp;
-	uint16_t event_id, pkt_len;
+	uint16_t event_id;
 	uint32_t sgcid;
 	union genz_c_control c_control;
 	unsigned long flags;
@@ -133,16 +175,15 @@ int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 		return -EINVAL;
 	}
 
-	pkt_len = uep_pkt_len(&uepi->uep);
-	dev_dbg(zbdev->bridge_dev, "version=%u, local=%u, ts_valid=%u, pkt_len=%u\n",
-		uepi->version, uepi->local, uepi->ts_valid, pkt_len);
+	dev_dbg(zbdev->bridge_dev, "version=%u, local=%u, ts_valid=%u\n",
+		uepi->version, uepi->local, uepi->ts_valid);
 
 	if (!uepi->ts_valid)
 		genz_set_uep_timestamp(uepi);
 
 	if (!uepi->local) {
-		sgcid = uep_sgcid(zbdev, uep);
-		event_id = uep_event_id(uep);
+		sgcid = uep_sgcid(zbdev, rec);
+		event_id = uep_event_id(rec);
 		dev_dbg(zbdev->bridge_dev, "sgcid=%s, event_id=%u\n",
 			genz_gcid_str(sgcid, str, sizeof(str)), event_id);
 		comp = genz_lookup_gcid(zbdev->fabric, sgcid);
@@ -183,10 +224,7 @@ int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 		genz_comp_put(comp);
 	}
 
-	/* clear uepi->uep beyond pkt length (to avoid kernel mem leak) */
-	memset((void *)&uepi->uep + pkt_len, 0,
-	       sizeof(struct genz_uep_pkt) - pkt_len);
-	/* same for unused uepi->flags */
+	/* clear unused uepi->flags (to avoid kernel mem leak) */
 	uepi->rv = 0;
 	/* send UEP to userspace via generic netlink */
 	ret = genz_notify_uep(zbdev, uepi);
