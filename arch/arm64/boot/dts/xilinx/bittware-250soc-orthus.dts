@@ -1530,24 +1530,24 @@
    xlnx,s-axi-supports-narrow-burst = <0x1>;
    xlnx,single-port-bram = <0x1>;
   };
-  genz_complex_genz_reqr_iprop_genz_raw_cb_la_0: iprop_genz_raw_cb_layer@80070000 {
+  genz_complex_genz_reqr_iprop_genz_raw_cb_la_0: iprop_genz_raw_cb_layer@80078000 {
    compatible = "xlnx,iprop-genz-raw-cb-layer-1.0";
    interrupt-names = "core_irq";
    interrupt-parent = <&gic>;
    interrupts = <0 89 4>;
-   reg = <0x0 0x80070000 0x0 0x8000>;
+   reg = <0x0 0x80078000 0x0 0x4000>;
    xlnx,s-axi-byte-width = <0x4>;
   };
-  genz_complex_genz_reqr_iprop_genz_requester_0: iprop_genz_requester_layer@80068000 {
+  genz_complex_genz_reqr_iprop_genz_requester_0: iprop_genz_requester_layer@80070000 {
    compatible = "xlnx,iprop-genz-requester-layer-1.0";
-   reg = <0x0 0x80068000 0x0 0x8000>;
+   reg = <0x0 0x80070000 0x0 0x8000>;
    xlnx,s-axi-byte-width = <0x4>;
   };
   genz_complex_genz_reqr_iprop_genz_requester_zmmu_0: iprop_genz_requester_zmmu@80060000 {
    clock-names = "s_axi_mm_aclk";
    clocks = <&zynqmp_clk 71>;
    compatible = "xlnx,iprop-genz-requester-zmmu-1.0";
-   reg = <0x0 0x80060000 0x0 0x8000>;
+   reg = <0x0 0x80060000 0x0 0x10000>;
    xlnx,s-axi-byte-width = <0x4>;
   };
   genz_complex_genz_resp_iprop_genz_control_o_0: iprop_genz_control_oc_layer@80350000 {
@@ -1589,14 +1589,14 @@
    compatible = "xlnx,iprop-axixbar-1.0";
    reg = <0x00000010 0x00000000 0x00000038 0x00000000 0x00000048 0x00000000 0x00000038 0x00000000>;
   };
-  iprop_cdma_0: iprop_cdma@80078000 {
+  iprop_cdma_0: iprop_cdma@8007c000 {
    clock-names = "S_AXI_ACLK", "M_AXI_ACLK", "M_AXI_AUX_ACLK";
    clocks = <&zynqmp_clk 71>, <&zynqmp_clk 71>, <&zynqmp_clk 71>;
    compatible = "xlnx,iprop-cdma-1.82b";
    interrupt-names = "irq";
    interrupt-parent = <&gic>;
    interrupts = <0 90 4>;
-   reg = <0x0 0x80078000 0x0 0x2000>;
+   reg = <0x0 0x8007c000 0x0 0x1000>;
    xlnx,addr-pipe-depth = <0x1>;
    xlnx,dphase-timeout = <0x8>;
    xlnx,length-width = <0xc>;
@@ -1609,14 +1609,14 @@
    xlnx,slv-dwidth = <0x20>;
    xlnx,use-wstrb = <0x1>;
   };
-  iprop_cdma_1: iprop_cdma@8007a000 {
+  iprop_cdma_1: iprop_cdma@8007d000 {
    clock-names = "S_AXI_ACLK", "M_AXI_ACLK", "M_AXI_AUX_ACLK";
    clocks = <&zynqmp_clk 71>, <&zynqmp_clk 71>, <&zynqmp_clk 71>;
    compatible = "xlnx,iprop-cdma-1.82b";
    interrupt-names = "irq";
    interrupt-parent = <&gic>;
    interrupts = <0 91 4>;
-   reg = <0x0 0x8007a000 0x0 0x2000>;
+   reg = <0x0 0x8007d000 0x0 0x1000>;
    xlnx,addr-pipe-depth = <0x1>;
    xlnx,dphase-timeout = <0x8>;
    xlnx,length-width = <0xc>;
@@ -1629,14 +1629,14 @@
    xlnx,slv-dwidth = <0x20>;
    xlnx,use-wstrb = <0x1>;
   };
-  iprop_cdma_2: iprop_cdma@8007c000 {
+  iprop_cdma_2: iprop_cdma@8007e000 {
    clock-names = "S_AXI_ACLK", "M_AXI_ACLK", "M_AXI_AUX_ACLK";
    clocks = <&zynqmp_clk 71>, <&zynqmp_clk 71>, <&zynqmp_clk 71>;
    compatible = "xlnx,iprop-cdma-1.82b";
    interrupt-names = "irq";
    interrupt-parent = <&gic>;
    interrupts = <0 92 4>;
-   reg = <0x0 0x8007c000 0x0 0x2000>;
+   reg = <0x0 0x8007e000 0x0 0x1000>;
    xlnx,addr-pipe-depth = <0x1>;
    xlnx,dphase-timeout = <0x8>;
    xlnx,length-width = <0xc>;
@@ -1649,14 +1649,14 @@
    xlnx,slv-dwidth = <0x20>;
    xlnx,use-wstrb = <0x1>;
   };
-  iprop_cdma_3: iprop_cdma@8007e000 {
+  iprop_cdma_3: iprop_cdma@8007f000 {
    clock-names = "S_AXI_ACLK", "M_AXI_ACLK", "M_AXI_AUX_ACLK";
    clocks = <&zynqmp_clk 71>, <&zynqmp_clk 71>, <&zynqmp_clk 71>;
    compatible = "xlnx,iprop-cdma-1.82b";
    interrupt-names = "irq";
    interrupt-parent = <&gic>;
    interrupts = <0 93 4>;
-   reg = <0x0 0x8007e000 0x0 0x2000>;
+   reg = <0x0 0x8007f000 0x0 0x1000>;
    xlnx,addr-pipe-depth = <0x1>;
    xlnx,dphase-timeout = <0x8>;
    xlnx,length-width = <0xc>;
