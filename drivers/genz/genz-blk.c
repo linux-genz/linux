@@ -110,6 +110,7 @@ struct genz_bdev {  /* one per genz_resource == genz_bdev_probe */
 
 #define GENZ_BLK_MAX_SG  ((ushort)256)  /* Revisit */
 #define GENZ_BLK_FL_ALTMAP 0x80000000ull
+#define GENZ_BLK_FL_PEC    0x40000000ull
 
 struct genz_blk_cmd {  /* one per request */
 	struct scatterlist sg[GENZ_BLK_MAX_SG];
@@ -960,6 +961,7 @@ static int genz_bdev_probe(struct genz_blk_state *bstate,
 	struct genz_dev *zdev = bstate->zdev;
 	struct genz_bridge_dev *zbdev = zdev->zbdev;
 	struct genz_bridge_info *br_info = &zbdev->br_info;
+	bool pec = zdev->driver_flags & GENZ_BLK_FL_PEC;
 	uint32_t gcid = genz_dev_gcid(zdev, 0);
 	uint64_t access;
 	uint32_t rkey;
@@ -1000,6 +1002,7 @@ static int genz_bdev_probe(struct genz_blk_state *bstate,
 	access = GENZ_MR_WRITE_REMOTE|GENZ_MR_INDIVIDUAL;
 	access |= (br_info->load_store) ? GENZ_MR_REQ_CPU : 0;
 	access |= (br_info->kern_map_data) ? GENZ_MR_KERN_MAP : 0;
+	access |= pec ? GENZ_MR_PEC : 0;
 	rkey = zres->rw_rkey;
 	err = genz_rmr_import(mdata, &zdev->instance_uuid, gcid,
 			      zbd->base_zaddr, zbd->size, access,
