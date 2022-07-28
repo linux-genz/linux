@@ -1588,6 +1588,9 @@
    clock-names = "S_AXI_ACLK", "M_AXI_ACLK", "M_AXI_AUX_ACLK";
    clocks = <&zynqmp_clk 71>, <&zynqmp_clk 71>, <&zynqmp_clk 71>;
    compatible = "xlnx,iprop-cdma-1.82b";
+   interrupt-names = "irq";
+   interrupt-parent = <&gic>;
+   interrupts = <0 90 4>;
    reg = <0x0 0x80078000 0x0 0x2000>;
    xlnx,addr-pipe-depth = <0x1>;
    xlnx,dphase-timeout = <0x8>;
@@ -1605,6 +1608,9 @@
    clock-names = "S_AXI_ACLK", "M_AXI_ACLK", "M_AXI_AUX_ACLK";
    clocks = <&zynqmp_clk 71>, <&zynqmp_clk 71>, <&zynqmp_clk 71>;
    compatible = "xlnx,iprop-cdma-1.82b";
+   interrupt-names = "irq";
+   interrupt-parent = <&gic>;
+   interrupts = <0 91 4>;
    reg = <0x0 0x8007a000 0x0 0x2000>;
    xlnx,addr-pipe-depth = <0x1>;
    xlnx,dphase-timeout = <0x8>;
@@ -1622,6 +1628,9 @@
    clock-names = "S_AXI_ACLK", "M_AXI_ACLK", "M_AXI_AUX_ACLK";
    clocks = <&zynqmp_clk 71>, <&zynqmp_clk 71>, <&zynqmp_clk 71>;
    compatible = "xlnx,iprop-cdma-1.82b";
+   interrupt-names = "irq";
+   interrupt-parent = <&gic>;
+   interrupts = <0 92 4>;
    reg = <0x0 0x8007c000 0x0 0x2000>;
    xlnx,addr-pipe-depth = <0x1>;
    xlnx,dphase-timeout = <0x8>;
@@ -1639,6 +1648,9 @@
    clock-names = "S_AXI_ACLK", "M_AXI_ACLK", "M_AXI_AUX_ACLK";
    clocks = <&zynqmp_clk 71>, <&zynqmp_clk 71>, <&zynqmp_clk 71>;
    compatible = "xlnx,iprop-cdma-1.82b";
+   interrupt-names = "irq";
+   interrupt-parent = <&gic>;
+   interrupts = <0 93 4>;
    reg = <0x0 0x8007e000 0x0 0x2000>;
    xlnx,addr-pipe-depth = <0x1>;
    xlnx,dphase-timeout = <0x8>;
