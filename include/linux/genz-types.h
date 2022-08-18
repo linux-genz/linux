@@ -6183,6 +6183,70 @@ struct genz_opcode_set_table{
     uint64_t r2;
 };
 
+struct genz_opcode_set_table_v1 {
+    uint64_t set_id                                : 3;
+    uint64_t r0                                    : 5;
+    uint64_t version                               : 8;  /* added in v1 */
+    uint64_t opcode_set_id_control_1               : 16;
+    uint64_t next_opcode_set_ptr                   : 32;
+    uint64_t r1;
+    uint64_t supported_core_64_opcode_set;
+    uint64_t enabled_core_64_opcode_set;
+    uint64_t supported_control_opcode_set;
+    uint64_t enabled_control_opcode_set;
+    uint64_t supported_p2p_64_opcode_set;
+    uint64_t enabled_p2p_64_opcode_set;
+    uint64_t supported_atomic_1_opcode_set;
+    uint64_t enabled_atomic_1_opcode_set;
+    uint64_t supported_ldm_1_opcode_set;
+    uint64_t enabled_ldm_1_opcode_set;
+    uint64_t supported_advanced_1_opcode_set;
+    uint64_t enabled_advanced_1_opcode_set;
+    uint64_t supported_advanced_2_opcode_set; /* these 2 fields were missing */
+    uint64_t enabled_advanced_2_opcode_set;   /* in the v0 structure */
+    uint64_t supported_opclass_0x6_opcode_set;
+    uint64_t enabled_opclass_0x6_opcode_set;
+    uint64_t supported_opclass_0x7_opcode_set;
+    uint64_t enabled_opclass_0x7_opcode_set;
+    uint64_t supported_opclass_0x8_opcode_set;
+    uint64_t enabled_opclass_0x8_opcode_set;
+    uint64_t supported_opclass_0x9_opcode_set;
+    uint64_t enabled_opclass_0x9_opcode_set;
+    uint64_t supported_opclass_0xa_opcode_set;
+    uint64_t enabled_opclass_0xa_opcode_set;
+    uint64_t supported_opclass_0xb_opcode_set;
+    uint64_t enabled_opclass_0xb_opcode_set;
+    uint64_t supported_opclass_0xc_opcode_set;
+    uint64_t enabled_opclass_0xc_opcode_set;
+    uint64_t supported_opclass_0xd_opcode_set;
+    uint64_t enabled_opclass_0xd_opcode_set;
+    uint64_t supported_opclass_0xe_opcode_set;
+    uint64_t enabled_opclass_0xe_opcode_set;
+    uint64_t supported_opclass_0xf_opcode_set;
+    uint64_t enabled_opclass_0xf_opcode_set;
+    uint64_t supported_opclass_0x10_opcode_set;
+    uint64_t enabled_opclass_0x10_opcode_set;
+    uint64_t supported_opclass_0x11_opcode_set;
+    uint64_t enabled_opclass_0x11_opcode_set;
+    uint64_t supported_opclass_0x12_opcode_set;
+    uint64_t enabled_opclass_0x12_opcode_set;
+    uint64_t supported_opclass_0x13_opcode_set;
+    uint64_t enabled_opclass_0x13_opcode_set;
+    uint64_t supported_dr_opcode_set;
+    uint64_t enabled_dr_opcode_set;
+    uint64_t supported_context_id_opcode_set;
+    uint64_t enabled_context_id_opcode_set;
+    uint64_t supported_multicast_opcode_set;
+    uint64_t enabled_multicast_opcode_set;
+    uint64_t supported_sod_opcode_set;
+    uint64_t enabled_sod_opcode_set;
+    uint64_t supported_multi_op_request_sub_op_set;
+    uint64_t enabled_multi_op_request_sub_op_set;
+    uint64_t supported_read_multi_op_set           : 32;
+    uint64_t enabled_read_multi_op_set             : 32;
+    uint64_t r2;
+};
+
 struct genz_opcode_set_uuid_table{
     uint64_t supported_p2p_vendor_defined_set;
     uint64_t enabled_p2p_vendor_defined_set;
