@@ -715,7 +715,19 @@ ssize_t genz_mvcat_table_size(struct genz_control_info *ci)
 
 ssize_t genz_opcode_set_table_size(struct genz_control_info *ci)
 {
-	return sizeof(struct genz_opcode_set_table);
+	struct genz_opcode_set_table_v1 ost;
+	ssize_t sz;
+	int ret;
+
+	/* Read the first 8 bytes of the table (includes version) */
+	ret = genz_control_read(ci->zbdev, ci->start, 8, &ost, ci->rmri, 0);
+	if (ret) {
+		pr_debug("control read of opcode set table failed with %d\n", ret);
+		return -1;
+	}
+	sz = (ost.version == 0) ? sizeof(struct genz_opcode_set_table) :
+		sizeof(struct genz_opcode_set_table_v1);
+	return sz;
 }
 
 ssize_t genz_opcode_set_uuid_table_size(struct genz_control_info *ci)
