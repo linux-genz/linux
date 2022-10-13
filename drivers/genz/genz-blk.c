@@ -515,7 +515,8 @@ static const struct blk_mq_ops genz_blk_mq_ops = {
 };
 
 static long genz_blk_dax_direct_access(struct dax_device *dax_dev,
-		pgoff_t pgoff, long nr_pages, void **kaddr, pfn_t *pfn)
+		pgoff_t pgoff, long nr_pages, enum dax_access_mode mode,
+		void **kaddr, pfn_t *pfn)
 {
 	struct genz_bdev *zbd = dax_get_private(dax_dev);
 	struct genz_rmr_info *rmri = &zbd->rmr_info;
