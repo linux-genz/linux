@@ -104,6 +104,10 @@ void kfree(void *p)
 	free(p);
 }
 
+void kmem_cache_shrink(struct kmem_cache *cachep)
+{
+}
+
 struct kmem_cache *
 kmem_cache_create(const char *name, unsigned int size, unsigned int align,
 		unsigned int flags, void (*ctor)(void *))
