@@ -857,13 +857,13 @@ struct genz_uep_info {
 	struct genz_uep_event_rec rec; /* set by br driver */
 };
 
+#define GENZ_UEP_INFO_VERS 2
+
 static inline void genz_set_uep_timestamp(struct genz_uep_info *uepi)
 {
 	ktime_get_real_ts64(&uepi->ts);
 	uepi->ts_valid = 1;
 }
-
-#define GENZ_UEP_INFO_VERS 1
 
 uint32_t genz_dev_gcid(struct genz_dev *zdev, uint index);
 
