@@ -169,9 +169,9 @@ int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 		       completes */
 		return -EINVAL;
 
-	if (uepi->version != GENZ_UEP_INFO_VERS) { /* only v1 supported */
-		dev_dbg(zbdev->bridge_dev, "unsupported version %u\n",
-			uepi->version);
+	if (uepi->version != GENZ_UEP_INFO_VERS) { /* only v2 supported */
+		dev_dbg(zbdev->bridge_dev, "unsupported UEP info version %u (expected %u)\n",
+			uepi->version, GENZ_UEP_INFO_VERS);
 		return -EINVAL;
 	}
 
