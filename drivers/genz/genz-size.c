@@ -617,6 +617,22 @@ ssize_t genz_firmware_table_size(struct genz_control_info *ci)
 	return (fw_cnt * sizeof(struct genz_firmware_table_array));
 }
 
+ssize_t genz_i_snapshot_table_size(struct genz_control_info *ci)
+{
+	struct genz_control_info *parent;
+
+	parent = ci->parent;      /* Interface Statistics Structure */
+
+	/* Find the interface statistics structure size field */
+	if (parent->type != GENZ_INTERFACE_STATISTICS_STRUCTURE) {
+		pr_debug("expected parent->type to be GENZ_INTERFACE_STATISTICS_STRUCTURE but it was 0x%x\n", parent->type);
+		return -1;
+	}
+
+	/* i_snapshot starts at offset 0x10 of interface statistics, and so its size is -0x10 */
+	return parent->size - 0x10;
+}
+
 ssize_t genz_page_grid_restricted_page_grid_table_size(
 	struct genz_control_info *ci)
 {

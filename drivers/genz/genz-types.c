@@ -129,7 +129,7 @@ struct genz_control_structure_ptr interface_phy_structure_ptrs[] = {
 
 struct genz_control_structure_ptr interface_statistics_structure_ptrs[] = {
     { GENZ_CONTROL_POINTER_STRUCTURE, GENZ_4_BYTE_POINTER, 0x8, GENZ_VENDOR_DEFINED_STRUCTURE, "vendor_defined" },
-    { GENZ_CONTROL_POINTER_NONE, GENZ_4_BYTE_POINTER, 0xc, GENZ_UNKNOWN_STRUCTURE, "i_snapshot" },
+    { GENZ_CONTROL_POINTER_TABLE, GENZ_4_BYTE_POINTER, 0xc, GENZ_I_SNAPSHOT_TABLE, "i_snapshot", genz_i_snapshot_table_size },
 };
 
 struct genz_control_structure_ptr component_error_and_signal_event_structure_ptrs[] = {
@@ -407,6 +407,7 @@ struct genz_control_ptr_info genz_table_type_to_ptrs[] = {
      { NULL, 0, 0, false, 0x0, "unreliable_multicast_table" },
      { NULL, 0, 0, false, 0x0, "unreliable_multicast_table_entry_row" },
      { NULL, 0, 0, false, 0x0, "vcat_table" },
+     { NULL, 0, 0, false, 0x0, "i_snapshot_table" },
 };
 
 EXPORT_SYMBOL(genz_struct_type_to_ptrs);
