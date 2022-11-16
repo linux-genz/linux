@@ -191,7 +191,8 @@ enum genz_control_structure_type {
     GENZ_TYPE_1_INTERLEAVE_TABLE = GENZ_TABLE_ENUM_START + 42,
     GENZ_UNRELIABLE_MULTICAST_TABLE = GENZ_TABLE_ENUM_START + 43,
     GENZ_UNRELIABLE_MULTICAST_TABLE_ENTRY_ROW = GENZ_TABLE_ENUM_START + 44,
-    GENZ_VCAT_TABLE = GENZ_TABLE_ENUM_START + 45
+    GENZ_VCAT_TABLE = GENZ_TABLE_ENUM_START + 45,
+    GENZ_I_SNAPSHOT_TABLE = GENZ_TABLE_ENUM_START + 46
 };
 
 struct genz_control_structure_ptr{
@@ -6509,6 +6510,8 @@ ssize_t genz_elog_table_size (struct genz_control_info *ci);
 ssize_t genz_event_record_size (struct genz_control_info *ci);
 
 ssize_t genz_firmware_table_size (struct genz_control_info *ci);
+
+ssize_t genz_i_snapshot_table_size (struct genz_control_info *ci);
 
 ssize_t genz_image_format_0xc86ed8c24bed49bda5143dd11950de9d_header_format_size (struct genz_control_info *ci);
 
