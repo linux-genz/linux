@@ -1131,6 +1131,7 @@ static int read_pointer_at_offset(struct genz_bridge_dev *zbdev,
 			off_t *ptr_offset)
 {
 	int ret;
+	off_t mask = BIT_ULL(psize * 8) - 1;
 
 	pr_debug("start=0x%lx, offset=0x%lx, start+offset=0x%lx\n",
 		 start, offset, start+offset);
@@ -1148,6 +1149,12 @@ static int read_pointer_at_offset(struct genz_bridge_dev *zbdev,
 	/* It is ok for many pointers to be NULL. Everything is optional. */
 	if (*ptr_offset == 0)
 		return ENOENT;
+
+	/* Check for an "all ones" PTR, which can happen on a failed read when
+	 * the bridge driver uses load/store and the req ZMMU PTE has PEC==1.
+	 */
+	if ((*ptr_offset & mask) == mask)
+	  return -ENODATA;
 
 	/* Shift the offset to get the byte address */
 	*ptr_offset <<= 4;
@@ -2263,6 +2270,10 @@ int genz_control_write_c_control(struct genz_bridge_dev *zbdev,
 {
 	int ret;
 
+	if (c_control == -1ULL) {
+		pr_debug("avoiding write of all-ones data\n");
+		return -ENODATA;
+	}
 	ret = genz_control_write_structure(zbdev, rmri, &c_control, 0,
 			offsetof(struct genz_core_structure, c_control),
 			sizeof(c_control));
