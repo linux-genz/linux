@@ -171,6 +171,7 @@ struct genz_comp {
 	struct kobject		*ctl_kobj;     /* kobj ptr for control space */
 	char                    *ctl_rmr_name; /* control space name */
 	uint16_t                uep_id;        /* last processed UEP EventID */
+	bool                    uep_halted;    /* last UEP was halted */
 	spinlock_t              uep_lock;      /* Revisit: mutex? */
 };
 #define kobj_to_genz_comp(x) container_of(x, struct genz_comp, kobj)

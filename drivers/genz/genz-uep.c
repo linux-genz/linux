@@ -31,6 +31,8 @@ static int genz_notify_uep(struct genz_bridge_dev *zbdev,
 	uuid_t mgr_uuid;
 	int ret;
 
+	/* clear unused uepi->flags (to avoid kernel mem leak) */
+	uepi->rv = 0;
 	total_size = nla_total_size(sizeof(*uepi) + sizeof(mgr_uuid) +
 				    sizeof(br_gcid));
 	/* Add GENL_HDR to total_size */
@@ -150,18 +152,42 @@ void genz_uep_pkt_to_rec(struct genz_uep_pkt *pkt, struct genz_uep_event_rec *re
 		rec->ES = pkt->u.u11.ES;
 		rec->EventID = pkt->u.u11.EventID;
 	}
+	pr_debug("NH=%u, GC=%u, SCID=0x%03x, Event=0x%x, EventID=%u\n",
+		 pkt->NH, pkt->GC, rec->SCID, rec->Event, rec->EventID);
 }
 EXPORT_SYMBOL_GPL(genz_uep_pkt_to_rec);
+
+static int halt_uert(struct genz_bridge_dev *zbdev, struct genz_comp *comp) {
+	struct genz_rmr_info *rmri = &comp->ctl_rmr_info;
+	union genz_c_control c_control;
+	int ret;
+
+	/* do read-modify-write of c_control.halt_uert */
+	ret = genz_control_read_c_control(zbdev, rmri, &c_control.val);
+	if (ret < 0) {
+		dev_dbg(zbdev->bridge_dev,
+			"genz_control_read_c_control failed, ret=%d\n", ret);
+		return ret;
+	}
+	c_control.halt_uert = 1;
+	ret = genz_control_write_c_control(zbdev, rmri, c_control.val);
+	if (ret < 0) {
+		dev_dbg(zbdev->bridge_dev,
+			"genz_control_write_c_control failed, ret=%d\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
 
 int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 {
 	struct genz_uep_event_rec *rec = &uepi->rec;
 	char str[GCID_STRING_LEN+1];
-	struct genz_rmr_info *rmri;
 	struct genz_comp *comp;
+	bool duplicate = false;
 	uint16_t event_id;
 	uint32_t sgcid;
-	union genz_c_control c_control;
 	unsigned long flags;
 	int ret;
 
@@ -199,40 +225,30 @@ int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi)
 				event_id,
 				genz_gcid_str(sgcid, str, sizeof(str)));
 			ret = 1; /* Revisit: enum or different value */
-			goto unlock;
+			duplicate = true;
+		} else {
+			/* this event id is now the latest */
+			comp->uep_id = event_id;
+			comp->uep_halted = false;
 		}
-		/* this event id is now the latest */
-		comp->uep_id = event_id;
-		rmri = &comp->ctl_rmr_info;
-		/* do read-modify-write of c_control.halt_uert */
-		ret = genz_control_read_c_control(zbdev, rmri, &c_control.val);
-		if (ret < 0) {
-			dev_dbg(zbdev->bridge_dev,
-				"genz_control_read_c_control failed, ret=%d\n",
-				ret);
-			goto unlock;
-		}
-		c_control.halt_uert = 1;
-		ret = genz_control_write_c_control(zbdev, rmri, c_control.val);
-		if (ret < 0) {
-			dev_dbg(zbdev->bridge_dev,
-				"genz_control_write_c_control failed, ret=%d\n",
-				ret);
-			goto unlock;
+		if (!comp->uep_halted) {
+			ret = halt_uert(zbdev, comp);
+			if (ret == 0) {
+				dev_dbg(zbdev->bridge_dev,
+					"uert halted, sgcid=%s, event_id=%u\n",
+					genz_gcid_str(sgcid, str, sizeof(str)),
+					event_id);
+				comp->uep_halted = true;
+			}
 		}
 		spin_unlock_irqrestore(&comp->uep_lock, flags);
 		genz_comp_put(comp);
 	}
 
-	/* clear unused uepi->flags (to avoid kernel mem leak) */
-	uepi->rv = 0;
-	/* send UEP to userspace via generic netlink */
-	ret = genz_notify_uep(zbdev, uepi);
-	return ret;
-
-unlock:
-	spin_unlock_irqrestore(&comp->uep_lock, flags);
-	genz_comp_put(comp);
+	if (!duplicate) {
+		/* send UEP to userspace via generic netlink */
+		ret = genz_notify_uep(zbdev, uepi);
+	}
 	return ret;
 }
 EXPORT_SYMBOL_GPL(genz_handle_uep);
