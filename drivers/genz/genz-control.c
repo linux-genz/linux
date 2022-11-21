@@ -2266,19 +2266,21 @@ int genz_control_read_c_control(struct genz_bridge_dev *zbdev,
 }
 
 int genz_control_write_c_control(struct genz_bridge_dev *zbdev,
-				 struct genz_rmr_info *rmri, uint64_t c_control)
+				 struct genz_rmr_info *rmri, uint64_t *c_control,
+				 size_t size)
 {
 	int ret;
 
-	if (c_control == -1ULL) {
+	if (size < 0 || size > sizeof(c_control))
+		return -EINVAL;
+	if (*c_control == -1ULL) {
 		pr_debug("avoiding write of all-ones data\n");
 		return -ENODATA;
 	}
-	ret = genz_control_write_structure(zbdev, rmri, &c_control, 0,
-			offsetof(struct genz_core_structure, c_control),
-			sizeof(c_control));
+	ret = genz_control_write_structure(zbdev, rmri, c_control, 0,
+			offsetof(struct genz_core_structure, c_control), size);
 	pr_debug("offset=0x%lx, c_control=0x%llx\n",
-		 offsetof(struct genz_core_structure, c_control), c_control);
+		 offsetof(struct genz_core_structure, c_control), *c_control);
 	return ret;
 }
 

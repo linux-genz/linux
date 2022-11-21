@@ -104,7 +104,8 @@ int genz_control_read_mgr_uuid(struct genz_bridge_dev *zbdev,
 int genz_control_read_c_control(struct genz_bridge_dev *zbdev,
 				struct genz_rmr_info *rmri, uint64_t *c_control);
 int genz_control_write_c_control(struct genz_bridge_dev *zbdev,
-				 struct genz_rmr_info *rmri, uint64_t c_control);
+				 struct genz_rmr_info *rmri,
+				 uint64_t *c_control, size_t size);
 struct genz_control_info *genz_first_struct_of_type(
 			    struct genz_control_info *parent, uint type);
 struct genz_control_info *genz_next_struct_of_type(

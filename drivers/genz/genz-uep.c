@@ -161,16 +161,12 @@ static int halt_uert(struct genz_bridge_dev *zbdev, struct genz_comp *comp) {
 	struct genz_rmr_info *rmri = &comp->ctl_rmr_info;
 	union genz_c_control c_control;
 	int ret;
-
-	/* do read-modify-write of c_control.halt_uert */
-	ret = genz_control_read_c_control(zbdev, rmri, &c_control.val);
-	if (ret < 0) {
-		dev_dbg(zbdev->bridge_dev,
-			"genz_control_read_c_control failed, ret=%d\n", ret);
-		return ret;
-	}
+	/* write only the low byte of c_control, which is a constant
+	 * containing component_enable, halt_uert, and 6 other WO bits */
+	c_control.val = 0;
+	c_control.component_enable = 1;
 	c_control.halt_uert = 1;
-	ret = genz_control_write_c_control(zbdev, rmri, c_control.val);
+	ret = genz_control_write_c_control(zbdev, rmri, &c_control.val, 1);
 	if (ret < 0) {
 		dev_dbg(zbdev->bridge_dev,
 			"genz_control_write_c_control failed, ret=%d\n", ret);
