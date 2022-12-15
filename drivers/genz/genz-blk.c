@@ -380,8 +380,7 @@ out:
 //	blk_mq_end_request(req, cmd->error);
 //}
 
-static enum blk_eh_timer_return genz_blk_timeout_rq(struct request *rq,
-						    bool reserved)
+static enum blk_eh_timer_return genz_blk_timeout_rq(struct request *rq)
 {
 	struct genz_bdev *const zbd = rq->q->queuedata;
 
@@ -767,7 +766,7 @@ cleanup_dax:
 	kill_dax(dax_dev);
 	put_dax(dax_dev);
 cleanup_disk:
-	blk_cleanup_disk(gd);
+	put_disk(gd);
 	goto out;
 }
 
@@ -820,7 +819,7 @@ static void genz_blk_destroy_bdev(struct genz_bdev *zbd)
 		put_dax(zbd->dax_dev);
 	}
 	del_gendisk(zbd->gd);
-	blk_cleanup_disk(zbd->gd);
+	put_disk(zbd->gd);
 }
 
 static int genz_blk_init_tag_set(struct genz_blk_bridge *bbr)
