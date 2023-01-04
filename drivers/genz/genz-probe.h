@@ -38,8 +38,11 @@
 struct genz_fabric *genz_find_fabric(uint32_t fabric_num);
 struct genz_fabric * genz_dev_to_fabric(struct device *dev);
 void genz_release_fabric(struct device *dev);
-struct genz_comp *genz_lookup_comp(struct genz_subnet *s, uint32_t cid);
+struct genz_comp *genz_lookup_comp(struct genz_subnet *s, uint32_t cid,
+				   bool lock);
 struct genz_os_comp *genz_lookup_os_comp(struct genz_os_subnet *s, uint32_t cid);
+struct genz_os_comp *genz_lookup_os_subnet_comp(struct genz_fabric *fabric,
+						uint16_t sid, uint16_t cid);
 struct genz_comp *genz_add_comp(struct genz_subnet *s, uint32_t cid,
 				bool add_kobj);
 void genz_remove_comp(struct genz_comp *zcomp);
@@ -49,8 +52,7 @@ struct genz_os_comp *genz_add_os_subnet_comp(struct genz_fabric *fabric,
 struct genz_comp *genz_lookup_gcid(struct genz_fabric *f, uint32_t gcid);
 struct genz_comp *genz_alloc_comp(void);
 struct genz_os_comp *genz_alloc_os_comp(void);
-int genz_init_comp(struct genz_comp *zcomp, struct genz_subnet *s,
-		   uint32_t cid, bool add_kobj);
+void genz_init_comp(struct genz_comp *zcomp, struct genz_subnet *s, uint32_t cid);
 int genz_init_os_comp(struct genz_os_comp *ocomp,
 			   struct genz_os_subnet *s, uint32_t cid);
 struct genz_dev *genz_alloc_dev(struct genz_fabric *fabric);
