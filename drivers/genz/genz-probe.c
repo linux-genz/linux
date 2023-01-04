@@ -655,12 +655,29 @@ static int genz_create_os_comp_files(struct device *dev)
 	return ret;
 }
 
+static void genz_release_comp(struct kobject *kobj)
+{
+	struct genz_comp *c = kobj_to_genz_comp(kobj);
+	int atm; /* Revisit: temp debug */
+
+	/* Revisit: temp debug - mark comp as "free" but don't kfree() it */
+	atm = atomic_fetch_or(BIT(1), &c->add_kobj);
+	pr_debug("comp=%px, atm=0x%x, kobj->refcount=%u\n", c, atm, kref_read(&kobj->kref));
+	//kfree(c);
+}
+
+static struct kobj_type genz_comp_ktype = {
+	.sysfs_ops = &kobj_sysfs_ops,
+	.release = genz_release_comp
+};
+
 struct genz_comp *genz_alloc_comp(void)
 {
 	struct genz_comp *zcomp;
 
 	zcomp = kzalloc(sizeof(*zcomp), GFP_KERNEL);
 	spin_lock_init(&zcomp->uep_lock);
+	kobject_init(&zcomp->kobj, &genz_comp_ktype);
 	return zcomp;
 }
 
@@ -686,32 +703,16 @@ void genz_release_os_comp(struct device *dev)
 	kfree(c);
 }
 
-static void genz_release_comp(struct kobject *kobj)
-{
-	struct genz_comp *c = kobj_to_genz_comp(kobj);
-
-	pr_debug("comp=%px, kobj->refcount=%u\n", c, kref_read(&kobj->kref));
-	kfree(c);
-}
-
-static struct kobj_type genz_comp_ktype = {
-	.sysfs_ops = &kobj_sysfs_ops,
-	.release = genz_release_comp
-};
-
-int genz_init_comp(struct genz_comp *zcomp,
-		   struct genz_subnet *s, uint32_t cid, bool add_kobj)
+static int genz_init_comp_kobj(struct genz_comp *zcomp,
+			       struct genz_subnet *s, uint32_t cid)
 {
 	struct genz_fabric *f = s->fabric;
 	int ret = 0;
 
-	zcomp->subnet = s;
-	zcomp->cid = cid;
-	if (add_kobj && !zcomp->add_kobj) {
-		ret = kobject_init_and_add(&zcomp->kobj, &genz_comp_ktype,
-			 &s->kobj, "%u:%04x:%03x", f->number, s->sid, cid);
+	if (!(atomic_fetch_or(BIT(0), &zcomp->add_kobj) & BIT(0))) {
+		ret = kobject_add(&zcomp->kobj, &s->kobj,
+				  "%u:%04x:%03x", f->number, s->sid, cid);
 		if (ret == 0) {
-			zcomp->add_kobj = true;  /* Revisit: locking */
 			pr_debug("zcomp=%px, kobj->refcount=%u\n", zcomp, kref_read(&zcomp->kobj.kref));
 		} else {
 			kobject_put(&zcomp->kobj);
@@ -720,15 +721,20 @@ int genz_init_comp(struct genz_comp *zcomp,
 	return ret;
 }
 
+void genz_init_comp(struct genz_comp *zcomp,
+		   struct genz_subnet *s, uint32_t cid)
+{
+	zcomp->subnet = s;
+	zcomp->cid = cid;
+}
+
 int genz_init_os_comp(struct genz_os_comp *ocomp,
 		      struct genz_os_subnet *s, uint32_t cid)
 {
 	struct genz_fabric *f = s->subnet.fabric;
 	int ret = 0;
 
-	ret = genz_init_comp(&ocomp->comp, &s->subnet, cid, false);
-	if (ret != 0)
-		return ret;
+	genz_init_comp(&ocomp->comp, &s->subnet, cid);
 	ocomp->subnet = s;
 	ocomp->dev.bus = &genz_bus_type;
 	ocomp->dev.id = cid;
@@ -759,23 +765,28 @@ void print_components(struct genz_fabric *f)
 
 }
 
-struct genz_comp *genz_lookup_comp(struct genz_subnet *s, uint32_t cid)
+/* Caller may either pass lock==true, and this will acquire & release lock
+ * or caller may acquire & release the lock itself, and pass lock==false.
+ * If comp was found, then this gets a reference.
+ */
+struct genz_comp *genz_lookup_comp(struct genz_subnet *s, uint32_t cid,
+				   bool lock)
 {
 	struct genz_comp *c, *found = NULL;
 	unsigned long flags;
 
-	spin_lock_irqsave(&s->fabric->components_lock, flags);
+	if (lock)
+		spin_lock_irqsave(&s->fabric->components_lock, flags);
 	list_for_each_entry(c, &s->fabric->components, fab_comp_node) {
 		if (c->cid == cid && s == c->subnet) {
 			found = c;
-			if (found->add_kobj) {
-				kobject_get(&found->kobj);
-				pr_debug("after get, found=%px, cid=%03x, found->cid=%03x, kobj->refcount=%u\n", found, cid, found->cid, kref_read(&found->kobj.kref));
-			}
+			kobject_get(&found->kobj);
+			pr_debug("after get, found=%px, cid=%03x, found->cid=%03x, atm=0x%x, kobj->refcount=%u\n", found, cid, found->cid, atomic_read(&found->add_kobj), kref_read(&found->kobj.kref));
 			break;
 		}
 	}
-	spin_unlock_irqrestore(&s->fabric->components_lock, flags);
+	if (lock)
+		spin_unlock_irqrestore(&s->fabric->components_lock, flags);
 	return found;
 }
 
@@ -796,41 +807,66 @@ struct genz_os_comp *genz_lookup_os_comp(struct genz_os_subnet *s,
 	return found;
 }
 
+static void _genz_remove_comp(struct genz_comp *zcomp)
+{
+	struct genz_subnet *s = zcomp->subnet;
+	unsigned long flags;
+
+	spin_lock_irqsave(&s->fabric->components_lock, flags);
+	list_del(&zcomp->fab_comp_node);
+	atomic_andnot(BIT(2), &zcomp->add_kobj); /* Revisit: temp debug */
+	spin_unlock_irqrestore(&s->fabric->components_lock, flags);
+	pr_debug("before final put, zcomp=%px, kobj->refcount=%u\n", zcomp, kref_read(&zcomp->kobj.kref));
+	genz_comp_put(zcomp);
+}
+
 struct genz_comp *genz_add_comp(struct genz_subnet *s,
 				uint32_t cid, bool add_kobj)
 {
-	struct genz_comp *found;
+	struct genz_comp *found, *add = NULL, *already = NULL;
+	char *msg;
 	int ret = 0;
 	unsigned long flags;
 
 	pr_debug("cid=%03x, add_kobj=%u\n", cid, add_kobj);
-	found = genz_lookup_comp(s, cid);
+	found = genz_lookup_comp(s, cid, /*lock*/true);
 	if (!found) {
 		pr_debug("cid %03x is not in the components list yet\n", cid);
 		/* Allocate a new genz_comp and add to list */
-		found = genz_alloc_comp();
-		if (!found) {
+		add = genz_alloc_comp();
+		if (!add) {
 			pr_debug("alloc_comp failed\n");
 			return found;
 		}
-		ret = genz_init_comp(found, s, cid, add_kobj);
-		if (ret) {
-			pr_debug("genz_init_comp failed, ret=%d\n", ret);
-			kfree(found);
-			return NULL;
-		}
-		/* Revisit: make sure this has not already been added. */
+		genz_init_comp(add, s, cid);
 		spin_lock_irqsave(&s->fabric->components_lock, flags);
-		list_add_tail(&found->fab_comp_node, &s->fabric->components);
+		/* make sure this comp has not already been added while
+		   the lock was released */
+		already = genz_lookup_comp(s, cid, /*lock*/false);
+		if (already) {
+			kobject_put(&add->kobj);
+			found = already;
+			msg = "already in";
+		} else {
+			list_add_tail(&add->fab_comp_node, &s->fabric->components);
+			atomic_or(BIT(2), &add->add_kobj); /* Revisit: temp debug */
+			found = add;
+			msg = "added to";
+		}
 		spin_unlock_irqrestore(&s->fabric->components_lock, flags);
-		pr_debug("added component %px, cid=%03x, to the component list, kobj->refcount=%u\n", found, found->cid, kref_read(&found->kobj.kref));
 	} else {
-		pr_debug("cid %03x found in the components list, %px, kobj->refcount=%u\n", found->cid, found, kref_read(&found->kobj.kref));
-		if (add_kobj && !found->add_kobj) {
-			ret = genz_init_comp(found, s, cid, add_kobj);
-			if (ret) {
-				pr_debug("genz_init_comp failed, ret=%d\n", ret);
-			}
+		msg = "found in";
+	}
+	pr_debug("component %px, cid=%03x, %s the components list, kobj->refcount=%u\n", found, found->cid, msg, kref_read(&found->kobj.kref));
+	if (add_kobj) {
+		ret = genz_init_comp_kobj(found, s, cid);
+		if (ret) {
+			pr_debug("genz_init_comp_kobj failed, ret=%d\n", ret);
+			if (add && !already)
+				_genz_remove_comp(found);
+			else
+				genz_comp_put(found);
+			found = NULL;
 		}
 	}
 	return found;
@@ -838,17 +874,10 @@ struct genz_comp *genz_add_comp(struct genz_subnet *s,
 
 void genz_remove_comp(struct genz_comp *zcomp)
 {
-	struct genz_subnet *s = zcomp->subnet;
-	unsigned long flags;
-
 	pr_debug("before first put, zcomp=%px, kobj->refcount=%u\n", zcomp, kref_read(&zcomp->kobj.kref));
 	/* undo extra ref that genz_lookup_comp got */
 	genz_comp_put(zcomp);
-	spin_lock_irqsave(&s->fabric->components_lock, flags);
-	list_del(&zcomp->fab_comp_node);
-	spin_unlock_irqrestore(&s->fabric->components_lock, flags);
-	pr_debug("before final put, zcomp=%px, kobj->refcount=%u\n", zcomp, kref_read(&zcomp->kobj.kref));
-	genz_comp_put(zcomp);
+	_genz_remove_comp(zcomp);
 }
 
 struct genz_os_comp *genz_add_os_comp(struct genz_os_subnet *s,
@@ -879,6 +908,19 @@ struct genz_os_comp *genz_add_os_comp(struct genz_os_subnet *s,
 		pr_debug("added component %px to the os_comp list\n", found);
 	}
 	return found;
+}
+
+struct genz_os_comp *genz_lookup_os_subnet_comp(struct genz_fabric *fabric,
+						uint16_t sid, uint16_t cid)
+{
+	struct genz_os_subnet *s;
+	struct genz_os_comp *ocomp;
+
+	s = genz_lookup_os_subnet(sid, fabric);
+	if (s == NULL)
+		return NULL;
+	ocomp = genz_lookup_os_comp(s, cid);
+	return ocomp;
 }
 
 struct genz_os_comp *genz_add_os_subnet_comp(struct genz_fabric *fabric,
@@ -912,7 +954,7 @@ struct genz_comp *genz_lookup_gcid(struct genz_fabric *f, uint32_t gcid)
 		 genz_gcid_str(gcid, gcstr, sizeof(gcstr)));
 	s = genz_lookup_subnet(genz_gcid_sid(gcid), f);
 	if (s != NULL)
-		c = genz_lookup_comp(s, genz_gcid_cid(gcid));
+		c = genz_lookup_comp(s, genz_gcid_cid(gcid), /*lock*/true);
 	return c;
 }
 

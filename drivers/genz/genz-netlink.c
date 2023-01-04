@@ -661,11 +661,12 @@ struct genz_fab_comp_info {
 
 static int parse_fabric_component(struct genl_info *info,
 				  struct genz_fab_comp_info *fci, bool dr,
-				  uint *scenario)
+				  bool add, uint *scenario)
 {
 	bool os = false;
 	bool add_kobj;
 	bool valid_dr_iface;
+	uint32_t sid, cid;
 	char gcstr[GCID_STRING_LEN+1];
 	int ret = 0;
 
@@ -792,30 +793,57 @@ static int parse_fabric_component(struct genl_info *info,
 		ret = -EINVAL;
 		goto err;
 	}
-	fci->zsub = genz_add_subnet(genz_gcid_sid(fci->gcid), fci->f);
-	if (fci->zsub == NULL) {
-		pr_debug("genz_add_subnet failed\n");
-		ret = -EINVAL;
-		goto err;
+	sid = genz_gcid_sid(fci->gcid);
+	cid = genz_gcid_cid(fci->gcid);
+	if (add) {
+		fci->zsub = genz_add_subnet(sid, fci->f);
+		if (fci->zsub == NULL) {
+			pr_debug("genz_add_subnet failed\n");
+			ret = -EINVAL;
+			goto err;
+		}
+	} else { /* remove */
+		fci->zsub = genz_lookup_subnet(sid, fci->f);
+		if (fci->zsub == NULL) {
+			pr_debug("genz_lookup_subnet failed to find 0x%x\n", sid);
+			ret = -EINVAL;
+			goto err;
+		}
 	}
 	os = (*scenario == 1);
 	if (os) {
-		fci->ocomp = genz_add_os_subnet_comp(fci->f,
-						     genz_gcid_sid(fci->gcid),
-						     genz_gcid_cid(fci->gcid));
-		if (IS_ERR(fci->ocomp)) {
-			pr_debug("genz_add_os_subnet_comp failed\n");
-			ret = PTR_ERR(fci->ocomp);
-			goto err;
+		if (add) {
+			fci->ocomp = genz_add_os_subnet_comp(fci->f, sid, cid);
+			if (IS_ERR(fci->ocomp)) {
+				pr_debug("genz_add_os_subnet_comp failed\n");
+				ret = PTR_ERR(fci->ocomp);
+				goto err;
+			}
+		} else { /* remove */
+			fci->ocomp = genz_lookup_os_subnet_comp(fci->f,
+								sid, cid);
+			if (fci->ocomp == NULL) {
+				ret = -EINVAL;
+				goto err;
+			}
 		}
-	} else {
-		add_kobj = (*scenario == 2) || (*scenario == 3);
-		fci->zcomp = genz_add_comp(fci->zsub,
-					   genz_gcid_cid(fci->gcid), add_kobj);
-		if (fci->zcomp == NULL) {
-			pr_debug("genz_add_comp failed\n");
-			ret = -EINVAL;
-			goto err;
+	} else { /* fabric */
+		if (add) {
+			add_kobj = (*scenario == 2) || (*scenario == 3);
+			fci->zcomp = genz_add_comp(fci->zsub, cid, add_kobj);
+			if (fci->zcomp == NULL) {
+				pr_debug("genz_add_comp failed\n");
+				ret = -EINVAL;
+				goto err;
+			}
+		} else { /* remove */
+			fci->zcomp = genz_lookup_comp(fci->zsub, cid,
+						      /*lock*/true);
+			if (fci->zcomp == NULL) {
+				pr_debug("genz_lookup_comp failed to find 0x%x\n", cid);
+				ret = -EINVAL;
+				goto err;
+			}
 		}
 	}
 
@@ -836,7 +864,8 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 	if (ret < 0)
 		goto err;
 
-	ret = parse_fabric_component(info, &fci, /*dr*/false, &scenario);
+	ret = parse_fabric_component(info, &fci, /*dr*/false, /*add*/true,
+				     &scenario);
 	if (ret < 0)
 		goto err;
 	/*
@@ -896,8 +925,8 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 	}
 	return ret;
 err_put:
-	if (fci.zcomp && fci.zcomp->add_kobj)
-		kobject_put(&fci.zcomp->kobj);
+	if (fci.zcomp)
+		genz_comp_put(fci.zcomp);
 err:
 	return ret;
 }
@@ -914,7 +943,8 @@ static int genz_remove_fabric_component(struct sk_buff *skb, struct genl_info *i
 	if (ret < 0)
 		goto err;
 
-	ret = parse_fabric_component(info, &fci, /*dr*/false, &scenario);
+	ret = parse_fabric_component(info, &fci, /*dr*/false, /*add*/false,
+				     &scenario);
 	if (ret < 0)
 		goto err;
 	/*
@@ -985,7 +1015,8 @@ static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *i
 	ret = check_netlink_perm();
 	if (ret < 0)
 		goto err;
-	ret = parse_fabric_component(info, &fci, /*dr*/true, &scenario);
+	ret = parse_fabric_component(info, &fci, /*dr*/true, /*add*/true,
+				     &scenario);
 	if (ret < 0)
 		goto err;
 	ret = genz_check_fabric_dr_gcids(&fci);
@@ -1038,7 +1069,7 @@ static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *i
 	}
 	return ret;
 err_put:
-	if (dr_comp && dr_comp->add_kobj)
+	if (dr_comp)
 		kobject_put(&dr_comp->kobj);
 err:
 	return ret;
@@ -1057,7 +1088,8 @@ static int genz_remove_fabric_dr_component(struct sk_buff *skb, struct genl_info
 	if (ret < 0)
 		goto err;
 
-	ret = parse_fabric_component(info, &fci, /*dr*/true, &scenario);
+	ret = parse_fabric_component(info, &fci, /*dr*/true, /*add*/false,
+				     &scenario);
 	if (ret < 0)
 		goto err;
 	ret = genz_check_fabric_dr_gcids(&fci);

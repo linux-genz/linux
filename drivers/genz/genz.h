@@ -159,7 +159,7 @@ struct genz_fru_attribute {
 struct genz_comp {
 	uint32_t		cid;
 	uint16_t		cclass;
-	bool                    add_kobj;
+	atomic_t                add_kobj;
 	uint64_t		serial;
 	uuid_t			c_uuid;
 	uuid_t			fru_uuid;
