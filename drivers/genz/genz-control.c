@@ -2385,8 +2385,50 @@ static struct kobject *genz_comp_iface_dir(struct genz_comp *dr_comp,
 	return 0;
 }
 
+static int move_back_to_dr(struct genz_bridge_dev *zbdev,
+			   struct genz_comp *f_comp, uint32_t gcid,
+			   uint16_t dr_iface, struct kobject *iface_dir)
+{
+	struct genz_rmr_info *rmri = &f_comp->ctl_rmr_info;
+	int ret;
+
+	/* we already have (normal) control space - move back to DR */
+	pr_debug("before move: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
+	ret = kobject_move(f_comp->ctl_kobj, iface_dir);
+	if (ret < 0) {
+		pr_debug("genz_kobject_move error ret=%d\n", ret);
+		goto err_mdata;
+	}
+	pr_debug("before rename: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
+	ret = kobject_rename(f_comp->ctl_kobj, "dr");
+	if (ret < 0) {
+		pr_debug("genz_kobject_rename error ret=%d\n", ret);
+		goto err_mdata;
+	}
+	pr_debug("after rename: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
+	/* update rmr to re-enable DR */
+	ret = genz_rmr_change_dr(&zbdev->fabric->mgr_uuid, gcid,
+				 dr_iface, rmri);
+	if (ret < 0) {
+		pr_debug("genz_rmr_change_dr error ret=%d\n", ret);
+		goto err_mdata;
+	}
+	ret = genz_comp_read_attrs(zbdev, rmri, f_comp);
+	if (ret < 0) {
+		pr_debug("genz_comp_read_attrs error ret=%d\n", ret);
+		goto err_mdata;
+	}
+	genz_remove_fab_files(&f_comp->kobj); /* Revisit: is this right? */
+	/* Revisit: Shouldn't this always remove_mdata()? */
+	return ret;
+
+err_mdata:
+	remove_mdata(zbdev);
+	return ret;
+}
+
 /**
- * genz_dr_create_control_files() - read control space for a directed-relay component
+ * genz_dr_create_control_files() - create control files for a directed-relay component
  */
 int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 				 struct genz_comp *f_comp,
@@ -2416,6 +2458,10 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 		pr_debug("dr_iface %u not found\n", dr_iface);
 		ret = -EINVAL;
 		goto err_mdata;
+	}
+	if (f_comp->ctl_kobj) {
+		/* we already have (normal) control space - move back to DR */
+		return move_back_to_dr(zbdev, f_comp, gcid, dr_iface, iface_dir);
 	}
 	/* Make the dr directory under interfaceN of the relaying component */
 	dr_dir = kobject_create_and_add("dr", iface_dir);
@@ -2454,6 +2500,7 @@ int genz_dr_create_control_files(struct genz_bridge_dev *zbdev,
 		pr_debug("start_core_structure error ret=%d\n", ret);
 		goto err_rmr;
 	}
+	pr_debug("f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
 	return 0;
 
 err_rmr:
@@ -2485,7 +2532,7 @@ static void genz_remove_control_info_hierarchy(struct genz_control_info *ci)
 }
 
 /**
- * genz_dr_remove_control_files() - remove control space for a DR fabric component
+ * genz_dr_remove_control_files() - remove control files for a DR fabric component
  */
 int genz_dr_remove_control_files(struct genz_bridge_dev *zbdev,
 				 struct genz_comp *f_comp,
@@ -2551,8 +2598,51 @@ int genz_comp_read_attrs(struct genz_bridge_dev *zbdev,
 	return ret;
 }
 
+static int move_from_dr(struct genz_bridge_dev *zbdev, struct genz_comp *f_comp,
+			uint32_t gcid)
+{
+	struct genz_rmr_info *rmri = &f_comp->ctl_rmr_info;
+	int ret;
+
+	/* we already have (dr) control space - move/update it */
+	pr_debug("before move: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
+	ret = kobject_move(f_comp->ctl_kobj, &f_comp->kobj);
+	if (ret < 0) {
+		pr_debug("genz_kobject_move error ret=%d\n", ret);
+		goto err_mdata;
+	}
+	pr_debug("before rename: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
+	ret = kobject_rename(f_comp->ctl_kobj, "control");
+	if (ret < 0) {
+		pr_debug("genz_kobject_rename error ret=%d\n", ret);
+		goto err_mdata;
+	}
+	pr_debug("after rename: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
+	/* update rmr to disable DR */
+	ret = genz_rmr_change_dr(&zbdev->fabric->mgr_uuid, gcid,
+				 GENZ_DR_IFACE_NONE, rmri);
+	if (ret < 0) {
+		pr_debug("genz_rmr_change_dr error ret=%d\n", ret);
+		goto err_mdata;
+	}
+	ret = genz_comp_read_attrs(zbdev, rmri, f_comp);
+	if (ret < 0) {
+		pr_debug("genz_comp_read_attrs error ret=%d\n", ret);
+		goto err_mdata;
+	}
+	ret = genz_create_fab_files(&f_comp->kobj);
+	genz_comp_put(f_comp); /* put extra ref from genz_add_comp */
+	pr_debug("after put: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
+	/* Revisit: Shouldn't this always remove_mdata()? */
+	return ret;
+
+err_mdata:
+	remove_mdata(zbdev);
+	return ret;
+}
+
 /**
- * genz_fab_create_control_files() - read control space for a "normal" fabric component
+ * genz_fab_create_control_files() - create control files for a "normal" fabric component
  */
 int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 				  struct genz_comp *f_comp,
@@ -2574,33 +2664,7 @@ int genz_fab_create_control_files(struct genz_bridge_dev *zbdev,
 	}
 	if (dr_iface != GENZ_DR_IFACE_NONE) {
 		/* we already have (dr) control space - move/update it */
-		pr_debug("before move: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
-		ret = kobject_move(f_comp->ctl_kobj, &f_comp->kobj);
-		if (ret < 0) {
-			pr_debug("genz_kobject_move error ret=%d\n", ret);
-			goto err_mdata;
-		}
-		pr_debug("before rename: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
-		ret = kobject_rename(f_comp->ctl_kobj, "control");
-		if (ret < 0) {
-			pr_debug("genz_kobject_rename error ret=%d\n", ret);
-			goto err_mdata;
-		}
-		pr_debug("after rename: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
-		/* update rmr to disable DR */
-		ret = genz_rmr_change_dr(&zbdev->fabric->mgr_uuid, gcid,
-					 GENZ_DR_IFACE_NONE, rmri);
-		if (ret < 0) {
-			pr_debug("genz_rmr_change_dr error ret=%d\n", ret);
-			goto err_mdata;
-		}
-		ret = genz_comp_read_attrs(zbdev, rmri, f_comp);
-		if (ret < 0) {
-			pr_debug("genz_comp_read_attrs error ret=%d\n", ret);
-			goto err_mdata;
-		}
-		ret = genz_create_fab_files(&f_comp->kobj);
-		return ret;
+		return move_from_dr(zbdev, f_comp, gcid);
 	}
 	/* Make the control directory under the component */
 	pr_debug("before add: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));

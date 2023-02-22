@@ -1061,7 +1061,7 @@ static int genz_add_fabric_dr_component(struct sk_buff *skb, struct genl_info *i
 			pr_debug("genz_dr_create_control_files failed, ret=%d\n", ret);
 			goto err_put;
 		}
-		genz_comp_put(dr_comp);
+		genz_comp_put(dr_comp); /* put ref from genz_lookup_gcid */
 	} else {
 		pr_debug("invalid combination of GCIDs\n");
 		ret = -EINVAL;
