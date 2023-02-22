@@ -699,6 +699,7 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 	struct dax_device *dax_dev;
 	unsigned long align, npfns;
 	resource_size_t offset;
+	size_t capacity;
 	u32 end_trunc;
 	void *addr;
 	struct device *dev;
@@ -747,9 +748,10 @@ static int genz_blk_register_gendisk(struct genz_bdev *zbd)
 		zbd->rmr_info.cpu_addr = addr;
 		dev_dbg(&zdev->dev, "cpu_addr=%px\n", addr);
 	}
-	set_capacity(gd, (zbd->size-zbd->data_offset)/KERNEL_SECTOR_SIZE);
-	pr_info("%s: set capacity to %llu 512 byte sectors\n",
-		gd->disk_name, (zbd->size-zbd->data_offset)/KERNEL_SECTOR_SIZE);
+	capacity = (zbd->size-zbd->data_offset)/KERNEL_SECTOR_SIZE;
+	set_capacity(gd, capacity);
+	pr_info("%s: set capacity to %zu 512 byte sectors\n",
+		gd->disk_name, capacity);
 	ret = device_add_disk(&zdev->dev, gd, NULL);
 	if (ret) {
 		dev_dbg(dev, "device_add_disk failed, ret=%d\n", ret);
