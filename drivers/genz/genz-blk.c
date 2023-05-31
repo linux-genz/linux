@@ -288,7 +288,7 @@ static void genz_blk_sgl_cmpl(struct genz_dev *zdev,
 	cmd->error = errno_to_blk_status(sgli->status);
 	/* Revisit: debug */
 	dev_dbg_ratelimited(&zdev->dev, "tag=0x%x, req=%px, cpu=%d, status=%d, error=%d\n",
-			    sgli->tag, req, smp_processor_id(),
+			    sgli->tag, req, raw_smp_processor_id(),
 			    sgli->status, cmd->error);
 	blk_mq_end_request(req, cmd->error);
 }
@@ -349,7 +349,7 @@ static blk_status_t genz_blk_queue_rq(struct blk_mq_hw_ctx *hctx,
 	dev_dbg_ratelimited(dev, "cmd=%s, tag=0x%x, req=%px, lba=%u, count=%u, nents=%d, nr_sg=%d, offset=0x%llx, cpu=%d\n",
 			    (cmd->sgli.data_dir == WRITE) ? "WR" : "RD",
 			    tag, req, lba, count, cmd->sgli.nents, cmd->sgli.nr_sg,
-			    cmd->sgli.offset, smp_processor_id());
+			    cmd->sgli.offset, raw_smp_processor_id());
 	blk_mq_start_request(req);
 	/* submit cmd */
 	err = genz_sgl_request(zdev, &cmd->sgli);
