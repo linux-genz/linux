@@ -124,7 +124,7 @@ struct dev_dax *__dax_genz_probe(struct genz_dev *zdev,
 		dev_dbg(dev, "devm_genz_uuid_import failed, ret=%d\n", ret);
 		return ERR_PTR(ret);
 	}
-	access = GENZ_MR_WRITE_REMOTE|GENZ_MR_INDIVIDUAL|GENZ_MR_REQ_CPU;
+	access = GENZ_MR_WRITE_REMOTE|GENZ_MR_INDIVIDUAL|GENZ_MR_REQ_CPU|GENZ_MR_KERN_MAP;
 	access |= pec ? GENZ_MR_PEC : 0;
 	rmri = devm_genz_rmr_import(zdev, uui, gcid,
 				    zres->res.start, resource_size(&zres->res),

@@ -159,7 +159,7 @@ static int genz_bus_match(struct device *dev, struct device_driver *drv)
 	return 0;
 }
 
-static int genz_uevent(struct device *dev, struct kobj_uevent_env *env)
+static int genz_uevent(const struct device *dev, struct kobj_uevent_env *env)
 {
 	struct genz_dev *zdev;
 

@@ -1460,6 +1460,7 @@ static int do_cdx_entry(const char *filename, void *symval,
 	DEF_FIELD(symval, cdx_device_id, device);
 
 	sprintf(alias, "cdx:v%08Xd%08Xd", vendor, device);
+}
 
 /* Looks like: genz:uuid */
 static int do_genz_entry(const char *filename, void *symval, char *alias)
