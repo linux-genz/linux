@@ -1158,38 +1158,47 @@ static struct genl_ops genz_gnl_ops[] = {
 	{
 	.cmd = GENZ_C_ADD_OS_COMPONENT,
 	.doit = genz_add_os_component,
+	.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	},
 	{
 	.cmd = GENZ_C_REMOVE_OS_COMPONENT,
 	.doit = genz_remove_os_component,
+	.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	},
 	{
 	.cmd = GENZ_C_SYMLINK_OS_COMPONENT,
 	.doit = genz_symlink_os_component,
+	.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	},
 	{
 	.cmd = GENZ_C_ADD_FABRIC_COMPONENT,
 	.doit = genz_add_fabric_component,
+	.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	},
 	{
 	.cmd = GENZ_C_REMOVE_FABRIC_COMPONENT,
 	.doit = genz_remove_fabric_component,
+	.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	},
 	{
 	.cmd = GENZ_C_ADD_FABRIC_DR_COMPONENT,
 	.doit = genz_add_fabric_dr_component,
+	.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	},
 	{
 	.cmd = GENZ_C_REMOVE_FABRIC_DR_COMPONENT,
 	.doit = genz_remove_fabric_dr_component,
+	.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	},
 	{
 	.cmd = GENZ_C_ADD_FABRIC,
 	.doit = genz_add_fabric,
+	.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	},
 	{
 	.cmd = GENZ_C_REMOVE_FABRIC,
 	.doit = genz_remove_fabric,
+	.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	},
 };
 
@@ -1205,8 +1214,10 @@ struct genl_family genz_gnl_family = {
 	.maxattr = GENZ_A_MAX,
 	.ops = genz_gnl_ops,
 	.n_ops = ARRAY_SIZE(genz_gnl_ops),
+	.resv_start_op = GENZ_C_MAX + 1,
 	.mcgrps = genz_mcgrps,
-	.n_mcgrps = ARRAY_SIZE(genz_mcgrps)
+	.n_mcgrps = ARRAY_SIZE(genz_mcgrps),
+	.module = THIS_MODULE
 };
 
 
