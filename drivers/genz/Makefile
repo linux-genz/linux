@@ -19,6 +19,7 @@ genz-y := genz-core.o \
 
 obj-$(CONFIG_GENZ)           += genz.o
 obj-$(CONFIG_GENZ_BLK)       += genz-blk.o
+obj-$(CONFIG_GENZ_CTL)       += genz-ctl.o
 
 # Object files in subdirectories
 obj-$(CONFIG_GENZ_WILDCAT)   += wildcat/
