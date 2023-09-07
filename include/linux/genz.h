@@ -1024,6 +1024,7 @@ void genz_rmr_remove(struct genz_rmr *rmr, bool lock);
 void genz_rmr_free_all(struct genz_mem_data *mdata);
 void genz_rmr_remove_unode(struct genz_mem_data *mdata,
 			   struct uuid_node *unode);
+void genz_rmr_zres(struct genz_resource *res, struct genz_rmr_info *rmri);
 int genz_teardown_remote_uuid(uuid_t *src_uuid);
 struct genz_rmr *genz_rmr_search(
 	struct genz_mem_data *mdata, uint32_t dgcid, uint64_t rsp_zaddr,
@@ -1061,6 +1062,8 @@ struct genz_rmr_info *devm_genz_rmr_import(struct genz_dev *zdev,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint32_t rkey,
 	uint16_t dr_iface, const char *rmr_name);
 void devm_genz_rmr_free(struct genz_dev *zdev, struct genz_rmr_info *rmri);
+struct genz_rmr_info *devm_genz_rmr_import_zres(struct genz_dev *zdev,
+	struct genz_resource *zres, uint64_t access);
 bool genz_gcid_is_local(struct genz_bridge_dev *br, uint32_t gcid);
 int genz_alloc_queues(struct genz_bridge_dev *br,
 		      struct genz_xdm_info *xdmi, struct genz_rdm_info *rdmi);
