@@ -61,7 +61,7 @@ struct genz_zres { /* subsystem private version of genz_resource */
 	struct genz_resource zres;
 	struct list_head zres_node;
 	struct bin_attribute res_attr;
-	struct genz_rmr_info *rmri;  /* Revisit */
+	struct genz_rmr_info *rmri;
 };
 #define to_genz_res(n) container_of(n, struct genz_zres, zres)
 #define res_attr_to_zres(n) container_of(n, struct genz_zres, res_attr)
@@ -247,10 +247,8 @@ static inline uint get_uint_len(uint val)
 
 static inline bool is_genz_offset_mapped(loff_t offset, struct genz_rmr_info *rmri)
 {
-	/* Revisit: this is only correct for control space, which is always
-	 * mapped starting at offset 0
-	 */
-	return (!rmri || (offset < rmri->len));
+	return (!rmri /* local control space */
+		|| ((offset - rmri->rsp_zaddr) < rmri->len));
 }
 
 static inline bool is_genz_range_mapped(loff_t offset, size_t size,
@@ -316,7 +314,8 @@ uint genz_parse_page_grid_opt(char *str, uint64_t max_page_count,
 			      bool allow_cpu_visible,
 			      struct genz_page_grid pg[]);
 
-int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
+int genz_req_page_grid_alloc(struct genz_dev *zdev,
+			     struct genz_zmmu_info *zi,
 			     struct genz_page_grid *grid);
 int genz_rsp_page_grid_alloc(struct genz_bridge_dev *br,
 			     struct genz_page_grid *grid);

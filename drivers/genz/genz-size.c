@@ -378,7 +378,6 @@ ssize_t genz_c_access_l_p2p_table_size(struct genz_control_info *ci)
 {
 	ssize_t sz = genz_c_access_table_entries(ci);
 
-	sz = genz_c_access_table_entries(ci);
 	return sz;  /* entries == bytes because sizeof(struct) is 1 */
 }
 

@@ -136,6 +136,20 @@ void __genz_unregister_driver(struct genz_driver *driver);
 
 typedef loff_t genz_control_cookie;
 
+struct genz_page_grid_config {
+	uint     nr_req_page_grids;
+	uint     nr_rsp_page_grids;
+	uint64_t nr_req_ptes;
+	uint64_t nr_rsp_ptes;
+	uint64_t req_page_grid_page_sizes;
+	uint64_t rsp_page_grid_page_sizes;
+	uint64_t min_cpuvisible_addr;
+	uint64_t max_cpuvisible_addr;
+	uint64_t min_nonvisible_addr;
+	uint64_t max_nonvisible_addr;
+	uint64_t cpuvisible_phys_offset;
+};
+
 struct genz_bridge_info {
 	uint     req_zmmu       : 1;
 	uint     rsp_zmmu       : 1;
@@ -150,17 +164,7 @@ struct genz_bridge_info {
 	uint     nr_rdm_queues;
 	uint     xdm_qlen;
 	uint     rdm_qlen;
-	uint     nr_req_page_grids;
-	uint     nr_rsp_page_grids;
-	uint64_t nr_req_ptes;
-	uint64_t nr_rsp_ptes;
-	uint64_t req_page_grid_page_sizes;
-	uint64_t rsp_page_grid_page_sizes;
-	uint64_t min_cpuvisible_addr;
-	uint64_t max_cpuvisible_addr;
-	uint64_t min_nonvisible_addr;
-	uint64_t max_nonvisible_addr;
-	uint64_t cpuvisible_phys_offset;
+	struct genz_page_grid_config pg_config;
 	uint64_t block_max_xfer;
 	unsigned short block_max_sg;
 };
@@ -415,14 +419,19 @@ struct genz_page_grid_info {
 	struct rb_root         base_pte_tree;
 	struct rb_root         base_addr_tree;
 	struct genz_page_grid  *humongous_pg;
+	struct genz_rmr_info   *pg_rmri[3]; // 0: PGStruct, 1: PGTable, 2: PTETable
 };
 
-union genz_zmmu_info {
-	struct {
-		struct genz_page_grid_info req_zmmu_pg;
-		struct genz_page_grid_info rsp_zmmu_pg;
+struct genz_zmmu_info {
+	spinlock_t zmmu_lock;
+	union {
+		struct {
+			struct genz_page_grid_info req_zmmu_pg;
+			struct genz_page_grid_info rsp_zmmu_pg;
+			struct genz_page_grid_config *pg_config;
+		};
+		/* struct genz_page_table_info;  Revisit: define this */
 	};
-	/* struct genz_page_table_info;  Revisit: define this */
 };
 
 struct genz_bridge_dev {
@@ -434,8 +443,7 @@ struct genz_bridge_dev {
 	uint16_t		bridge_num;
 	struct genz_fabric	*fabric;
 	struct genz_bridge_info br_info;
-	spinlock_t              zmmu_lock;  /* global bridge zmmu lock */
-	union genz_zmmu_info    zmmu_info;
+	struct genz_zmmu_info   zmmu_info;
 	struct resource         ld_st_res;
 	/* Revisit: add address space */
 	struct kobject		genzN_dir;
@@ -949,7 +957,6 @@ static inline int genz_data_read(struct genz_bridge_dev *br, loff_t offset,
 				 size_t size, void *data,
 				 struct genz_rmr_info *rmri, uint flags)
 {
-	/* Revisit: need req ZMMU mapping */
 	if (!br->zbdrv->data_read)  /* data_read is required */
 		return -EINVAL;
 	return br->zbdrv->data_read(br, offset, size, data, rmri, flags);
@@ -959,7 +966,6 @@ static inline int genz_data_write(struct genz_bridge_dev *br, loff_t offset,
 				  size_t size, void *data,
 				  struct genz_rmr_info *rmri, uint flags)
 {
-	/* Revisit: need req ZMMU mapping */
 	if (!br->zbdrv->data_write)  /* data_write is required */
 		return -EINVAL;
 	return br->zbdrv->data_write(br, offset, size, data, rmri, flags);
@@ -978,7 +984,7 @@ int genz_unregister_bridge(struct device *dev);
 char *genz_gcid_str(const uint32_t gcid, char *str, const size_t len);
 void genz_init_mem_data(struct genz_mem_data *mdata,
 			struct genz_bridge_dev *br);
-void genz_zmmu_clear_all(struct genz_bridge_dev *br, bool free_radix_tree);
+void genz_zmmu_clear_all(struct genz_zmmu_info *zi, bool free_radix_tree);
 int genz_zmmu_req_pte_update(struct genz_pte_info *ptei);
 int genz_zmmu_req_pte_alloc(struct genz_pte_info *ptei,
                             struct genz_rmr_info *rmri);

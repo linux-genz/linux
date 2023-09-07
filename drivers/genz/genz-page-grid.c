@@ -84,17 +84,17 @@ static void zmmu_clear_pg_info(struct genz_page_grid_info *pgi,
 	pgi->humongous_pg = NULL;
 }
 
-void genz_zmmu_clear_all(struct genz_bridge_dev *br, bool free_radix_tree)
+void genz_zmmu_clear_all(struct genz_zmmu_info *zi, bool free_radix_tree)
 {
 	ulong flags;
 
-	pr_debug("br=%px, free_radix_tree=%u\n", br, free_radix_tree);
-	spin_lock_irqsave(&br->zmmu_lock, flags);
-	zmmu_clear_pg_info(&br->zmmu_info.req_zmmu_pg,
-			   br->br_info.nr_req_ptes, free_radix_tree);
-	zmmu_clear_pg_info(&br->zmmu_info.rsp_zmmu_pg,
-			   br->br_info.nr_rsp_ptes, free_radix_tree);
-	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+	pr_debug("zi=%px, free_radix_tree=%u\n", zi, free_radix_tree);
+	spin_lock_irqsave(&zi->zmmu_lock, flags);
+	zmmu_clear_pg_info(&zi->req_zmmu_pg,
+			   zi->pg_config->nr_req_ptes, free_radix_tree);
+	zmmu_clear_pg_info(&zi->rsp_zmmu_pg,
+			   zi->pg_config->nr_rsp_ptes, free_radix_tree);
+	spin_unlock_irqrestore(&zi->zmmu_lock, flags);
 }
 
 static int parse_page_grid_one(char *str, uint64_t max_page_count,
@@ -199,7 +199,7 @@ static uint64_t zmmu_base_addr_insert(struct genz_page_grid_info *pgi,
 	struct genz_page_grid *node = &pgi->pg[pg_index];
 	int result;
 
-	/* caller must hold bridge zmmu lock */
+	/* caller must hold zmmu lock */
 
 	/* figure out where to put new node */
 	while (*new) {
@@ -229,7 +229,7 @@ static int zmmu_base_pte_insert(struct genz_page_grid_info *pgi, uint pg_index)
 	struct rb_node **new = &root->rb_node, *parent = NULL;
 	struct genz_page_grid *node = &pgi->pg[pg_index];
 
-	/* caller must hold bridge zmmu lock */
+	/* caller must hold zmmu lock */
 
 	/* figure out where to put new node */
 	while (*new) {
@@ -255,7 +255,7 @@ static int zmmu_base_pte_insert(struct genz_page_grid_info *pgi, uint pg_index)
 
 static uint64_t zmmu_find_pg_addr_range(struct genz_page_grid_info *pgi,
 					uint pg_index,
-					struct genz_bridge_info *bri)
+					struct genz_page_grid_config *pgc)
 {
 	struct genz_page_grid *pg;
 	struct rb_node *rb;
@@ -264,10 +264,10 @@ static uint64_t zmmu_find_pg_addr_range(struct genz_page_grid_info *pgi,
 	uint64_t page_size  = genz_pg_ps(&pgi->pg[pg_index]);
 	uint64_t range      = page_size * page_count;
 	uint64_t min_addr   = (cpu_visible) ?
-		ROUND_UP_PAGE(bri->min_cpuvisible_addr, page_size) :
-		ROUND_UP_PAGE(bri->min_nonvisible_addr, page_size);
+		ROUND_UP_PAGE(pgc->min_cpuvisible_addr, page_size) :
+		ROUND_UP_PAGE(pgc->min_nonvisible_addr, page_size);
 	uint64_t max_addr   = (cpu_visible) ?
-		bri->max_cpuvisible_addr : bri->max_nonvisible_addr;
+		pgc->max_cpuvisible_addr : pgc->max_nonvisible_addr;
 	uint64_t ret        = GENZ_BASE_ADDR_ERROR;
 	uint64_t base_addr, next_addr, pg_addr;
 	uint64_t prev_base = 0; /* Revisit: debug */
@@ -327,7 +327,7 @@ static int zmmu_find_pg_pte_range(struct genz_page_grid_info *pgi,
 	uint min_pte = 0, max_pte = pgi->pte_entries - 1, end_pte;
 	int ret = -ENOSPC;
 
-	/* caller must hold bridge zmmu lock */
+	/* caller must hold zmmu lock */
 
 	for (rb = rb_last(&pgi->base_pte_tree); rb; rb = rb_prev(rb)) {
 		pg = container_of(rb, struct genz_page_grid, base_pte_node);
@@ -361,7 +361,7 @@ static struct genz_page_grid *zmmu_pg_pte_search(
 	struct rb_root *root = &pgi->base_pte_tree;
 	uint pte_index = pgi->pg[pg_index].page_grid.base_pte_index;
 
-	/* caller must hold bridge zmmu lock */
+	/* caller must hold zmmu lock */
 	node = root->rb_node;
 
 	while (node) {
@@ -385,7 +385,7 @@ static void zmmu_free_pg_pte_range(struct genz_page_grid_info *pgi,
 {
 	struct genz_page_grid *pg;
 
-	/* caller must hold bridge dev zmmu lock */
+	/* caller must hold zmmu lock */
 	pg = zmmu_pg_pte_search(pgi, pg_index);
 	rb_erase(&pg->base_pte_node, &pgi->base_pte_tree);
 	pgi->pg[pg_index].page_grid.page_count = 0;
@@ -399,7 +399,7 @@ static struct genz_page_grid *zmmu_pg_addr_search(
 	struct rb_root *root = &pgi->base_addr_tree;
 	uint64_t base_addr = pgi->pg[pg_index].page_grid.pg_base_address;
 
-	/* caller must hold bridge dev zmmu lock */
+	/* caller must hold zmmu lock */
 	node = root->rb_node;
 
 	while (node) {
@@ -423,7 +423,7 @@ static void zmmu_free_pg_addr_range(struct genz_page_grid_info *pgi,
 {
 	struct genz_page_grid *pg;
 
-	/* caller must hold bridge dev zmmu lock */
+	/* caller must hold zmmu lock */
 	pg = zmmu_pg_addr_search(pgi, pg_index);
 	rb_erase(&pg->base_addr_node, &pgi->base_addr_tree);
 	pgi->pg[pg_index].page_grid.pg_base_address = 0;
@@ -468,15 +468,15 @@ char *genz_page_grid_name(uint ps, uint pg_index)
 void genz_set_page_grid_res(struct genz_page_grid_info *pgi, uint pg_index,
 			    struct genz_bridge_dev *br)
 {
-	struct genz_bridge_info *bri = &br->br_info;
-	struct genz_page_grid   *pg = &pgi->pg[pg_index];
+	struct genz_page_grid_config *pgc = &br->br_info.pg_config;
+	struct genz_page_grid        *pg = &pgi->pg[pg_index];
 	uint64_t ps;
 
 	if (!pg->cpu_visible)
 		return;
 
 	ps = genz_pg_ps(pg);
-	pg->res.start = genz_pg_addr(pg) + bri->cpuvisible_phys_offset;
+	pg->res.start = genz_pg_addr(pg) + pgc->cpuvisible_phys_offset;
 	pg->res.end = pg->res.start + genz_pg_size(pg) - 1;
 	pg->res.flags = IORESOURCE_MEM;
 	pg->res.name = genz_page_grid_name(pg->page_grid.page_size, pg_index);
@@ -493,7 +493,7 @@ void genz_release_page_grid_res(struct genz_page_grid_info *pgi, uint pg_index)
 
 void genz_release_page_grid_res_all(struct genz_bridge_dev *br)
 {
-	uint entries = br->br_info.nr_req_page_grids;
+	uint entries = br->br_info.pg_config.nr_req_page_grids;
 	struct genz_page_grid_info *pgi = &br->zmmu_info.req_zmmu_pg;
 	uint pg_index;
 
@@ -506,17 +506,19 @@ void genz_release_page_grid_res_all(struct genz_bridge_dev *br)
 	}
 }
 
-int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
+int genz_req_page_grid_alloc(struct genz_dev *zdev,
+			     struct genz_zmmu_info *zi,
 			     struct genz_page_grid *grid)
 {
 	int pg_index, pte_index, err;
 	uint64_t base_addr;
 	unsigned long key;
-	uint entries = br->br_info.nr_req_page_grids;
+	uint entries = zi->pg_config->nr_req_page_grids;
+	struct genz_bridge_dev *br = zdev->zbdev;
 	struct genz_page_grid *req_pg;
 	ulong flags;
 
-	if (!br->br_info.req_zmmu || entries == 0) {
+	if (entries == 0) {
 		err = -EINVAL;
 		goto out;
 	}
@@ -526,9 +528,9 @@ int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
 	if (err < 0)
 		goto out;
 
-	spin_lock_irqsave(&br->zmmu_lock, flags);
+	spin_lock_irqsave(&zi->zmmu_lock, flags);
 	/* find & allocate a free page grid */
-	pg_index = bitmap_find_free_region(br->zmmu_info.req_zmmu_pg.pg_bitmap,
+	pg_index = bitmap_find_free_region(zi->req_zmmu_pg.pg_bitmap,
 					   entries, 0);
 	if (pg_index < 0) {
 		err = pg_index;
@@ -536,38 +538,38 @@ int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
 	}
 
 	/* we assume caller has already checked validity of grid */
-	req_pg = &br->zmmu_info.req_zmmu_pg.pg[pg_index];
+	req_pg = &zi->req_zmmu_pg.pg[pg_index];
 	*req_pg = *grid;
 	req_pg->pte_tree = RB_ROOT;
 	/* find & allocate free PTE range */
-	pte_index = zmmu_find_pg_pte_range(&br->zmmu_info.req_zmmu_pg,
-					   pg_index);
+	pte_index = zmmu_find_pg_pte_range(&zi->req_zmmu_pg, pg_index);
 	if (pte_index < 0) {
 		err = pte_index;
 		goto clear;
 	}
 	/* find & allocate free phys addr range */
-	base_addr = zmmu_find_pg_addr_range(&br->zmmu_info.req_zmmu_pg,
-					    pg_index, &br->br_info);
+	base_addr = zmmu_find_pg_addr_range(&zi->req_zmmu_pg,
+					    pg_index, zi->pg_config);
 	if (base_addr == GENZ_BASE_ADDR_ERROR) {
 		err = -ENOSPC;
 		goto free_pte;
 	}
-	genz_set_page_grid_res(&br->zmmu_info.req_zmmu_pg, pg_index, br);
+	if (genz_is_local_bridge(br, zi->req_zmmu_pg.pg_rmri[0]))
+		genz_set_page_grid_res(&zi->req_zmmu_pg, pg_index, br);
 	set_bit(grid->page_grid.page_size,
 		(grid->cpu_visible) ?
-		br->zmmu_info.req_zmmu_pg.pg_cpu_visible_ps_bitmap :
-		br->zmmu_info.req_zmmu_pg.pg_non_visible_ps_bitmap);
+		zi->req_zmmu_pg.pg_cpu_visible_ps_bitmap :
+		zi->req_zmmu_pg.pg_non_visible_ps_bitmap);
 	key = grid->page_grid.page_size +
 		((grid->cpu_visible) ? GENZ_PAGE_GRID_MAX_PAGESIZE : 0);
-	err = radix_tree_insert(&br->zmmu_info.req_zmmu_pg.pg_pagesize_tree,
-				key, &br->zmmu_info.req_zmmu_pg.pg[pg_index]);
+	err = radix_tree_insert(&zi->req_zmmu_pg.pg_pagesize_tree,
+				key, &zi->req_zmmu_pg.pg[pg_index]);
 	if (err < 0)
 		goto free_addr;
 	if (grid->humongous)
-		br->zmmu_info.req_zmmu_pg.humongous_pg =
-			&br->zmmu_info.req_zmmu_pg.pg[pg_index];
-	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+		zi->req_zmmu_pg.humongous_pg =
+			&zi->req_zmmu_pg.pg[pg_index];
+	spin_unlock_irqrestore(&zi->zmmu_lock, flags);
 	radix_tree_preload_end();
 
 	/* call bridge driver to write page grid entry */
@@ -577,7 +579,7 @@ int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
 		goto free_radix;
 	}
 	err = br->zbdrv->req_page_grid_write(br, pg_index,
-					     br->zmmu_info.req_zmmu_pg.pg);
+					     zi->req_zmmu_pg.pg);
 	if (err < 0) {
 		dev_dbg(br->bridge_dev, "req_page_grid_write failed, err=%d\n",
 			err);
@@ -595,31 +597,32 @@ int genz_req_page_grid_alloc(struct genz_bridge_dev *br,
 	return pg_index;
 
 free_radix:
-	radix_tree_delete(&br->zmmu_info.req_zmmu_pg.pg_pagesize_tree, key);
+	radix_tree_delete(&zi->req_zmmu_pg.pg_pagesize_tree, key);
 free_addr:
-	genz_release_page_grid_res(&br->zmmu_info.req_zmmu_pg, pg_index);
+	genz_release_page_grid_res(&zi->req_zmmu_pg, pg_index);
 	clear_bit(grid->page_grid.page_size,
 		  (grid->cpu_visible) ?
-		  br->zmmu_info.req_zmmu_pg.pg_cpu_visible_ps_bitmap :
-		  br->zmmu_info.req_zmmu_pg.pg_non_visible_ps_bitmap);
-	zmmu_free_pg_addr_range(&br->zmmu_info.req_zmmu_pg, pg_index);
+		  zi->req_zmmu_pg.pg_cpu_visible_ps_bitmap :
+		  zi->req_zmmu_pg.pg_non_visible_ps_bitmap);
+	zmmu_free_pg_addr_range(&zi->req_zmmu_pg, pg_index);
 free_pte:
-	zmmu_free_pg_pte_range(&br->zmmu_info.req_zmmu_pg, pg_index);
+	zmmu_free_pg_pte_range(&zi->req_zmmu_pg, pg_index);
 clear:
-	bitmap_clear(br->zmmu_info.req_zmmu_pg.pg_bitmap, pg_index, 1);
+	bitmap_clear(zi->req_zmmu_pg.pg_bitmap, pg_index, 1);
 unlock:
-	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+	spin_unlock_irqrestore(&zi->zmmu_lock, flags);
 	radix_tree_preload_end();
 out:
 	return err;
 }
+EXPORT_SYMBOL(genz_req_page_grid_alloc);
 
 int genz_rsp_page_grid_alloc(struct genz_bridge_dev *br,
 			     struct genz_page_grid *grid)
 {
 	int pg_index, pte_index, err;
 	uint64_t base_addr;
-	uint entries = br->br_info.nr_rsp_page_grids;
+	uint entries = br->br_info.pg_config.nr_rsp_page_grids;
 	struct genz_page_grid *rsp_pg;
 	ulong flags;
 
@@ -633,7 +636,7 @@ int genz_rsp_page_grid_alloc(struct genz_bridge_dev *br,
 	if (err < 0)
 		goto out;
 
-	spin_lock_irqsave(&br->zmmu_lock, flags);
+	spin_lock_irqsave(&br->zmmu_info.zmmu_lock, flags);
 	/* find & allocate a free page grid */
 	pg_index = bitmap_find_free_region(br->zmmu_info.rsp_zmmu_pg.pg_bitmap,
 					   entries, 0);
@@ -657,7 +660,7 @@ int genz_rsp_page_grid_alloc(struct genz_bridge_dev *br,
 	}
 	/* find & allocate free zaddr range */
 	base_addr = zmmu_find_pg_addr_range(&br->zmmu_info.rsp_zmmu_pg,
-					    pg_index, &br->br_info);
+					    pg_index, &br->br_info.pg_config);
 	if (base_addr == GENZ_BASE_ADDR_ERROR) {
 		err = -ENOSPC;
 		goto free_pte;
@@ -673,7 +676,7 @@ int genz_rsp_page_grid_alloc(struct genz_bridge_dev *br,
 	if (grid->humongous)
 		br->zmmu_info.rsp_zmmu_pg.humongous_pg =
 			&br->zmmu_info.rsp_zmmu_pg.pg[pg_index];
-	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+	spin_unlock_irqrestore(&br->zmmu_info.zmmu_lock, flags);
 	radix_tree_preload_end();
 
 	/* call bridge driver to write page grid entry */
@@ -712,7 +715,7 @@ free_pte:
 clear:
 	bitmap_clear(br->zmmu_info.rsp_zmmu_pg.pg_bitmap, pg_index, 1);
 unlock:
-	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+	spin_unlock_irqrestore(&br->zmmu_info.zmmu_lock, flags);
 	radix_tree_preload_end();
 out:
 	return err;
@@ -824,7 +827,7 @@ static int zmmu_find_pte_range(struct genz_pte_info *ptei,
 	uint end_pte;
 	int ret = -ENOSPC;
 
-	/* caller must hold bridge zmmu lock */
+	/* caller must zmmu lock */
 
 	for (rb = rb_last(&pg->pte_tree); rb; rb = rb_prev(rb)) {
 		this = container_of(rb, struct genz_pte_info, node);
@@ -878,7 +881,7 @@ int genz_zmmu_req_pte_alloc(struct genz_pte_info *ptei,
 	int                         ret;
 	ulong                       flags;
 
-	spin_lock_irqsave(&br->zmmu_lock, flags);
+	spin_lock_irqsave(&br->zmmu_info.zmmu_lock, flags);
 	gz_pg = zmmu_pg_page_size(ptei, pgi);
 	if (IS_ERR(gz_pg)) {
 		ret = PTR_ERR(gz_pg);
@@ -891,7 +894,7 @@ int genz_zmmu_req_pte_alloc(struct genz_pte_info *ptei,
 
 	rmri->req_addr = genz_zmmu_pte_addr(ptei, ptei->addr);
 	rmri->pg_ps = gz_pg->page_grid.page_size;
-	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+	spin_unlock_irqrestore(&br->zmmu_info.zmmu_lock, flags);
 	pr_debug("pte_index=%u, zmmu_pages=%u, pg_ps=%u\n",
 		 ptei->pte_index, ptei->zmmu_pages, rmri->pg_ps);
 
@@ -910,7 +913,7 @@ out:
 err_pte:
 	ptei->zmmu_pages = 0;
 unlock:
-	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+	spin_unlock_irqrestore(&br->zmmu_info.zmmu_lock, flags);
 	goto out;
 }
 EXPORT_SYMBOL(genz_zmmu_req_pte_alloc);
@@ -929,9 +932,9 @@ void genz_zmmu_req_pte_free(struct genz_pte_info *ptei)
 		br->zbdrv->req_pte_write(br, ptei);
 	}
 
-	spin_lock_irqsave(&br->zmmu_lock, flags);
+	spin_lock_irqsave(&br->zmmu_info.zmmu_lock, flags);
 	zmmu_pte_erase(ptei);
-	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+	spin_unlock_irqrestore(&br->zmmu_info.zmmu_lock, flags);
 }
 EXPORT_SYMBOL(genz_zmmu_req_pte_free);
 
@@ -944,7 +947,7 @@ int genz_zmmu_rsp_pte_alloc(struct genz_pte_info *ptei, uint64_t *rsp_zaddr,
 	int                         ret;
 	ulong                       flags;
 
-	spin_lock_irqsave(&br->zmmu_lock, flags);
+	spin_lock_irqsave(&br->zmmu_info.zmmu_lock, flags);
 	gz_pg = zmmu_pg_page_size(ptei, pgi);
 	if (IS_ERR(gz_pg)) {
 		ret = PTR_ERR(gz_pg);
@@ -957,7 +960,7 @@ int genz_zmmu_rsp_pte_alloc(struct genz_pte_info *ptei, uint64_t *rsp_zaddr,
 
 	*rsp_zaddr = genz_zmmu_pte_addr(ptei, ptei->addr);
 	*pg_ps = gz_pg->page_grid.page_size;
-	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+	spin_unlock_irqrestore(&br->zmmu_info.zmmu_lock, flags);
 	pr_debug("pte_index=%u, zmmu_pages=%u, pg_ps=%u\n",
 		 ptei->pte_index, ptei->zmmu_pages, *pg_ps);
 
@@ -977,7 +980,7 @@ out:
 	return ret;
 
 unlock:
-	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+	spin_unlock_irqrestore(&br->zmmu_info.zmmu_lock, flags);
 	goto out;
 }
 EXPORT_SYMBOL(genz_zmmu_rsp_pte_alloc);
@@ -996,8 +999,8 @@ void genz_zmmu_rsp_pte_free(struct genz_pte_info *ptei)
 		br->zbdrv->rsp_pte_write(br, ptei);
 	}
 
-	spin_lock_irqsave(&br->zmmu_lock, flags);
+	spin_lock_irqsave(&br->zmmu_info.zmmu_lock, flags);
 	zmmu_pte_erase(ptei);
-	spin_unlock_irqrestore(&br->zmmu_lock, flags);
+	spin_unlock_irqrestore(&br->zmmu_info.zmmu_lock, flags);
 }
 EXPORT_SYMBOL(genz_zmmu_rsp_pte_free);
