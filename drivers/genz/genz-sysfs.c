@@ -52,11 +52,13 @@ static ssize_t read_control(struct file *file,
 	struct genz_rmr_info *rmri = zres->rmri;
 	loff_t offset = zres->zres.res.start + pos;
 	uint flags = 0;  /* Revisit */
+	int ret;
 
 	dev_dbg(&zdev->dev, "pos=%llx, size=%zu, offset=%llx, rmri=%px\n",
 		pos, size, offset, rmri);
-	return genz_control_read(zdev->zbdev, offset, size, buffer,
-				 rmri, flags);
+	ret = genz_control_read(zdev->zbdev, offset, size, buffer,
+				rmri, flags);
+	return (ret < 0) ? ret : size;
 }
 
 static ssize_t write_control(struct file *file,
@@ -71,11 +73,13 @@ static ssize_t write_control(struct file *file,
 	struct genz_rmr_info *rmri = zres->rmri;
 	loff_t offset = zres->zres.res.start + pos;
 	uint flags = 0;  /* Revisit */
+	int ret;
 
 	dev_dbg(&zdev->dev, "pos=%llx, size=%zu, offset=%llx, rmri=%px\n",
 		pos, size, offset, rmri);
-	return genz_control_write(zdev->zbdev, offset, size, buffer,
-				  rmri, flags);
+	ret = genz_control_write(zdev->zbdev, offset, size, buffer,
+				 rmri, flags);
+	return (ret < 0) ? ret : size;
 }
 
 static ssize_t read_data(struct file *file,
@@ -90,10 +94,12 @@ static ssize_t read_data(struct file *file,
 	struct genz_rmr_info *rmri = zres->rmri;
 	loff_t offset = zres->zres.res.start + pos;
 	uint flags = 0;  /* Revisit */
+	int ret;
 
 	dev_dbg(&zdev->dev, "pos=%llx, size=%zu, offset=%llx\n",
 		pos, size, offset);
-	return genz_data_read(zdev->zbdev, offset, size, buffer, rmri, flags);
+	ret = genz_data_read(zdev->zbdev, offset, size, buffer, rmri, flags);
+	return (ret < 0) ? ret : size;
 }
 
 static ssize_t write_data(struct file *file,
@@ -108,10 +114,12 @@ static ssize_t write_data(struct file *file,
 	struct genz_rmr_info *rmri = zres->rmri;
 	loff_t offset = zres->zres.res.start + pos;
 	uint flags = 0;  /* Revisit */
+	int ret;
 
 	dev_dbg(&zdev->dev, "pos=%llx, size=%zu, offset=%llx\n",
 		pos, size, offset);
-	return genz_data_write(zdev->zbdev, offset, size, buffer, rmri, flags);
+	ret = genz_data_write(zdev->zbdev, offset, size, buffer, rmri, flags);
+	return (ret < 0) ? ret : size;
 }
 
 int genz_create_attr(struct genz_dev *zdev, struct genz_zres *zres)
