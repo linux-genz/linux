@@ -293,6 +293,7 @@ static void genz_blk_sgl_cmpl(struct genz_dev *zdev,
 	struct request *req = blk_mq_rq_from_pdu(cmd);
 
 	if (sgli->xdmi)
+		/* Revisit: unmap also in queue_rq - could happen twice */
 		dma_unmap_sg(sgli->xdmi->dma_dev, cmd->sg, sgli->nents, rq_dma_dir(req));
 	cmd->error = errno_to_blk_status(sgli->status);
 	/* Revisit: debug */

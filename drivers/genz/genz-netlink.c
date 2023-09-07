@@ -187,7 +187,6 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 	int str_len;
 	const char *fmt;
 
-	pr_debug("\t\tMemory Region List:\n");
 	/* Go through the nested list of memory region structures */
 	nla_for_each_nested(nested_attr,  mr_list, rem) {
 		/* Revisit: learn about netlink_ext_ack */
@@ -197,6 +196,7 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 		if (ret < 0) {
 			pr_debug("nla_parse_nested returned %d\n", ret);
 		}
+		/* mem_start is the Gen-Z fabric address needed for access */
 		if (mr_attrs[GENZ_A_MR_START]) {
 			mem_start = nla_get_u64(mr_attrs[GENZ_A_MR_START]);
 		}
@@ -218,7 +218,7 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 			goto error;
 		}
 		zres->zres.res.start = mem_start;
-		zres->zres.res.end = mem_start + mem_len -1;
+		zres->zres.res.end = mem_start + mem_len - 1;
 		zres->zres.res.desc = IORES_DESC_NONE;
 		zres->zres.ro_rkey = ro_rkey;
 		zres->zres.rw_rkey = rw_rkey;
@@ -245,9 +245,8 @@ static int parse_mr_list(struct genz_dev *zdev, const struct nlattr *mr_list)
 			goto error;
 		}
 
-		pr_debug("\t\t\tMR_START: 0x%llx\n\t\t\t\tMR_LENGTH: %lld\n\t\t\t\tMR_TYPE: %s\n\t\t\t\tRO_RKEY: 0x%x\n\t\t\t\tRW_KREY 0x%x\n", mem_start, mem_len, (mem_type == GENZ_DATA ? "DATA":"CONTROL"), ro_rkey, rw_rkey);
+		pr_debug("MR_START: 0x%llx, MR_LENGTH: %lld, MR_TYPE: %s, RO_RKEY: 0x%x, RW_RKEY: 0x%x\n", mem_start, mem_len, (mem_type == GENZ_DATA ? "DATA":"CONTROL"), ro_rkey, rw_rkey);
 	}
-	pr_debug("\t\tend of Memory Region List\n");
 	return ret;
 error:
 	pr_debug("\t\tparse_mr_list failed with %d\n", ret);
@@ -666,7 +665,7 @@ static int parse_fabric_component(struct genl_info *info,
 	bool os = false;
 	bool add_kobj;
 	bool valid_dr_iface;
-	uint32_t sid, cid;
+	uint32_t sid, cid, tcid;
 	char gcstr[GCID_STRING_LEN+1];
 	int ret = 0;
 
@@ -745,7 +744,8 @@ static int parse_fabric_component(struct genl_info *info,
 	 *    fabric/GCID to its permanent home.
 	 * 2. A new, directly-attached component.
 	 * 3. An existing directed-relay component being moved to its
-	 *    permanent GCID.
+	 *    permanent GCID. If TEMP_GCID is valid, it means the initial
+	 *    GCID "guess" was wrong and must be corrected.
 	 * 4. A direct-attached component is to be accessed via directed relay
 	 * 5. A switch-attached component is to be accessed via directed relay
 	 *
@@ -753,7 +753,7 @@ static int parse_fabric_component(struct genl_info *info,
 	 * --------------------------------------------------------------
 	 *    1      valid  GCID     temp subnet  invalid  false
 	 *    2      valid  !GCID    invalid      invalid  false
-	 *    3      valid  !GCID    invalid      valid    false
+	 *    3      valid  !GCID    (in)valid    valid    false
 	 *    4      valid  valid    invalid      BR_GCID  true
 	 *    5      valid  valid    invalid      !BR_GCID true
 	 */
@@ -775,8 +775,7 @@ static int parse_fabric_component(struct genl_info *info,
 			goto err;
 		}
 		*scenario = 2;
-	} else if (!dr && !genz_valid_gcid(fci->tmp_gcid) &&
-		   genz_valid_gcid(fci->dr_gcid)) {
+	} else if (!dr && genz_valid_gcid(fci->dr_gcid)) {
 		if (fci->gcid == fci->br_gcid) {
 			pr_debug("scenario 3, gcid (%d) == br_gcid(%d)\n",
 				 fci->gcid, fci->br_gcid);
@@ -830,11 +829,23 @@ static int parse_fabric_component(struct genl_info *info,
 	} else { /* fabric */
 		if (add) {
 			add_kobj = (*scenario == 2) || (*scenario == 3);
-			fci->zcomp = genz_add_comp(fci->zsub, cid, add_kobj);
-			if (fci->zcomp == NULL) {
-				pr_debug("genz_add_comp failed\n");
-				ret = -EINVAL;
-				goto err;
+			if (genz_valid_gcid(fci->tmp_gcid)) {
+				tcid = genz_gcid_cid(fci->tmp_gcid);
+				/* Revisit: tmp_gcid on diff subnet */
+				fci->zcomp = genz_lookup_comp(fci->zsub, tcid,
+							      /*lock*/true);
+				if (fci->zcomp == NULL) {
+					pr_debug("genz_lookup_comp failed to find 0x%x\n", tcid);
+					ret = -EINVAL;
+					goto err;
+				}
+			} else {
+				fci->zcomp = genz_add_comp(fci->zsub, cid, add_kobj);
+				if (fci->zcomp == NULL) {
+					pr_debug("genz_add_comp failed\n");
+					ret = -EINVAL;
+					goto err;
+				}
 			}
 		} else { /* remove */
 			fci->zcomp = genz_lookup_comp(fci->zsub, cid,
@@ -856,7 +867,9 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 {
 	struct genz_fab_comp_info fci;
 	struct genz_bridge_dev *zbdev;
+	struct genz_comp *existing;
 	uint scenario;
+	uint32_t cid;
 	int ret;
 
 	pr_debug("entered\n");
@@ -911,6 +924,24 @@ static int genz_add_fabric_component(struct sk_buff *skb, struct genl_info *info
 				 fci.br_gcid);
 			ret = -EINVAL;
 			goto err_put;
+		}
+		if (genz_valid_gcid(fci.tmp_gcid)) {
+			/* Revisit: subnets */
+			cid = genz_gcid_cid(fci.gcid);
+			existing = genz_lookup_comp(fci.zsub, cid, /*lock*/true);
+			if (existing) {
+				pr_debug("scenario 3, cid %u already exists\n",
+					 cid);
+				genz_comp_put(existing);
+				ret = -EEXIST;
+				goto err_put;
+			}
+			fci.zcomp->cid = cid;
+			ret = genz_init_comp_kobj(fci.zcomp, fci.zsub, cid);
+			if (ret < 0) {
+				pr_debug("genz_init_comp_kobj failed, ret=%d\n", ret);
+				goto err_put;
+			}
 		}
 		ret = genz_fab_create_control_files(zbdev, fci.zcomp,
 						    fci.dr_iface, &fci.mgr_uuid);

@@ -703,8 +703,8 @@ void genz_release_os_comp(struct device *dev)
 	kfree(c);
 }
 
-static int genz_init_comp_kobj(struct genz_comp *zcomp,
-			       struct genz_subnet *s, uint32_t cid)
+int genz_init_comp_kobj(struct genz_comp *zcomp,
+			struct genz_subnet *s, uint32_t cid)
 {
 	struct genz_fabric *f = s->fabric;
 	int ret = 0;
