@@ -30,6 +30,17 @@ config GENZ_BLK
 	  To compile this code as a module, choose M here: the module
 	  will be called genz-blk.
 
+config GENZ_CTL
+	tristate "Gen-Z control space mapping driver"
+	depends on GENZ
+	help
+	  This option enables the Gen-Z control space mapping driver.
+
+	  Say Y here to enable support for these types of devices.
+
+	  To compile this code as a module, choose M here: the module
+	  will be called genz-ctl.
+
 source "drivers/genz/iprop/Kconfig"
 source "drivers/genz/wildcat/Kconfig"
 endif
