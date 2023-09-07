@@ -1194,3 +1194,40 @@ void devm_genz_rmr_free(struct genz_dev *zdev, struct genz_rmr_info *rmri)
 	devm_release_action(&zdev->dev, devm_genz_rmr_import_release, rmri);
 }
 EXPORT_SYMBOL(devm_genz_rmr_free);
+
+struct genz_rmr_info *devm_genz_rmr_import_zres(struct genz_dev *zdev,
+						struct genz_resource *zres,
+						uint64_t access)
+{
+	struct genz_rmr_info *rmri;
+	struct genz_uuid_info *uui;
+	struct genz_bridge_dev *zbdev = zdev->zbdev;
+	struct genz_bridge_info *br_info = &zbdev->br_info;
+	struct device *dev = &zdev->dev;
+	uint32_t gcid = genz_dev_gcid(zdev, 0);
+	bool writable = !!(access & GENZ_MR_PUT_REMOTE);
+	uint32_t rkey = writable ? zres->rw_rkey : zres->ro_rkey;
+	int ret;
+
+	uui = devm_genz_uuid_import(zdev, &zdev->instance_uuid,
+				    /* Revisit */0, GFP_KERNEL);
+	if (IS_ERR(uui)) {
+		ret = PTR_ERR(uui);
+		dev_dbg(dev, "devm_genz_uuid_import failed, ret=%d\n", ret);
+		return ERR_PTR(ret);
+	}
+
+	access |= br_info->kern_map_data ? GENZ_MR_KERN_MAP : 0;
+	rmri = devm_genz_rmr_import(zdev, uui, gcid,
+				    zres->res.start, resource_size(&zres->res),
+				    access, rkey, GENZ_DR_IFACE_NONE,
+				    zres->res.name);
+	if (IS_ERR(rmri)) {
+		ret = PTR_ERR(rmri);
+		dev_dbg(dev, "devm_genz_rmr_import failed, ret=%d\n", ret);
+		return ERR_PTR(ret);
+	}
+	genz_rmr_zres(zres, rmri);
+	return rmri;
+}
+EXPORT_SYMBOL(devm_genz_rmr_import_zres);

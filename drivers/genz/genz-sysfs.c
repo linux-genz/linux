@@ -174,6 +174,14 @@ void genz_remove_attr(struct genz_dev *zdev, struct genz_zres *zres)
 	sysfs_remove_bin_file(&zdev->dev.kobj, &zres->res_attr);
 }
 
+void genz_rmr_zres(struct genz_resource *res, struct genz_rmr_info *rmri)
+{
+	struct genz_zres *zres = to_genz_res(res);
+
+	zres->rmri = rmri;
+}
+EXPORT_SYMBOL(genz_rmr_zres);
+
 const struct device_type genz_dev_type = {
 //	.groups = genz_dev_attr_groups,
 };
