@@ -1388,7 +1388,7 @@ static struct genz_mem_data *alloc_mdata(struct genz_bridge_dev *zbdev,
 	bool                     local;
 	ulong                    flags;
 
-	spin_lock_irqsave(&zbdev->zmmu_lock, flags);
+	spin_lock_irqsave(&zbdev->zmmu_info.zmmu_lock, flags);
 	if (zbdev->control_mdata == NULL) {
 		mdata = kzalloc(sizeof(*mdata), GFP_ATOMIC);
 		if (!mdata) {
@@ -1422,7 +1422,7 @@ static struct genz_mem_data *alloc_mdata(struct genz_bridge_dev *zbdev,
 	}
 
 unlock:
-	spin_unlock_irqrestore(&zbdev->zmmu_lock, flags);
+	spin_unlock_irqrestore(&zbdev->zmmu_info.zmmu_lock, flags);
 	return mdata;
 err_md:
 	genz_free_local_or_remote_uuid(mdata, mgr_uuid, uu, &local);
@@ -2284,6 +2284,15 @@ int genz_control_write_c_control(struct genz_bridge_dev *zbdev,
 	return ret;
 }
 
+static void genz_update_ctl_rmr_name(struct genz_comp *zcomp)
+{
+	struct genz_fabric *fabric = zcomp->subnet->fabric;
+	char gcstr[GCID_STRING_LEN+1];
+
+	sprintf(zcomp->ctl_rmr_name, "genz%u:%s control", fabric->number,
+		genz_gcid_str(genz_comp_gcid(zcomp), gcstr, sizeof(gcstr)));
+}
+
 static char *genz_ctl_rmr_name(struct genz_comp *zcomp)
 {
 	char *name;
@@ -2619,6 +2628,7 @@ static int move_from_dr(struct genz_bridge_dev *zbdev, struct genz_comp *f_comp,
 	}
 	pr_debug("after rename: f_comp=%px, kobj->refcount=%u\n", f_comp, kref_read(&f_comp->kobj.kref));
 	/* update rmr to disable DR */
+	genz_update_ctl_rmr_name(f_comp);
 	ret = genz_rmr_change_dr(&zbdev->fabric->mgr_uuid, gcid,
 				 GENZ_DR_IFACE_NONE, rmri);
 	if (ret < 0) {

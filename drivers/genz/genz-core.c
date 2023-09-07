@@ -327,7 +327,8 @@ static int initialize_zbdev(struct genz_bridge_dev *zbdev,
 	zbdev->zdev.zbdev = zbdev;
 	zbdev->bridge_dev = dev;
 	zbdev->bridge_num = get_new_bridge_number();
-	spin_lock_init(&zbdev->zmmu_lock);
+	spin_lock_init(&zbdev->zmmu_info.zmmu_lock);
+	zbdev->zmmu_info.pg_config = &zbdev->br_info.pg_config;
 	genz_set_drvdata(&zbdev->zdev, driver_data);
 
 	ret = genz_control_read_mgr_uuid(zbdev, NULL, &mgr_uuid);
@@ -459,17 +460,17 @@ int genz_register_bridge(struct device *dev, struct genz_bridge_driver *zbdrv,
 		"bridge_info: ret=%d, req_zmmu=%u, rsp_zmmu=%u, xdm=%u, rdm=%u, load_store=%u, kern_map_data=%u, loopback=%u, nr_req_page_grids=%u, nr_rsp_page_grids=%u, nr_req_ptes=%llu, nr_rsp_ptes=%llu, block_max_xfer=%llu, min_cpuvisible_addr=0x%llx, max_cpuvisible_addr=0x%llx\n",
 		ret, info->req_zmmu, info->rsp_zmmu, info->xdm, info->rdm,
 		info->load_store, info->kern_map_data, info->loopback,
-		info->nr_req_page_grids, info->nr_rsp_page_grids,
-		info->nr_req_ptes, info->nr_rsp_ptes, info->block_max_xfer,
-		info->min_cpuvisible_addr, info->max_cpuvisible_addr);
+		info->pg_config.nr_req_page_grids, info->pg_config.nr_rsp_page_grids,
+		info->pg_config.nr_req_ptes, info->pg_config.nr_rsp_ptes, info->block_max_xfer,
+		info->pg_config.min_cpuvisible_addr, info->pg_config.max_cpuvisible_addr);
 	if (ret < 0)
 		goto out; /* Revisit: properly undo stuff */
 
 	if (info->load_store) {
-		zbdev->ld_st_res.start = info->min_cpuvisible_addr +
-			info->cpuvisible_phys_offset;
-		zbdev->ld_st_res.end = info->max_cpuvisible_addr +
-			info->cpuvisible_phys_offset;
+		zbdev->ld_st_res.start = info->pg_config.min_cpuvisible_addr +
+			info->pg_config.cpuvisible_phys_offset;
+		zbdev->ld_st_res.end = info->pg_config.max_cpuvisible_addr +
+			info->pg_config.cpuvisible_phys_offset;
 		zbdev->ld_st_res.name = genz_bridge_res_name(zbdev);
 		if (zbdev->ld_st_res.name == NULL) {
 			ret = -ENOMEM;
@@ -722,14 +723,15 @@ static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br)
 	uint pg;
 	int pg_index, err = 0;
 	bool cleared = false;
+	struct genz_dev *zdev = &br->zdev;
 
 	if (br->br_info.req_zmmu) {
-		if (br->br_info.nr_req_page_grids) {
-			genz_zmmu_clear_all(br, false);
+		if (br->br_info.pg_config.nr_req_page_grids) {
+			genz_zmmu_clear_all(&br->zmmu_info, false);
 			cleared = true;
 			for (pg = 0; pg < req_pg_cnt; pg++) {
-				pg_index = genz_req_page_grid_alloc(
-					br, &req_parse_pg[pg]);
+				pg_index = genz_req_page_grid_alloc(zdev,
+					&br->zmmu_info, &req_parse_pg[pg]);
 				if (pg_index < 0) {
 					pr_debug("genz_req_page_grid_alloc failed, ret=%d\n",
 						 pg_index);
@@ -741,9 +743,9 @@ static int genz_bridge_zmmu_setup(struct genz_bridge_dev *br)
 	}
 
 	if (br->br_info.rsp_zmmu) {
-		if (br->br_info.nr_rsp_page_grids) {
+		if (br->br_info.pg_config.nr_rsp_page_grids) {
 			if (!cleared)
-				genz_zmmu_clear_all(br, false);
+				genz_zmmu_clear_all(&br->zmmu_info, false);
 			for (pg = 0; pg < rsp_pg_cnt; pg++) {
 				pg_index = genz_rsp_page_grid_alloc(
 					br, &rsp_parse_pg[pg]);
@@ -764,9 +766,9 @@ static int genz_bridge_zmmu_clear(struct genz_bridge_dev *br)
 {
 	genz_release_page_grid_res_all(br);
 
-	if ((br->br_info.req_zmmu && br->br_info.nr_req_page_grids) ||
-	    (br->br_info.rsp_zmmu && br->br_info.nr_rsp_page_grids))
-		genz_zmmu_clear_all(br, true);
+	if ((br->br_info.req_zmmu && br->br_info.pg_config.nr_req_page_grids) ||
+	    (br->br_info.rsp_zmmu && br->br_info.pg_config.nr_rsp_page_grids))
+		genz_zmmu_clear_all(&br->zmmu_info, true);
 	/* Revisit: finish this */
 
 	return 0;

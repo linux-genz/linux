@@ -971,7 +971,7 @@ int genz_rmr_import(
 	bool                    remote, cpu_visible, writable, individual, kmap;
 	bool                    control, dr;
 	ulong                   mflags, mmap_pfn;
-	uint64_t cpuvisible_offset = br_info->cpuvisible_phys_offset;
+	uint64_t cpuvisible_offset = br_info->pg_config.cpuvisible_phys_offset;
 	resource_size_t         start;
 	char                    gcstr[GCID_STRING_LEN+1];
 
