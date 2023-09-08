@@ -1510,32 +1510,12 @@
    reg = <0x0 0x80030000 0x0 0x10000>;
    xlnx,s-axi-byte-width = <0x4>;
   };
-  genz_complex_genz_reqr_axi_bram_ctrl_0: axi_bram_ctrl@80080000 {
-   clock-names = "s_axi_aclk";
-   clocks = <&zynqmp_clk 71>;
-   compatible = "xlnx,axi-bram-ctrl-4.1";
-   reg = <0x0 0x80080000 0x0 0x80000>;
-   xlnx,bram-addr-width = <0xe>;
-   xlnx,bram-inst-mode = "EXTERNAL";
-   xlnx,ecc = <0x0>;
-   xlnx,ecc-onoff-reset-value = <0x0>;
-   xlnx,ecc-type = <0x0>;
-   xlnx,fault-inject = <0x0>;
-   xlnx,memory-depth = <0x4000>;
-   xlnx,rd-cmd-optimization = <0x0>;
-   xlnx,read-latency = <0x1>;
-   xlnx,s-axi-ctrl-addr-width = <0x20>;
-   xlnx,s-axi-ctrl-data-width = <0x20>;
-   xlnx,s-axi-id-width = <0x1>;
-   xlnx,s-axi-supports-narrow-burst = <0x1>;
-   xlnx,single-port-bram = <0x1>;
-  };
-  genz_complex_genz_reqr_iprop_genz_raw_cb_la_0: iprop_genz_raw_cb_layer@80078000 {
+  genz_complex_genz_reqr_iprop_genz_raw_cb_la_0: iprop_genz_raw_cb_layer@80060000 {
    compatible = "xlnx,iprop-genz-raw-cb-layer-1.0";
    interrupt-names = "core_irq";
    interrupt-parent = <&gic>;
    interrupts = <0 89 4>;
-   reg = <0x0 0x80078000 0x0 0x4000>;
+   reg = <0x0 0x80060000 0x0 0x10000>;
    xlnx,s-axi-byte-width = <0x4>;
   };
   genz_complex_genz_reqr_iprop_genz_requester_0: iprop_genz_requester_layer@80070000 {
@@ -1543,11 +1523,11 @@
    reg = <0x0 0x80070000 0x0 0x8000>;
    xlnx,s-axi-byte-width = <0x4>;
   };
-  genz_complex_genz_reqr_iprop_genz_requester_zmmu_0: iprop_genz_requester_zmmu@80060000 {
+  genz_complex_genz_reqr_iprop_genz_requester_zmmu_0: iprop_genz_requester_zmmu@80080000 {
    clock-names = "s_axi_mm_aclk";
    clocks = <&zynqmp_clk 71>;
    compatible = "xlnx,iprop-genz-requester-zmmu-1.0";
-   reg = <0x0 0x80060000 0x0 0x10000>;
+   reg = <0x0 0x80080000 0x0 0x80000>;
    xlnx,s-axi-byte-width = <0x4>;
   };
   genz_complex_genz_resp_iprop_genz_control_o_0: iprop_genz_control_oc_layer@80350000 {
@@ -1961,9 +1941,6 @@
   ti,fifo-depth = <0x1>;
   reg = <0>;
  };
-};
-&genz_complex_genz_reqr_axi_bram_ctrl_0 {
- compatible = "xlnx,iprop-genz-pte-table";
 };
 &raw_cb_ram_cntrl1 {
  compatible = "xlnx,iprop-genz-raw-cb-table";
