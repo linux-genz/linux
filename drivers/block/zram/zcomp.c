@@ -11,6 +11,8 @@
 #include <linux/sched.h>
 #include <linux/cpu.h>
 #include <linux/crypto.h>
+#include <linux/mm.h>
+#include <linux/io.h>
 
 #include "zcomp.h"
 
@@ -30,6 +32,8 @@ static const char * const backends[] = {
 	"zstd",
 #endif
 };
+
+extern int zram_numa_node;
 
 static void zcomp_strm_free(struct zcomp_strm *zstrm)
 {
@@ -51,7 +55,22 @@ static int zcomp_strm_init(struct zcomp_strm *zstrm, struct zcomp *comp)
 	 * allocate 2 pages. 1 for compressed data, plus 1 extra for the
 	 * case when compressed size is larger than the original one
 	 */
-	zstrm->buffer = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, 1);
+	if (zram_numa_node < 0) {
+		zstrm->buffer = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, 1);
+	} else {
+		struct page *pages;
+
+		zstrm->buffer = NULL;
+		pages = alloc_pages_node(zram_numa_node,
+				GFP_KERNEL | __GFP_ZERO | __GFP_THISNODE, 1);
+		if (!pages) {
+			zcomp_strm_free(zstrm);
+			return -ENOMEM;
+		}
+		zstrm->buffer = page_address(pages);
+		pr_info("%s: allocated zstrm->buffer at nid=%d\n", __func__, page_to_nid(pages));
+	}
+
 	if (IS_ERR_OR_NULL(zstrm->tfm) || !zstrm->buffer) {
 		zcomp_strm_free(zstrm);
 		return -ENOMEM;

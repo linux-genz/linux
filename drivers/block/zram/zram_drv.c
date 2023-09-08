@@ -34,12 +34,17 @@
 #include <linux/debugfs.h>
 #include <linux/cpuhotplug.h>
 #include <linux/part_stat.h>
+#include <linux/numa.h>
+#include <linux/io.h>
 
 #include "zram_drv.h"
 
 static DEFINE_IDR(zram_index_idr);
 /* idr index must be protected */
 static DEFINE_MUTEX(zram_index_mutex);
+
+int zram_numa_node __read_mostly = -1;
+module_param_named(numa_node, zram_numa_node, int, 0444);
 
 static int zram_major;
 static const char *default_compressor = "lzo-rle";
@@ -2097,6 +2102,11 @@ static void destroy_devices(void)
 static int __init zram_init(void)
 {
 	int ret;
+
+	if (zram_numa_node >= num_online_nodes()) {
+		pr_err("Requested NUMA node %d not available\n", zram_numa_node);
+		return -EINVAL;
+	}
 
 	ret = cpuhp_setup_state_multi(CPUHP_ZCOMP_PREPARE, "block/zram:prepare",
 				      zcomp_cpu_up_prepare, zcomp_cpu_dead);

@@ -57,6 +57,7 @@
 #include <linux/wait.h>
 #include <linux/pagemap.h>
 #include <linux/fs.h>
+#include <linux/io.h>
 
 #define ZSPAGE_MAGIC	0x58
 
@@ -179,6 +180,9 @@ static struct dentry *zs_stat_root;
 #ifdef CONFIG_COMPACTION
 static struct vfsmount *zsmalloc_mnt;
 #endif
+
+static int zsmalloc_numa_node __read_mostly = -1;
+module_param_named(numa_node, zsmalloc_numa_node, int, 0444);
 
 /*
  * We assign a page to ZS_ALMOST_EMPTY fullness group when:
@@ -1074,7 +1078,20 @@ static struct zspage *alloc_zspage(struct zs_pool *pool,
 	for (i = 0; i < class->pages_per_zspage; i++) {
 		struct page *page;
 
-		page = alloc_page(gfp);
+		if (zsmalloc_numa_node < 0) {
+			/* Custom alloc disabled, apply default kernel behavior */
+			page = alloc_page(gfp);
+		} else {
+			int nid;
+
+			page = alloc_pages_node(zsmalloc_numa_node, gfp | __GFP_THISNODE, 0);
+			nid = page_to_nid(page);
+			if (nid != zsmalloc_numa_node) {
+				pr_err_ratelimited("%s: allocated page at nid=%d\n", __func__,
+						page_to_nid(page));
+			}
+		}
+
 		if (!page) {
 			while (--i >= 0) {
 				dec_zone_page_state(pages[i], NR_ZSPAGES);
@@ -1117,7 +1134,20 @@ static inline int __zs_cpu_up(struct mapping_area *area)
 	 */
 	if (area->vm_buf)
 		return 0;
-	area->vm_buf = kmalloc(ZS_MAX_ALLOC_SIZE, GFP_KERNEL);
+	if (zsmalloc_numa_node < 0) {
+		area->vm_buf = kmalloc(ZS_MAX_ALLOC_SIZE, GFP_KERNEL);
+	} else {
+		struct page *page;
+
+		area->vm_buf = NULL;
+		page = alloc_pages_node(zsmalloc_numa_node,
+				GFP_KERNEL | __GFP_THISNODE, 0);
+		if (!page)
+			return -ENOMEM;
+		pr_info("%s: allocated area->vm_buf at nid=%d", __func__,
+				page_to_nid(page));
+		area->vm_buf = page_address(page);
+	}
 	if (!area->vm_buf)
 		return -ENOMEM;
 	return 0;
@@ -1125,7 +1155,11 @@ static inline int __zs_cpu_up(struct mapping_area *area)
 
 static inline void __zs_cpu_down(struct mapping_area *area)
 {
-	kfree(area->vm_buf);
+	if (zsmalloc_numa_node < 0)
+		kfree(area->vm_buf);
+	else
+		free_pages((unsigned long)area->vm_buf, 0);
+
 	area->vm_buf = NULL;
 }
 
@@ -2508,6 +2542,11 @@ static int __init zs_init(void)
 	ret = zsmalloc_mount();
 	if (ret)
 		goto out;
+
+	if (zsmalloc_numa_node >= num_online_nodes()) {
+		pr_err("Requested NUMA node %d not available\n", zsmalloc_numa_node);
+		return -EINVAL;
+	}
 
 	ret = cpuhp_setup_state(CPUHP_MM_ZS_PREPARE, "mm/zsmalloc:prepare",
 				zs_cpu_prepare, zs_cpu_dead);
