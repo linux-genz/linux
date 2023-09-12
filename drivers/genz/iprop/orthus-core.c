@@ -829,11 +829,8 @@ static struct genz_bridge_info orthus_br_info = {
 	.xdm                 = 0,
 	.rdm                 = 0,
 	.load_store          = 1,
+	.kern_map_data       = 1,
 	.loopback            = 0,
-	.nr_req_page_grids   = ORTHUS_PAGE_GRID_ENTRIES,
-	.nr_req_ptes         = ORTHUS_REQ_ZMMU_ENTRIES,
-	.min_cpuvisible_addr = ORTHUS_MIN_CPUVISIBLE_ADDR,
-	.max_cpuvisible_addr = ORTHUS_MAX_CPUVISIBLE_ADDR,
 };
 
 static int orthus_bridge_info(struct genz_bridge_dev *gzbr,
@@ -845,6 +842,10 @@ static int orthus_bridge_info(struct genz_bridge_dev *gzbr,
 		return -EINVAL;
 
 	*info = orthus_br_info;
+	info->pg_config.min_cpuvisible_addr = ORTHUS_MIN_CPUVISIBLE_ADDR;
+	info->pg_config.max_cpuvisible_addr = ORTHUS_MAX_CPUVISIBLE_ADDR;
+	info->pg_config.nr_req_page_grids = ORTHUS_PAGE_GRID_ENTRIES;
+	info->pg_config.nr_req_ptes = ORTHUS_REQ_ZMMU_ENTRIES;
 	return 0;
 }
 
