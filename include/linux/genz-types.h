@@ -5530,7 +5530,7 @@ struct genz_service_uuid_structure{
     uint64_t type                                                           : 12;
     uint64_t vers                                                           : 4;
     uint64_t size                                                           : 16;
-    uuid_t s_uuid_table_sz;
+    uint64_t s_uuid_table_sz                                                : 16;
     uint64_t r0                                                             : 16;
     uint64_t s_uuid_ptr                                                     : 32;
     uint64_t r1                                                             : 32;

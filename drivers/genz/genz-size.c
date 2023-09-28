@@ -35,6 +35,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <linux/module.h>
+#include <linux/slab.h>
 #include "genz.h"
 #include "genz-control.h"
 
@@ -530,7 +531,53 @@ ssize_t genz_pa_table_size(struct genz_control_info *ci)
 
 ssize_t genz_service_uuid_table_size(struct genz_control_info *ci)
 {
-	return 0;  /* Revisit: implement this */
+	struct genz_service_uuid_structure serv_fixed;
+	struct genz_service_uuid_structure *serv = &serv_fixed;
+	struct genz_control_info *parent;
+	uint32_t serv_cnt, max_si, i;
+	ssize_t sz;
+	int ret;
+
+	parent = ci->parent;      /* Service UUID Structure */
+
+	/* Find the service uuid structure s_uuid_table_sz field */
+	if (parent->type != GENZ_SERVICE_UUID_STRUCTURE) {
+		pr_debug("expected parent->type to be GENZ_SERVICE_UUID_STRUCTURE but it was 0x%x\n", parent->type);
+		return -1;
+	}
+
+	/* read the fixed part of the service uuid structure */
+	ret = genz_control_read(parent->zbdev, parent->start,
+				sizeof(*serv), serv, parent->rmri, 0);
+	if (ret) {
+		pr_debug("control read of service uuid structure failed with %d\n",
+			 ret);
+		return -1;
+	}
+	/* allocate space for and read entire service uuid structure */
+	sz = serv->size * 16;
+	serv = kmalloc(sz, GFP_KERNEL);
+	ret = genz_control_read(parent->zbdev, parent->start,
+				sz, serv, parent->rmri, 0);
+	if (ret) {
+		pr_debug("control read of service uuid structure failed with %d\n",
+			 ret);
+		sz = -1;
+		goto free;
+	}
+	serv_cnt = serv->s_uuid_table_sz;
+	if (serv_cnt == 0)
+		serv_cnt = BIT(16); /* Spec says 0 means 2^16 */
+	sz = serv_cnt * sizeof(uuid_t);
+	for (i = 0; i < serv_cnt; i++) {
+		max_si = (i % 2 == 0) ?
+			serv->service_uuid_structure_array[i / 2].max_si_sub_0 :
+			serv->service_uuid_structure_array[i / 2].max_si_sub_1;
+		sz += max_si * sizeof(struct genz_service_uuid_table_array_array);
+	}
+free:
+	kfree(serv);
+	return sz;
 }
 
 ssize_t genz_ssod_msod_table_size(struct genz_control_info *ci)
