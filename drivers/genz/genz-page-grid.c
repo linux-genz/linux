@@ -37,6 +37,7 @@
 
 #include <linux/slab.h>
 #include <linux/bitops.h>
+#include "genz-control.h"
 #include "genz.h"
 
 /* Revisit: genz_pg_restricted_pg_table_array field names */
@@ -45,18 +46,30 @@
 #define pg_base_address pg_base_address_0
 #define base_pte_index base_pte_index_0
 
-uint64_t genz_zmmu_pte_addr(const struct genz_pte_info *info, uint64_t addr)
+
+struct genz_zmmu_info *genz_zdev_zmmu_info(struct genz_dev *zdev)
+{
+	struct genz_zmmu_info *zi = NULL;
+
+	if (zdev != NULL && zdev->zcomp != NULL)
+		zi = zdev->zcomp->zmmu_info;
+
+	return zi;
+}
+EXPORT_SYMBOL(genz_zdev_zmmu_info);
+
+uint64_t genz_zmmu_pte_addr(const struct genz_pte_info *ptei, uint64_t addr)
 {
 	uint64_t base_addr, ps, pte_off;
-	struct genz_page_grid *pg = info->pg;
+	struct genz_page_grid *pg = ptei->pg;
 
 	if (!pg)
 		return GENZ_BASE_ADDR_ERROR;
 
 	base_addr = genz_pg_addr(pg);
 	ps = genz_pg_ps(pg);
-	pte_off = info->pte_index - pg->page_grid.base_pte_index;
-	return base_addr + (pte_off * ps) + (addr - info->addr_aligned);
+	pte_off = ptei->pte_index - pg->page_grid.base_pte_index;
+	return base_addr + (pte_off * ps) + (addr - ptei->addr_aligned);
 }
 EXPORT_SYMBOL(genz_zmmu_pte_addr);
 
@@ -515,7 +528,9 @@ int genz_req_page_grid_alloc(struct genz_dev *zdev,
 	unsigned long key;
 	uint entries = zi->pg_config->nr_req_page_grids;
 	struct genz_bridge_dev *br = zdev->zbdev;
+	struct device *dev = &zdev->dev;
 	struct genz_page_grid *req_pg;
+	struct genz_rmr_info *rmri;
 	ulong flags;
 
 	if (entries == 0) {
@@ -554,7 +569,8 @@ int genz_req_page_grid_alloc(struct genz_dev *zdev,
 		err = -ENOSPC;
 		goto free_pte;
 	}
-	if (genz_is_local_bridge(br, zi->req_zmmu_pg.pg_rmri[0]))
+	rmri = zi->req_zmmu_pg.pg_rmri[GENZ_PG_TABLE];
+	if (genz_is_local_bridge(br, rmri))
 		genz_set_page_grid_res(&zi->req_zmmu_pg, pg_index, br);
 	set_bit(grid->page_grid.page_size,
 		(grid->cpu_visible) ?
@@ -574,25 +590,24 @@ int genz_req_page_grid_alloc(struct genz_dev *zdev,
 
 	/* call bridge driver to write page grid entry */
 	if (!br->zbdrv->req_page_grid_write) {
-		dev_dbg(br->bridge_dev, "req_page_grid_write is NULL\n");
+		dev_dbg(dev, "req_page_grid_write is NULL\n");
 		err = -EINVAL;
 		goto free_radix;
 	}
 	err = br->zbdrv->req_page_grid_write(br, pg_index,
-					     zi->req_zmmu_pg.pg);
+					     zi->req_zmmu_pg.pg, zi);
 	if (err < 0) {
-		dev_dbg(br->bridge_dev, "req_page_grid_write failed, err=%d\n",
-			err);
+		dev_dbg(dev, "req_page_grid_write failed, err=%d\n", err);
 		goto free_radix;
 	}
 
-	pr_debug("pg[%d]:addr=0x%llx-0x%llx, page_size=%u, page_count=%u, "
-		 "base_pte_index=%u, cpu_visible=%d, humongous=%d\n",
-		 pg_index, genz_pg_addr(req_pg),
-		 genz_pg_addr(req_pg) + genz_pg_size(req_pg) - 1,
-		 req_pg->page_grid.page_size, req_pg->page_grid.page_count,
-		 req_pg->page_grid.base_pte_index, req_pg->cpu_visible,
-		 req_pg->humongous);
+	dev_dbg(dev, "pg[%d]:addr=0x%llx-0x%llx, page_size=%u, page_count=%u, "
+		"base_pte_index=%u, cpu_visible=%d, humongous=%d\n",
+		pg_index, genz_pg_addr(req_pg),
+		genz_pg_addr(req_pg) + genz_pg_size(req_pg) - 1,
+		req_pg->page_grid.page_size, req_pg->page_grid.page_count,
+		req_pg->page_grid.base_pte_index, req_pg->cpu_visible,
+		req_pg->humongous);
 
 	return pg_index;
 
@@ -738,9 +753,11 @@ static struct genz_page_grid *zmmu_pg_page_size(struct genz_pte_info *ptei,
 		ptei->length = BIT_ULL(ps);
 		ptei->addr &= ~(BIT_ULL(ps) - 1ull);
 	} else {
+		// Revisit: this fails if length is 0
 		length_adjusted = roundup_pow_of_two(ptei->length);
 		addr_aligned = ROUND_DOWN_PAGE(ptei->addr, length_adjusted);
-		if (addr_aligned != ptei->addr)
+		if ((addr_aligned + length_adjusted - 1) <
+		    (ptei->addr + ptei->length - 1))
 			length_adjusted <<= 1;
 		len_ps = clamp(ilog2(length_adjusted),
 			       GENZ_PAGE_GRID_MIN_PAGESIZE,
@@ -858,13 +875,13 @@ int genz_zmmu_req_pte_update(struct genz_pte_info *ptei)
 	struct genz_bridge_dev *br = ptei->bridge;
 	int                    ret;
 
-	pr_debug("pte_index=%u, zmmu_pages=%u\n",
-		 ptei->pte_index, ptei->zmmu_pages);
+	pr_debug("pte_index=%u, zmmu_pages=%u, zi=%px\n",
+		 ptei->pte_index, ptei->zmmu_pages, ptei->zi);
 
 	if (br->zbdrv->req_pte_write) { /* call bridge driver to write HW PTE */
-		ret = br->zbdrv->req_pte_write(br, ptei);
+		ret = br->zbdrv->req_pte_write(br, ptei, ptei->zi);
 	} else {
-		ret = -EINVAL;
+		ret = genz_req_pte_write(br, ptei, ptei->zi);
 	}
 
 	pr_debug("ret=%d, addr=0x%llx\n", ret, ptei->addr);
@@ -929,7 +946,7 @@ void genz_zmmu_req_pte_free(struct genz_pte_info *ptei)
 		return;
 	ptei->pte.req.v = 0;
 	if (br->zbdrv->req_pte_write) { /* call bridge driver to clear HW PTE */
-		br->zbdrv->req_pte_write(br, ptei);
+		br->zbdrv->req_pte_write(br, ptei, ptei->zi);
 	}
 
 	spin_lock_irqsave(&br->zmmu_info.zmmu_lock, flags);
@@ -1004,3 +1021,343 @@ void genz_zmmu_rsp_pte_free(struct genz_pte_info *ptei)
 	spin_unlock_irqrestore(&br->zmmu_info.zmmu_lock, flags);
 }
 EXPORT_SYMBOL(genz_zmmu_rsp_pte_free);
+
+static void genz_req_pte_field_cfg(struct genz_req_pte_config *cfg,
+				   struct genz_req_pte_attr_63_0 attr, bool et)
+{
+	uint16_t pos = 0;
+	bool sup;
+
+	cfg->valid.width = 1;             // valid always bit 0
+	cfg->valid.start = pos++;
+
+	cfg->et.width = et;               // ET only for page table PTEs
+	cfg->et.start = pos;
+	pos += et;
+
+	cfg->d_attr.width = 3;            // d-attr always 3 bits
+	cfg->d_attr.start = pos;
+	pos += 3;
+
+	cfg->st.width = attr.st_drc_sup;  // ST is 1 bit if st_drc_sup
+	cfg->st.start = pos;
+	pos += attr.st_drc_sup;
+
+	cfg->drc.width = attr.st_drc_sup; // DRC is 1 bit if st_drc_sup
+	cfg->drc.start = pos;
+	pos += attr.st_drc_sup;
+
+	cfg->pp = cfg->drc;               // PP shares bit with DRC
+
+	cfg->cce.width = attr.cce_sup;    // CCE is 1 bit if cce_sup
+	cfg->cce.start = pos;
+	pos += attr.cce_sup;
+
+	cfg->ce.width = attr.ce_sup;      // CE is 1 bit if ce_sup
+	cfg->ce.start = pos;
+	pos += attr.ce_sup;
+
+	cfg->wpe.width = attr.wpe_sup;    // WPE is 1 bit if wpe_sup
+	cfg->wpe.start = pos;
+	pos += attr.wpe_sup;
+
+	sup = attr.pasid_sz > 0;          // PSE is 1 bit if pasid_sz > 0
+	cfg->pse.width = sup;
+	cfg->pse.start = pos;
+	pos += sup;
+
+	cfg->pfme.width = attr.pfme_sup;  // PFME is 1 bit if pfme_sup
+	cfg->pfme.start = pos;
+	pos += attr.pfme_sup;
+
+	cfg->pec.width = attr.pec_sup;    // PEC is 1 bit if pec_sup
+	cfg->pec.start = pos;
+	pos += attr.pec_sup;
+
+	cfg->lpe.width = attr.lpe_sup;    // LPE is 1 bit if lpe_sup
+	cfg->lpe.start = pos;
+	pos += attr.lpe_sup;
+
+	cfg->nse.width = attr.nse_sup;    // NSE is 1 bit if nse_sup
+	cfg->nse.start = pos;
+	pos += attr.nse_sup;
+
+	cfg->wr_mode.width = 3;           // Write Mode always 3 bits
+	cfg->wr_mode.start = pos;
+	pos += 3;
+
+	cfg->tc.width = 4 * attr.tc_sup;  // TC is 4 bits if tc_sup
+	cfg->tc.start = pos;
+	pos += 4 * attr.tc_sup;
+
+	cfg->pasid.width = attr.pasid_sz; // PASID is 0 - 20 bits
+	cfg->pasid.start = pos;
+	pos += attr.pasid_sz;
+
+	cfg->loc_dest.width = 12;         // Local Dest always 12 bits
+	cfg->loc_dest.start = pos;
+	pos += 12;
+
+	cfg->glb_dest.width = attr.pte_gd_sz; // Global Dest is 0 - 16 bits
+	cfg->glb_dest.start = pos;
+	pos += attr.pte_gd_sz;
+
+	cfg->tr_idx.width = 4 * attr.tr_idx_sup; // TR Index is 4 bits if tr_index_sup
+	cfg->tr_idx.start = pos;
+	pos += 4 * attr.tr_idx_sup;
+
+	cfg->co.width = 2 * attr.co_sup;  // CO is 2 bits if co_sup
+	cfg->co.start = pos;
+	pos += 2 * attr.co_sup;
+
+	cfg->rkey.width = 32 * attr.rkey_sup;  // RKey is 32 bits if rkey_sup
+	cfg->rkey.start = pos;
+	pos += 32 * attr.rkey_sup;
+
+	cfg->addr.width = 52;             // Address always 52 bits
+	cfg->addr.start = pos;
+	pos += 40;                        // DR Iface overlaps upper addr bits
+
+	cfg->dr_iface.width = 12;         // DR Iface is 12 bits
+	cfg->dr_iface.start = pos;
+}
+
+static struct genz_zmmu_info *genz_alloc_zmmu_info(struct genz_dev *zdev)
+{
+	struct device *dev = &zdev->dev;
+	struct genz_zmmu_info *zi;
+	struct genz_page_grid_config *pgc;
+
+	zi = devm_kzalloc(dev, sizeof(*zi), GFP_KERNEL);
+	if (!zi)
+		return zi;
+	spin_lock_init(&zi->zmmu_lock);
+	pgc = devm_kzalloc(dev, sizeof(*pgc), GFP_KERNEL);
+	if (!pgc) {
+		devm_kfree(dev, zi);
+		return 0;
+	}
+	zi->pg_config = pgc;
+	return zi;
+}
+
+static int genz_clone_req_page_grid(struct genz_dev *zdev,
+				    struct genz_zmmu_info *fr_zi,
+				    struct genz_zmmu_info *to_zi)
+{
+	struct genz_page_grid_config *to_pgc = to_zi->pg_config;
+	struct genz_page_grid_info *fr_pgi = &fr_zi->req_zmmu_pg;
+	uint fr_pg_index, fr_pg_used, page_count;
+	struct device *dev = &zdev->dev;
+	int ret = 0;
+
+	fr_pg_used = bitmap_weight(fr_pgi->pg_bitmap, PAGE_GRID_ENTRIES);
+	dev_dbg(dev, "fr_pg_used=%u\n", fr_pg_used);
+	if (fr_pg_used > to_pgc->nr_req_page_grids)
+		return -ENOSPC;
+	// Revisit: check to_pgc->nr_req_ptes
+	for (fr_pg_index = 0; fr_pg_index < PAGE_GRID_ENTRIES; fr_pg_index++) {
+		page_count = fr_pgi->pg[fr_pg_index].page_grid.page_count;
+		if (page_count == 0)
+			continue;
+		ret = genz_req_page_grid_alloc(zdev, to_zi, &fr_pgi->pg[fr_pg_index]);
+		if (ret < 0) {
+			dev_dbg(dev, "genz_req_page_grid_alloc[fr_pg_index=%u] failed, ret=%d\n",
+				fr_pg_index, ret);
+			goto out;
+		}
+		ret = 0; /* map positive pg_index values to 0 */
+	}
+
+out:
+	return ret;
+}
+
+int genz_req_zmmu_setup(struct genz_dev *zdev, struct genz_resource *zres[])
+{
+	struct genz_component_page_grid_structure pg;
+	struct genz_req_pte_attr_63_0 attr;
+	struct genz_bridge_dev *zbdev = zdev->zbdev;
+	struct genz_page_grid_config *pgc;
+	struct device *dev = &zdev->dev;
+	struct genz_zmmu_info *zi;
+	struct genz_rmr_info *rmri;
+	uint64_t access;
+	int i, ret = -EINVAL;
+
+	zi = genz_alloc_zmmu_info(zdev);
+	if (!zi)
+		return -ENOMEM;
+	zdev->zcomp->zmmu_info = zi;
+	pgc = zi->pg_config;
+	access = GENZ_MR_WRITE_REMOTE|GENZ_MR_INDIVIDUAL|GENZ_MR_REQ_CPU|
+		 GENZ_MR_CONTROL|GENZ_MR_REQ_CPU_UC|GENZ_MR_PEC;
+	/* Revisit: support page-table ZMMUs */
+	/* import PGStruct, PGTable, PTETable */
+	for (i = 0; i < 3; i++) {  // Revisit: constants
+		rmri = devm_genz_rmr_import_zres(zdev, zres[i], access);
+		if (IS_ERR(rmri)) {
+			ret = PTR_ERR(rmri);
+			dev_dbg(dev, "devm_genz_rmr_import_zres failed, ret=%d\n", ret);
+			goto out;
+		}
+		zi->req_zmmu_pg.pg_rmri[i] = rmri;
+	}
+	/* read component page grid structure */
+	rmri = zi->req_zmmu_pg.pg_rmri[GENZ_PG_STRUCT];
+	ret = genz_control_read(zbdev, rmri->rsp_zaddr, sizeof(pg), &pg, rmri, 0);
+	if (ret != 0)
+		goto out;
+	attr = *(struct genz_req_pte_attr_63_0 *)&pg.pte_attr_63_0;
+	pgc->nr_req_page_grids = genz_sz_0_special(pg.pg_table_sz, 8);
+	pgc->nr_req_ptes = genz_sz_0_special(pg.pte_table_sz, 32);
+	pgc->req_page_grid_page_sizes = pg.zmmu_supported_page_sizes;
+	pgc->pte_sz = pg.pte_sz / 8; /* convert bits to bytes */
+	/* genz_zmmu_clear_all depends on pgc->nr_req_ptes */
+	genz_zmmu_clear_all(zi, false);
+	genz_req_pte_field_cfg(&pgc->req_pte_cfg, attr, /*et*/false);
+	/* Revisit: major hack - copy min/max visible_addr values from local bridge */
+	pgc->min_cpuvisible_addr = zbdev->br_info.pg_config.min_cpuvisible_addr;
+	pgc->max_cpuvisible_addr = zbdev->br_info.pg_config.max_cpuvisible_addr;
+	/* Revisit: need nonvisible values too? */
+	dev_dbg(dev, "nr_req_page_grids=%u, nr_req_ptes=%llu, req_page_grid_page_sizes=0x%llx, pte_sz=%u, min_cpuvisible_addr=0x%llx, max_cpuvisible_addr=0x%llx\n",
+		pgc->nr_req_page_grids, pgc->nr_req_ptes, pgc->req_page_grid_page_sizes,
+		pgc->pte_sz, pgc->min_cpuvisible_addr, pgc->max_cpuvisible_addr);
+	ret = genz_clone_req_page_grid(zdev, &zbdev->zmmu_info, zi);
+	if (ret < 0)
+		goto out;
+	ret = genz_clone_zdev_ref_ptes(zdev);
+
+out:
+	return ret;
+}
+EXPORT_SYMBOL(genz_req_zmmu_setup);
+
+static void genz_pte_field(uint64_t field, uint16_t st_bit, uint16_t width,
+			   uint64_t *pte_buf)
+{
+	uint16_t end_bit = st_bit + width - 1;
+	uint16_t lo = st_bit % 64;
+	uint16_t hi = end_bit % 64;
+	uint16_t st_idx = st_bit / 64;
+	uint16_t end_idx = end_bit / 64;
+	uint16_t width0 = 64 - lo;
+	uint64_t data0, mask0, data1, mask1;
+	bool single = (st_idx == end_idx); /* entire field is in 1 uint64_t */
+	uint16_t hi0 = (single) ? hi : 63;
+
+	if (width == 0)  /* nothing to do */
+		return;
+
+	data0 = pte_buf[st_idx];
+	mask0 = GENMASK_ULL(hi0, lo);
+	pte_buf[st_idx] = (data0 & ~mask0) | ((field << lo) & mask0);
+	if (!single) {  /* field spans 2 uint64_t's (not more, as field < 64 bits) */
+		data1 = pte_buf[end_idx];
+		mask1 = GENMASK_ULL(hi, 0); /* mask1 always starts at bit 0 */
+		pte_buf[end_idx] = (data1 & ~mask1) | ((field >> width0) & mask1);
+	}
+}
+
+static void genz_req_pte_format(struct genz_req_pte *pte,
+				struct genz_req_pte_config *cfg,
+				uint64_t *pte_buf)
+{
+	uint64_t addr = pte->data.addr >> 12; /* for control, includes dr_iface */
+	uint16_t gdest = genz_gcid_sid(pte->dgcid);
+	uint16_t ldest = genz_gcid_cid(pte->dgcid);
+
+	/* build PTE in order, from low bit to high */
+	genz_pte_field(pte->v,       cfg->valid.start,    cfg->valid.width,    pte_buf);
+	genz_pte_field(pte->et,      cfg->et.start,       cfg->et.width,       pte_buf);
+	genz_pte_field(pte->d_attr,  cfg->d_attr.start,   cfg->d_attr.width,   pte_buf);
+	genz_pte_field(pte->st,      cfg->st.start,       cfg->st.width,       pte_buf);
+	genz_pte_field(pte->drc,     cfg->drc.start,      cfg->drc.width,      pte_buf);
+	genz_pte_field(pte->pp,      cfg->pp.start,       cfg->pp.width,       pte_buf);
+	genz_pte_field(pte->cce,     cfg->cce.start,      cfg->cce.width,      pte_buf);
+	genz_pte_field(pte->ce,      cfg->ce.start,       cfg->ce.width,       pte_buf);
+	genz_pte_field(pte->wpe,     cfg->wpe.start,      cfg->wpe.width,      pte_buf);
+	genz_pte_field(pte->pse,     cfg->pse.start,      cfg->pse.width,      pte_buf);
+	genz_pte_field(pte->pfme,    cfg->pfme.start,     cfg->pfme.width,     pte_buf);
+	genz_pte_field(pte->pec,     cfg->pec.start,      cfg->pec.width,      pte_buf);
+	genz_pte_field(pte->lpe,     cfg->lpe.start,      cfg->lpe.width,      pte_buf);
+	genz_pte_field(pte->nse,     cfg->nse.start,      cfg->nse.width,      pte_buf);
+	genz_pte_field(pte->wr_mode, cfg->wr_mode.start,  cfg->wr_mode.width,  pte_buf);
+	genz_pte_field(pte->tc,      cfg->tc.start,       cfg->tc.width,       pte_buf);
+	genz_pte_field(pte->pasid,   cfg->pasid.start,    cfg->pasid.width,    pte_buf);
+	genz_pte_field(ldest,        cfg->loc_dest.start, cfg->loc_dest.width, pte_buf);
+	genz_pte_field(gdest,        cfg->glb_dest.start, cfg->glb_dest.width, pte_buf);
+	genz_pte_field(pte->tr_idx,  cfg->tr_idx.start,   cfg->tr_idx.width,   pte_buf);
+	genz_pte_field(pte->co,      cfg->co.start,       cfg->co.width,       pte_buf);
+	genz_pte_field(pte->rkey,    cfg->rkey.start,     cfg->rkey.width,     pte_buf);
+	genz_pte_field(addr,         cfg->addr.start,     cfg->addr.width,     pte_buf);
+}
+
+int genz_req_pte_write(struct genz_bridge_dev *br,
+		       struct genz_pte_info *ptei,
+		       struct genz_zmmu_info *zi)
+{
+	struct genz_req_pte *pte = &ptei->pte.req;
+	uint64_t ps = genz_pg_ps(ptei->pg);
+	struct genz_page_grid_config *pgc;
+	struct genz_rmr_info *rmri;
+	uint first = ptei->pte_index;
+	uint last = first + ptei->zmmu_pages - 1;
+	uint64_t pte_buf[1024 / 64]; /* max Gen-Z HW PTE is 1024 bits */
+	uint64_t addr = ptei->addr; /* full byte address */
+	uint pte_sz; /* in bytes */
+	uint64_t offset;
+	int ret;
+	uint i;
+
+	if (!zi)
+		return -EINVAL;
+	pgc = zi->pg_config;
+	pte_sz = zi->pg_config->pte_sz; /* in bytes */
+	rmri = zi->req_zmmu_pg.pg_rmri[GENZ_PTE_TABLE];
+	offset = rmri->rsp_zaddr + ((uint64_t)first * pte_sz);
+	// Revisit: optimize by formatting entire PTE once and only updating addr
+	for (i = first; i <= last; i++) {
+		if (pte->st == GENZ_DATA)
+			pte->data.addr = addr;
+		else
+			pte->control.addr = addr;
+		genz_req_pte_format(pte, &pgc->req_pte_cfg, pte_buf);
+		ret = genz_control_write(br, offset, pte_sz, pte_buf, rmri, 0);
+		if (ret < 0)
+			goto out;
+		addr += ps;
+		offset += pte_sz;
+	}
+
+out:
+	return ret;
+}
+EXPORT_SYMBOL(genz_req_pte_write);
+
+int genz_clone_req_pg_ptes(struct genz_dev *zdev, struct genz_pte_info *ptei,
+			   struct genz_zmmu_info *zi)
+{
+	struct genz_page_grid_info *pgi;
+	struct genz_page_grid *gz_pg;
+	ulong flags;
+	int ret;
+
+	if (!zi)
+		return -EINVAL;
+	pgi = &zi->req_zmmu_pg;
+	spin_lock_irqsave(&zi->zmmu_lock, flags);
+	gz_pg = zmmu_pg_page_size(ptei, pgi);
+	if (IS_ERR(gz_pg)) {
+		ret = PTR_ERR(gz_pg);
+		goto unlock;
+	}
+	ptei->pg = gz_pg;
+	spin_unlock_irqrestore(&zi->zmmu_lock, flags);
+	ret = genz_req_pte_write(zdev->zbdev, ptei, zi);
+	return ret;
+
+unlock:
+	spin_unlock_irqrestore(&zi->zmmu_lock, flags);
+	return ret;
+}

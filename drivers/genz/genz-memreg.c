@@ -71,15 +71,15 @@ static inline int umem_cmp(uint64_t vaddr, uint64_t length, uint64_t access,
 			   const struct genz_umem *u)
 {
 	int cmp;
-	const struct genz_pte_info *info = u->pte_info;
+	const struct genz_pte_info *ptei = u->pte_info;
 
 	cmp = arithcmp(vaddr, u->vaddr);
 	if (cmp)
 		return cmp;
-	cmp = arithcmp(length, info->length);
+	cmp = arithcmp(length, ptei->length);
 	if (cmp)
 		return cmp;
-	return arithcmp(USER_ACCESS(access), USER_ACCESS(info->access));
+	return arithcmp(USER_ACCESS(access), USER_ACCESS(ptei->access));
 }
 
 struct genz_umem *genz_umem_search(struct genz_mem_data *mdata,
@@ -121,7 +121,7 @@ EXPORT_SYMBOL(genz_umem_search);
 
 static struct genz_umem *umem_insert(struct genz_umem *umem)
 {
-	struct genz_pte_info *info = umem->pte_info;
+	struct genz_pte_info *ptei = umem->pte_info;
 	struct genz_mem_data *mdata = umem->mdata;
 	struct rb_root *root;
 	struct rb_node **new, *parent = NULL;
@@ -135,8 +135,8 @@ static struct genz_umem *umem_insert(struct genz_umem *umem)
 	while (*new) {
 		struct genz_umem *this =
 			container_of(*new, struct genz_umem, node);
-		int64_t result = umem_cmp(umem->vaddr, info->length,
-					  info->access, this);
+		int64_t result = umem_cmp(umem->vaddr, ptei->length,
+					  ptei->access, this);
 
 		parent = *new;
 		if (result < 0) {
@@ -167,10 +167,10 @@ void genz_umem_remove(struct genz_umem *umem)
 }
 EXPORT_SYMBOL(genz_umem_remove);
 
-static inline void pte_info_remove(struct genz_pte_info *info)
+static inline void pte_info_remove(struct genz_pte_info *ptei)
 {
-	if (info)
-		kref_put(&info->refcount, pte_info_free);
+	if (ptei)
+		kref_put(&ptei->refcount, pte_info_free);
 }
 
 /* Returns the offset of the umem start relative to the first page */
@@ -408,7 +408,7 @@ struct genz_umem *genz_umem_get(struct genz_mem_data *mdata, uint64_t vaddr,
 				bool kernel)
 {
 	struct genz_umem *umem, *found;
-	struct genz_pte_info *info;
+	struct genz_pte_info *ptei;
 	int ret = 0;
 	ulong flags;
 
@@ -423,29 +423,31 @@ struct genz_umem *genz_umem_get(struct genz_mem_data *mdata, uint64_t vaddr,
 	umem = kzalloc(sizeof(*umem), GFP_KERNEL);
 	if (!umem)
 		return ERR_PTR(-ENOMEM);
-	info = kzalloc(sizeof(*info), GFP_KERNEL);
-	if (!info) {
+	ptei = kzalloc(sizeof(*ptei), GFP_KERNEL);
+	if (!ptei) {
 		kfree(umem);
 		return ERR_PTR(-ENOMEM);
 	}
 
-	umem->pte_info        = info;
+	umem->pte_info        = ptei;
 	umem->mdata           = mdata;
-	info->bridge          = mdata->bridge;
+	// Revisit: use genz_pte_info_alloc_and_init()
+	ptei->bridge          = mdata->bridge;
+	ptei->zi              = NULL; // Revisit: non-bridge
 	umem->vaddr           = vaddr;
-	info->addr            = vaddr;
+	ptei->addr            = vaddr;
 	umem->size            = size;
-	info->length          = size;
-	info->access          = USER_ACCESS(access) | GENZ_MR_RSP;
-	info->pte.rsp.pasid   = pasid;
-	info->pte.rsp.ro_rkey = ro_rkey;
-	info->pte.rsp.rw_rkey = rw_rkey;
+	ptei->length          = size;
+	ptei->access          = USER_ACCESS(access) | GENZ_MR_RSP;
+	ptei->pte.rsp.pasid   = pasid;
+	ptei->pte.rsp.ro_rkey = ro_rkey;
+	ptei->pte.rsp.rw_rkey = rw_rkey;
 	umem->page_shift      = PAGE_SHIFT;
 	umem->writable        = !!(access & (GENZ_MR_GET|GENZ_MR_PUT_REMOTE));
 	/* We assume the memory is from hugetlb until proven otherwise */
 	umem->hugetlb         = 1;
 	kref_init(&umem->refcount);
-	kref_init(&info->refcount);
+	kref_init(&ptei->refcount);
 
 	pr_debug("vaddr=0x%016llx, size=0x%zx, access=0x%llx, pasid=%u, kernel=%u\n",
 		 vaddr, size, access, pasid, kernel);
@@ -472,12 +474,12 @@ EXPORT_SYMBOL(genz_umem_get);
 static void pte_info_free(struct kref *ref)
 {
 	/* caller must already hold mdata->md_lock */
-	struct genz_pte_info *info = container_of(
+	struct genz_pte_info *ptei = container_of(
 		ref, struct genz_pte_info, refcount);
 	uint64_t             access;
 	bool                 local, remote, cpu_visible, individual, req, rsp;
 
-	access = info->access;
+	access = ptei->access;
 	local = !!(access & (GENZ_MR_GET|GENZ_MR_PUT));
 	remote = !!(access & (GENZ_MR_GET_REMOTE|GENZ_MR_PUT_REMOTE));
 	cpu_visible = !!(access & GENZ_MR_REQ_CPU);
@@ -485,24 +487,24 @@ static void pte_info_free(struct kref *ref)
 	req = !!(access & GENZ_MR_REQ);
 	rsp = !!(access & GENZ_MR_RSP);
 	if (remote && rsp) {
-		genz_zmmu_rsp_pte_free(info);
+		genz_zmmu_rsp_pte_free(ptei);
 		/* Revisit: do TAKE_SNAPSHOT IOMMU teardown sequence */
 	}
 	if (remote && req) {
-		genz_zmmu_req_pte_free(info);
+		genz_zmmu_req_pte_free(ptei);
 	}
-	kfree(info);
+	kfree(ptei);
 }
 
 static void umem_free(struct kref *ref)
 {
 	/* caller must already hold mdata->md_lock */
 	struct genz_umem *umem = container_of(ref, struct genz_umem, refcount);
-	struct genz_pte_info *info = umem->pte_info;
+	struct genz_pte_info *ptei = umem->pte_info;
 	struct genz_mem_data *mdata = umem->mdata;
 	struct rb_root   *root = &mdata->md_mr_tree;
 
-	pte_info_remove(info);
+	pte_info_remove(ptei);
 	if (umem->erase)
 		rb_erase(&umem->node, root);
 	_genz_umem_release(umem);
@@ -514,16 +516,16 @@ void genz_umem_free_all(struct genz_mem_data *mdata,
 {
 	struct rb_node *rb, *next;
 	struct genz_umem *umem;
-	struct genz_pte_info *info;
+	struct genz_pte_info *ptei;
 	ulong flags;
 
 	spin_lock_irqsave(&mdata->md_lock, flags);
 
 	for (rb = rb_first_postorder(&mdata->md_mr_tree); rb; rb = next) {
 		umem = container_of(rb, struct genz_umem, node);
-		info = umem->pte_info;
+		ptei = umem->pte_info;
 		pr_debug("vaddr=0x%016llx, len=0x%zx, access=0x%llx\n",
-			 umem->vaddr, info->length, info->access);
+			 umem->vaddr, ptei->length, ptei->access);
 		next = rb_next_postorder(rb);  /* must precede umem_free() */
 		umem->erase = false;
 		umem_free(&umem->refcount);
@@ -543,21 +545,21 @@ static inline int rmr_cmp(uint32_t dgcid, uint64_t rsp_zaddr,
 			  const struct genz_rmr *r)
 {
 	int cmp;
-	const struct genz_pte_info *info = r->pte_info;
+	const struct genz_pte_info *ptei = r->pte_info;
 
-	cmp = arithcmp(dgcid, info->pte.req.dgcid);
+	cmp = arithcmp(dgcid, ptei->pte.req.dgcid);
 	if (cmp)
 		return cmp;
 	cmp = arithcmp(rsp_zaddr, r->rsp_zaddr);
 	if (cmp)
 		return cmp;
-	cmp = arithcmp(length, info->length);
+	cmp = arithcmp(length, ptei->length);
 	if (cmp)
 		return cmp;
-	cmp = arithcmp(dr_iface, info->dr_iface);
+	cmp = arithcmp(dr_iface, ptei->dr_iface);
 	if (cmp)
 		return cmp;
-	return arithcmp(USER_ACCESS(access), USER_ACCESS(info->access));
+	return arithcmp(USER_ACCESS(access), USER_ACCESS(ptei->access));
 }
 
 static inline int rmr_uu_cmp(uint64_t rsp_zaddr, uint64_t length,
@@ -566,18 +568,18 @@ static inline int rmr_uu_cmp(uint64_t rsp_zaddr, uint64_t length,
 			     const struct genz_rmr *r)
 {
 	int cmp;
-	const struct genz_pte_info *info = r->pte_info;
+	const struct genz_pte_info *ptei = r->pte_info;
 
 	cmp = arithcmp(rsp_zaddr, r->rsp_zaddr);
 	if (cmp)
 		return cmp;
-	cmp = arithcmp(length, info->length);
+	cmp = arithcmp(length, ptei->length);
 	if (cmp)
 		return cmp;
-	cmp = arithcmp(dr_iface, info->dr_iface);
+	cmp = arithcmp(dr_iface, ptei->dr_iface);
 	if (cmp)
 		return cmp;
-	cmp = arithcmp(USER_ACCESS(access), USER_ACCESS(info->access));
+	cmp = arithcmp(USER_ACCESS(access), USER_ACCESS(ptei->access));
 	if (cmp)
 		return cmp;
 	return genz_uuid_cmp(&local_uuid->uuid,
@@ -622,7 +624,7 @@ EXPORT_SYMBOL(genz_rmr_search);
 
 static struct genz_rmr *rmr_insert(struct genz_rmr *rmr)
 {
-	struct genz_pte_info *info = rmr->pte_info;
+	struct genz_pte_info *ptei = rmr->pte_info;
 	struct genz_mem_data *mdata = rmr->mdata;
 	struct rb_root *root;
 	struct rb_node **new, *parent = NULL;
@@ -636,8 +638,8 @@ static struct genz_rmr *rmr_insert(struct genz_rmr *rmr)
 	while (*new) {
 		struct genz_rmr *this =
 			container_of(*new, struct genz_rmr, md_node);
-		int64_t result = rmr_cmp(info->pte.req.dgcid, rmr->rsp_zaddr,
-					 info->length, info->dr_iface, info->access, this);
+		int64_t result = rmr_cmp(ptei->pte.req.dgcid, rmr->rsp_zaddr,
+					 ptei->length, ptei->dr_iface, ptei->access, this);
 
 		parent = *new;
 		if (result < 0) {
@@ -664,8 +666,8 @@ static struct genz_rmr *rmr_insert(struct genz_rmr *rmr)
 	while (*new) {
 		struct genz_rmr *this =
 			container_of(*new, struct genz_rmr, un_node);
-		int result = rmr_uu_cmp(rmr->rsp_zaddr, info->length,
-					info->dr_iface, info->access,
+		int result = rmr_uu_cmp(rmr->rsp_zaddr, ptei->length,
+					ptei->dr_iface, ptei->access,
 					mdata->local_uuid, this);
 
 		parent = *new;
@@ -691,16 +693,16 @@ static void rmr_free(struct kref *ref)
 {
 	/* caller must already hold mdata->md_lock */
 	struct genz_rmr *rmr = container_of(ref, struct genz_rmr, refcount);
-	struct genz_pte_info *info = rmr->pte_info;
+	struct genz_pte_info *ptei = rmr->pte_info;
 	struct genz_mem_data *mdata = rmr->mdata;
 	const char *rmr_name;
 	uint64_t rsp_zaddr = rmr->rsp_zaddr;
 	uint64_t req_addr = rmr->req_addr;
-	uint32_t dgcid = info->pte.req.dgcid;
-	uint32_t rkey = info->pte.req.rkey;
-	uint16_t dr_iface = info->dr_iface;
-	uint64_t access = info->access;
-	uint64_t len = info->length;
+	uint32_t dgcid = ptei->pte.req.dgcid;
+	uint32_t rkey = ptei->pte.req.rkey;
+	uint16_t dr_iface = ptei->dr_iface;
+	uint64_t access = ptei->access;
+	uint64_t len = ptei->length;
 	bool remote, writable, cpu_visible, individual, kmap, control, dr;
 	char gcstr[GCID_STRING_LEN+1];
 
@@ -723,7 +725,7 @@ static void rmr_free(struct kref *ref)
 		 writable, cpu_visible, individual, kmap, control, dr);
 	if (cpu_visible && rmr->zres)
 		remove_resource(&rmr->zres->res);
-	pte_info_remove(info);
+	pte_info_remove(ptei);
 	if (rmr->fd_erase)
 		rb_erase(&rmr->md_node, &mdata->md_rmr_tree);
 	if (rmr->un_erase) {
@@ -752,7 +754,7 @@ void genz_rmr_remove_unode(struct genz_mem_data *mdata, struct uuid_node *unode)
 	struct rb_root *root = &unode->un_rmr_tree;
 	struct rb_node *rb, *next;
 	struct genz_rmr *rmr;
-	struct genz_pte_info *info;
+	struct genz_pte_info *ptei;
 	ulong flags;
 	char str[GCID_STRING_LEN+1];
 
@@ -760,11 +762,11 @@ void genz_rmr_remove_unode(struct genz_mem_data *mdata, struct uuid_node *unode)
 
 	for (rb = rb_first_postorder(root); rb; rb = next) {
 		rmr = container_of(rb, struct genz_rmr, un_node);
-		info = rmr->pte_info;
+		ptei = rmr->pte_info;
 		pr_debug("dgcid=%s, rsp_zaddr=0x%016llx, "
 			 "len=0x%zx, access=0x%llx\n",
-			 genz_gcid_str(info->pte.req.dgcid, str, sizeof(str)),
-			 rmr->rsp_zaddr, info->length, info->access);
+			 genz_gcid_str(ptei->pte.req.dgcid, str, sizeof(str)),
+			 rmr->rsp_zaddr, ptei->length, ptei->access);
 		next = rb_next_postorder(rb);  /* must precede rmr_free() */
 		rmr->fd_erase = true;
 		rmr->un_erase = false;
@@ -778,7 +780,7 @@ void genz_rmr_free_all(struct genz_mem_data *mdata)
 {
 	struct rb_node *rb, *next;
 	struct genz_rmr *rmr;
-	struct genz_pte_info *info;
+	struct genz_pte_info *ptei;
 	char str[GCID_STRING_LEN+1];
 	ulong flags;
 
@@ -786,11 +788,11 @@ void genz_rmr_free_all(struct genz_mem_data *mdata)
 
 	for (rb = rb_first_postorder(&mdata->md_rmr_tree); rb; rb = next) {
 		rmr = container_of(rb, struct genz_rmr, md_node);
-		info = rmr->pte_info;
+		ptei = rmr->pte_info;
 		pr_debug("dgcid = %s, rsp_zaddr = 0x%016llx, "
 			 "len = 0x%zx, access = 0x%llx\n",
-			 genz_gcid_str(info->pte.req.dgcid, str, sizeof(str)),
-			 rmr->rsp_zaddr, info->length, info->access);
+			 genz_gcid_str(ptei->pte.req.dgcid, str, sizeof(str)),
+			 rmr->rsp_zaddr, ptei->length, ptei->access);
 		next = rb_next_postorder(rb);  /* must precede rmr_free() */
 		rmr->fd_erase = false;
 		rmr->un_erase = true;
@@ -805,31 +807,72 @@ EXPORT_SYMBOL(genz_rmr_free_all);
 
 extern uint req_write_mode;  /* Revisit: module param hack */
 
+struct genz_pte_info *genz_pte_info_alloc_and_init(
+	struct genz_bridge_dev *br, uint32_t dgcid,
+	uint64_t addr, uint64_t len, uint64_t access, uint pasid,
+	uint32_t rkey, uint16_t dr_iface, struct genz_zmmu_info *zi)
+{
+	struct genz_pte_info *ptei;
+	bool control, dr, pec;
+
+	control = !!(access & GENZ_MR_CONTROL);
+	dr = control && (dr_iface != GENZ_DR_IFACE_NONE);
+	pec = control || !!(access & GENZ_MR_PEC);
+	ptei = kzalloc(sizeof(*ptei), GFP_KERNEL);
+	if (!ptei)
+		return ptei;
+
+	kref_init(&ptei->refcount);
+	ptei->bridge        = br;
+	ptei->zi            = zi;
+	ptei->addr          = addr;
+	ptei->access        = USER_ACCESS(access) | GENZ_MR_REQ;
+	ptei->length        = len;
+	ptei->dr_iface      = dr_iface;
+	ptei->pte.req.st    = (control) ? GENZ_CONTROL : GENZ_DATA;
+	if (control) {
+		ptei->pte.req.control.addr = addr;
+		ptei->pte.req.drc = dr;
+		if (dr)
+			ptei->pte.req.control.dr_iface = dr_iface;
+	} else {
+		ptei->pte.req.data.addr = addr;
+	}
+	ptei->pte.req.pec     = pec;
+	ptei->pte.req.pasid   = pasid;
+	ptei->pte.req.rkey    = rkey;
+	ptei->pte.req.dgcid   = dgcid;
+	ptei->pte.req.d_attr  = GENZ_DA_UNICAST;  /* Revisit: others */
+	ptei->pte.req.wr_mode = req_write_mode; /* Revisit: hack */
+	/* Revisit: pp, cce, ce, wpe, pse, pfme, lpe, nse, tc */
+	ptei->pte.req.v = 1;
+	return ptei;
+}
+
 struct genz_rmr *genz_rmr_get(
 	struct genz_mem_data *mdata, uuid_t *uuid, uint32_t dgcid,
 	uint64_t rsp_zaddr, uint64_t len, uint64_t access, uint pasid,
 	uint32_t rkey, uint16_t dr_iface, struct genz_rmr_info *rmri)
 {
 	struct genz_rmr         *rmr, *found;
-	struct genz_pte_info    *info;
+	struct genz_pte_info    *ptei;
 	struct uuid_node        *unode;
 	struct uuid_tracker     *uu;
-	bool                    writable, indiv_rkeys, control, dr, pec;
+	bool                    writable, indiv_rkeys;
 	int                     ret = 0;
 	char                    gcstr[GCID_STRING_LEN+1];
 
 	writable = !!(access & GENZ_MR_PUT_REMOTE);
 	indiv_rkeys = !!(access & GENZ_MR_INDIV_RKEYS);
-	control = !!(access & GENZ_MR_CONTROL);
-	dr = control && (dr_iface != GENZ_DR_IFACE_NONE);
-	pec = control || !!(access & GENZ_MR_PEC);
 	rmr = kzalloc(sizeof(*rmr), GFP_KERNEL);
 	if (!rmr) {
 		ret = -ENOMEM;
 		goto out;
 	}
-	info = kzalloc(sizeof(*info), GFP_KERNEL);
-	if (!info) {
+	ptei = genz_pte_info_alloc_and_init(mdata->bridge, dgcid, rsp_zaddr,
+					    len, access, pasid, rkey, dr_iface,
+					    NULL); // Revisit: NULL zi
+	if (!ptei) {
 		kfree(rmr);
 		ret = -ENOMEM;
 		goto out;
@@ -838,7 +881,7 @@ struct genz_rmr *genz_rmr_get(
 	unode = genz_remote_uuid_get(mdata, uuid);
 	if (!unode) {
 		kfree(rmr);
-		kfree(info);
+		kfree(ptei);
 		ret = -EINVAL;  /* UUID must have been imported */
 		goto out;
 	}
@@ -847,39 +890,16 @@ struct genz_rmr *genz_rmr_get(
 	if (!indiv_rkeys && uu->remote->rkeys_valid)
 		rkey = (writable) ? uu->remote->rw_rkey : uu->remote->ro_rkey;
 	rmr->mdata          = mdata;
-	rmr->pte_info       = info;
+	rmr->pte_info       = ptei;
 	rmr->rsp_zaddr      = rsp_zaddr;
 	rmr->uu             = uu;
 	rmr->unode          = unode;
 	rmr->writable       = writable;
 	kref_init(&rmr->refcount);
-	kref_init(&info->refcount);
-	info->bridge        = mdata->bridge;
-	info->addr          = rsp_zaddr;
-	info->access        = USER_ACCESS(access) | GENZ_MR_REQ;
-	info->length        = len;
-	info->dr_iface      = dr_iface;
-	info->pte.req.st    = (control) ? GENZ_CONTROL : GENZ_DATA;
-	if (control) {
-		info->pte.req.control.addr = rsp_zaddr;
-		info->pte.req.drc = dr;
-		if (dr)
-			info->pte.req.control.dr_iface = dr_iface;
-	} else {
-		info->pte.req.data.addr = rsp_zaddr;
-	}
-	info->pte.req.pec        = pec;
-	info->pte.req.pasid      = pasid;
-	info->pte.req.rkey       = rkey;
-	info->pte.req.dgcid      = dgcid;
-	info->pte.req.d_attr     = GENZ_DA_UNICAST;  /* Revisit: others */
-	info->pte.req.write_mode = req_write_mode; /* Revisit: hack */
-	/* Revisit: pp, cce, ce, wpe, pse, pfme, lpe, nse, tc */
-	info->pte.req.v = 1;
-	pr_debug("rmr: info=%p, addr=0x%llx, dgcid=%s, rkey=0x%x, uu=%p\n",
-		 info, info->addr,
-		 genz_gcid_str(info->pte.req.dgcid, gcstr, sizeof(gcstr)),
-		 info->pte.req.rkey, rmr->uu);
+	pr_debug("rmr: ptei=%p, addr=0x%llx, dgcid=%s, rkey=0x%x, uu=%p\n",
+		 ptei, ptei->addr,
+		 genz_gcid_str(ptei->pte.req.dgcid, gcstr, sizeof(gcstr)),
+		 ptei->pte.req.rkey, rmr->uu);
 
 	found = rmr_insert(rmr);
 	if (found != rmr) {
@@ -1231,3 +1251,98 @@ struct genz_rmr_info *devm_genz_rmr_import_zres(struct genz_dev *zdev,
 	return rmri;
 }
 EXPORT_SYMBOL(devm_genz_rmr_import_zres);
+
+static bool zres_match(struct genz_resource *zr1, struct genz_resource *zr2)
+{
+	bool match;
+
+	/* Revisit: not comparing flags or name */
+	match = (zr1->res.start == zr2->res.start) &&
+		(zr1->res.end == zr2->res.end) &&
+		(zr1->ro_rkey == zr2->ro_rkey) &&
+		(zr1->rw_rkey == zr2->rw_rkey);
+	pr_debug("zr1=%px (start=0x%llx, end=0x%llx), zr2=%px (start=0x%llx, end=0x%llx), match=%u\n",
+		 zr1, zr1->res.start, zr1->res.end,
+		 zr2, zr2->res.start, zr2->res.end, match);
+	return match;
+}
+
+struct genz_zres *genz_find_zdev_zres(struct genz_dev *zdev,
+				      struct genz_resource *res)
+{
+	struct genz_resource *zres;
+
+	genz_for_each_resource(zres, zdev) {
+		if (zres_match(zres, res))
+		    return to_genz_res(zres);
+	}
+
+	return NULL;
+}
+
+int genz_clone_zdev_ref_ptes(struct genz_dev *zdev)
+{
+	struct genz_pte_info *zmm_ptei, *pg_ptei;
+	struct genz_dev *kmem_zdev, *zmm_zdev;
+	struct genz_zmmu_info *fr_zi, *to_zi;
+	struct genz_mem_data *mdata;
+	struct genz_rmr_info *rmri;
+	struct genz_zres *zmm_zres;
+	struct genz_resource *kmem_zres;
+	struct genz_rmr *rmr;
+	int ret = -EINVAL;
+	ulong flags;
+
+	to_zi = zdev->zcomp->zmmu_info;
+	// Revisit: assmues a ref_uuid chain: zdev->kmem_zdev->zmm_zdev
+	kmem_zdev = genz_ref_zdev(zdev);
+	if (IS_ERR(kmem_zdev)) {
+		ret = PTR_ERR(kmem_zdev);
+		goto out;
+	}
+
+	zmm_zdev = genz_ref_zdev(kmem_zdev);
+	if (IS_ERR(zmm_zdev)) {
+		ret = PTR_ERR(zmm_zdev);
+		goto out;
+	}
+
+	genz_for_each_resource(kmem_zres, kmem_zdev) {
+		zmm_zres = genz_find_zdev_zres(zmm_zdev, kmem_zres);
+		if (!zmm_zres)
+			goto out;
+
+		rmri = zmm_zres->rmri;
+		dev_dbg(&zdev->dev, "zmm_zdev=%px, zmm_zres=%px, rmri=%px\n", zmm_zdev, zmm_zres, rmri);
+		if (!rmri)
+			goto out;
+		mdata = rmri->mdata;
+		spin_lock_irqsave(&mdata->md_lock, flags);
+		rmr = genz_rmr_search(mdata, rmri->gcid, rmri->rsp_zaddr, rmri->len,
+				      rmri->dr_iface, rmri->access, rmri->req_addr);
+		if (!rmr)
+			goto unlock;
+		spin_unlock_irqrestore(&mdata->md_lock, flags);
+		zmm_ptei = rmr->pte_info;
+		fr_zi = zmm_ptei->zi;
+		pg_ptei = genz_pte_info_alloc_and_init(
+			zdev->zbdev, zmm_ptei->pte.req.dgcid, zmm_ptei->addr,
+			zmm_ptei->length, zmm_ptei->access, zmm_ptei->pte.req.pasid,
+			zmm_ptei->pte.req.rkey, zmm_ptei->dr_iface, to_zi);
+		if (!pg_ptei) {
+			ret = -ENOMEM;
+			goto out;
+		}
+		// Revisit: setup other ptei fields: node?
+		pg_ptei->pte_index = zmm_ptei->pte_index;
+		// Revisit: setup devm action to free pg_ptei
+		ret = genz_clone_req_pg_ptes(zdev, pg_ptei, to_zi);
+	}
+	goto out;
+
+unlock:
+	spin_unlock_irqrestore(&mdata->md_lock, flags);
+out:
+	return ret;
+}
+EXPORT_SYMBOL(genz_clone_zdev_ref_ptes);

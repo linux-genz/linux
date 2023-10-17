@@ -582,7 +582,6 @@ struct uuid_tracker *genz_fabric_uuid_tracker_alloc_and_insert(
 	int status;
 	struct uuid_tracker *uu;
 	int ret;
-	uuid_t zero_uuid = { 0 };
 
 	uu = genz_uuid_tracker_alloc(uuid, UUID_TYPE_FABRIC, GFP_KERNEL,
 			&status);
@@ -943,3 +942,40 @@ struct genz_uuid_info *devm_genz_uuid_import(struct genz_dev *zdev, uuid_t *uuid
 	return uui;
 }
 EXPORT_SYMBOL(devm_genz_uuid_import);
+
+static void devm_genz_uuid_release(void *data)
+{
+	genz_uuid_remove((struct uuid_tracker *)data);
+}
+
+struct genz_dev *genz_ref_zdev(struct genz_dev *zdev)
+{
+	struct genz_dev *ref_zdev = NULL;
+	struct uuid_tracker *uu;
+	int ret = -EINVAL;
+
+	if (genz_uuid_cmp(&zdev->ref_uuid, &zero_uuid) == 0)
+		goto err;
+
+	uu = genz_uuid_search(&zdev->ref_uuid);  /* gets uu refcount if found */
+	if (!uu)
+		goto err;
+
+	if (!(uu->uutype & UUID_TYPE_ZDEV))
+		goto refcount;
+
+	/* add action to zdev, not ref_zdev */
+	ret = devm_add_action_or_reset(&zdev->dev, devm_genz_uuid_release, uu);
+	if (ret < 0)
+		goto refcount;
+
+	ref_zdev = uu->zdev->zdev;
+	dev_dbg(&zdev->dev, "ref_zdev=%px\n", ref_zdev);
+	return ref_zdev;
+
+refcount:
+	genz_uuid_remove(uu);  /* decrement refcount */
+err:
+	return ERR_PTR(ret);
+}
+EXPORT_SYMBOL(genz_ref_zdev);

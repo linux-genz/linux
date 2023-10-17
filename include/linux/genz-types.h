@@ -6399,6 +6399,34 @@ struct genz_sm_backup_table{
     struct genz_sm_backup_table_array sm_backup_table_array[];
 };
 
+struct genz_req_pte_attr_63_0 {
+	uint64_t pte_gd_sz                : 5;
+	uint64_t rv0                      : 5;
+	uint64_t pasid_sz                 : 5;
+	uint64_t pfme_sup                 : 1;
+	uint64_t wpe_sup                  : 1;
+	uint64_t rkey_sup                 : 1;
+	uint64_t nse_sup                  : 1;
+	uint64_t lpe_sup                  : 1;
+	uint64_t ce_sup                   : 1;
+	uint64_t st_drc_sup               : 1;
+	uint64_t cce_sup                  : 1;
+	uint64_t write_mode_0_sup         : 1;
+	uint64_t write_mode_1_sup         : 1;
+	uint64_t write_mode_2_sup         : 1;
+	uint64_t write_mode_3_sup         : 1;
+	uint64_t write_mode_4_sup         : 1;
+	uint64_t write_mode_5_sup         : 1;
+	uint64_t write_mode_6_sup         : 1;
+	uint64_t write_mode_7_sup         : 1;
+	uint64_t pec_sup                  : 1;
+	uint64_t dattr_multicast_sup      : 1;
+	uint64_t tc_sup                   : 2;
+	uint64_t tr_idx_sup               : 1;
+	uint64_t co_sup                   : 1;
+	uint64_t rv1                      : 27;
+};
+
 struct genz_ssap_mcap_msap_and_msmcap_table{};
 
 struct genz_ssod_msod_table{};

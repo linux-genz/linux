@@ -50,6 +50,8 @@
 #define GENZ_Z_UUID	0x4813ea5f074e4be2a355a354145c9927
 #define GENZ_CAST_UUID(u) (*((uuid_t *)&(u)))
 
+static const uuid_t zero_uuid = { 0 };
+
 extern struct bus_type genz_bus_type;
 extern struct kset *genz_fabrics_kset;
 
@@ -179,6 +181,7 @@ struct genz_comp {
 struct genz_os_comp {
 	struct genz_comp	comp;
 	struct genz_os_subnet	*subnet;
+	struct genz_zmmu_info   *zmmu_info; /* req/rsp ZMMU info */
 	struct device		dev;  /* /sys/devices/genz<N>/SID/CID */
 	atomic_t res_count[GENZ_NUM_HARDWARE_TYPES+1]; /* +1 for "unknown" */
 };
@@ -293,7 +296,7 @@ struct genz_control_info_attribute {
 #define ROUND_DOWN_PAGE(_addr, _sz) ((_addr) & -(_sz))
 #define ROUND_UP_PAGE(_addr, _sz)   (((_addr) + ((_sz) - 1)) & -(_sz))
 
-struct genz_driver_aux {
+struct genz_driver_aux { // Revisit: unused
 	struct list_head	uu_node;
 	uuid_t			uuid;
 	struct genz_driver	*zdrv;

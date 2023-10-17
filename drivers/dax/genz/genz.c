@@ -132,9 +132,10 @@ struct dev_dax *__dax_genz_probe(struct genz_dev *zdev,
 				    zres->res.name);
 	if (IS_ERR(rmri)) {
 		ret = PTR_ERR(rmri);
-		dev_dbg(dev, "devm_genz_uuid_import failed, ret=%d\n", ret);
+		dev_dbg(dev, "devm_genz_rmr_import failed, ret=%d\n", ret);
 		return ERR_PTR(ret);
 	}
+	genz_rmr_zres(zres, rmri);
 	__dax_genz_pfn_size(zdev, &rmri->zres, &align, &end_trunc, &offset, &npfns);
 	ret = __dax_genz_setup_pfn(zdev, &rmri->zres, align, end_trunc, offset,
 				   npfns, &pgmap);

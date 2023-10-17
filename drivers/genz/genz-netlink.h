@@ -70,6 +70,7 @@ enum {
 	GENZ_A_U_FLAGS,
 	GENZ_A_U_CLASS,
 	GENZ_A_U_MRL,
+	GENZ_A_U_REFERENCE_UUID,
 	__GENZ_A_U_MAX,
 };
 #define GENZ_A_U_MAX (__GENZ_A_U_MAX - 1)

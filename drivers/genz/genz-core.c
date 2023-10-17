@@ -152,10 +152,12 @@ static int genz_bus_match(struct device *dev, struct device_driver *drv)
 	struct genz_driver *zdrv = to_genz_driver(drv);
 	const struct genz_device_id *match;
 
-	pr_debug("entered\n");
 	match = genz_match_device(zdrv, zdev);
-	if (match)
+	if (match) {
+		pr_debug("%s uuid %pUb matched %s\n", zdrv->name, &match->uuid,
+			 dev_name(dev));
 		return 1;
+	}
 	return 0;
 }
 

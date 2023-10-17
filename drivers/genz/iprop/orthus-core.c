@@ -353,15 +353,18 @@ static int orthus_control_mmap(struct genz_bridge_dev *gzbr,
 }
 
 static int orthus_req_page_grid_write(struct genz_bridge_dev *gzbr, uint pg_index,
-				      struct genz_page_grid genz_pg[])
+				      struct genz_page_grid genz_pg[],
+				      struct genz_zmmu_info *zi)
 {
 	struct orthus_bridge *obr = orthus_gzbr_to_obr(gzbr);
 	struct device *dev = &gzbr->zdev.dev;
 	struct iprop_genz_req_zmmu *const req_zmmu = &obr->req_zmmu;
 	struct genz_page_grid_restricted_page_grid_table_array *pg;
+	struct genz_rmr_info *rmri;
 	uint32_t offset;
 	int ret = 0;
 
+	rmri = (!zi) ? NULL : zi->req_zmmu_pg.pg_rmri[GENZ_PG_TABLE];
 	pg = &genz_pg[pg_index].page_grid;
 	offset = pg_index * sizeof(*pg);
 	dev_dbg(dev,
@@ -370,8 +373,13 @@ static int orthus_req_page_grid_write(struct genz_bridge_dev *gzbr, uint pg_inde
 		(uint64_t)pg->pg_base_address_0, pg->page_count_0,
 		pg->page_size_0, pg->base_pte_index_0, pg->res,
 		(uint)sizeof(*pg));
-	orthus_local_control_write(obr, req_zmmu->pg_base_offset + offset,
+	if (genz_is_local_bridge(gzbr, rmri)) {
+		ret = orthus_local_control_write(obr, req_zmmu->pg_base_offset + offset,
 				   sizeof(*pg), pg, 0);
+	} else {
+		ret = orthus_control_write(gzbr, rmri->rsp_zaddr + offset,
+					   sizeof(*pg), pg, rmri, 0);
+	}
 	return ret;
 }
 

@@ -125,9 +125,7 @@ ssize_t genz_requester_vcat_table_size(struct genz_control_info *ci)
 			 ret);
 		return -1;
 	}
-	req_vcatsz = cdt.req_vcatsz;
-	if (req_vcatsz == 0)
-		req_vcatsz = BIT(5); /* Spec says 0 means 2^5 */
+	req_vcatsz = genz_sz_0_special(cdt.req_vcatsz, 5);
 
 	/* Get the entry size based on the route control table hcs field */
 	entry_sz = vcat_entry_sz(ci, &cdt, NULL);
@@ -196,9 +194,7 @@ ssize_t genz_responder_vcat_table_size(struct genz_control_info *ci)
 			 ret);
 		return -1;
 	}
-	rsp_vcatsz = cdt.rsp_vcatsz;
-	if (rsp_vcatsz == 0)
-		rsp_vcatsz = BIT(5); /* Spec says 0 means 2^5 */
+	rsp_vcatsz = genz_sz_0_special(cdt.rsp_vcatsz, 5);
 
 	/* Get the entry size based on the route control table hcs field */
 	entry_sz = vcat_entry_sz(ci, &cdt, NULL);
@@ -228,9 +224,7 @@ static uint num_interfaces(struct genz_control_info *core_ci)
 			 ret);
 		return 1;
 	}
-	num_ifaces = core.max_interface;
-	if (num_ifaces == 0)
-		num_ifaces = BIT(12);  /* Spec says 0 means 2^12 */
+	num_ifaces = genz_sz_0_special(core.max_interface, 12);
 	pr_debug("num_ifaces=%d\n", num_ifaces);
 	return num_ifaces;
 }
@@ -322,13 +316,9 @@ ssize_t genz_ssdt_msdt_table_size(struct genz_control_info *ci)
 #define GENZ_SSDT_TABLE_OFFSET 0x20
 #define GENZ_MSDT_TABLE_OFFSET 0x24
 	if (ci->csp->pointer_offset == GENZ_SSDT_TABLE_OFFSET) {
-		num_rows = cdt.ssdt_size;
-		if (num_rows == 0)
-			num_rows = BIT(12); /* Spec says 0 means 2^12 */
+		num_rows = genz_sz_0_special(cdt.ssdt_size, 12);
 	} else if (ci->csp->pointer_offset == GENZ_MSDT_TABLE_OFFSET) {
-		num_rows = cdt.msdt_size;
-		if (num_rows == 0)
-			num_rows = BIT(16); /* Spec says 0 means 2^16 */
+		num_rows = genz_sz_0_special(cdt.msdt_size, 16);
 	} else {
 		pr_debug("unexpected offset does not match SSDT or MSDT 0x%x\n", ci->csp->pointer_offset);
 	}

@@ -249,12 +249,17 @@ static void _zmmu_req_page_grid_write_slice(struct slice *sl,
 }
 
 int wildcat_req_page_grid_write(struct genz_bridge_dev *gzbr, uint pg_index,
-				struct genz_page_grid genz_pg[])
+				struct genz_page_grid genz_pg[],
+				struct genz_zmmu_info *zi)
 {
 	int                      sl;
 	struct wildcat_page_grid wc_pg = { 0 };
 	struct bridge            *br = wildcat_gzbr_to_br(gzbr);
+	struct genz_rmr_info     *rmri;
 
+	rmri = (!zi) ? NULL : zi->req_zmmu_pg.pg_rmri[GENZ_PG_TABLE];
+	if (!genz_is_local_bridge(gzbr, rmri))
+		return -EINVAL;
 	/* convert "generic" Gen-Z page grid to wildcat HW format */
 	wildcat_convert_genz_page_grid(&genz_pg[pg_index], &wc_pg);
 	dev_dbg(gzbr->bridge_dev,
@@ -358,11 +363,16 @@ static void _zmmu_req_pte_write_slice(struct slice *sl,
 }
 
 int wildcat_req_pte_write(struct genz_bridge_dev *gzbr,
-			  struct genz_pte_info *info)
+			  struct genz_pte_info *info,
+			  struct genz_zmmu_info *zi)
 {
 	struct bridge         *br = wildcat_gzbr_to_br(gzbr);
+	struct genz_rmr_info  *rmri;
 	uint                  sl;
 
+	rmri = (!zi) ? NULL : zi->req_zmmu_pg.pg_rmri[GENZ_PTE_TABLE];
+	if (!genz_is_local_bridge(gzbr, rmri))
+		return -EINVAL;
 	if (!wildcat_no_avx)
 		kernel_fpu_begin();
 	for (sl = 0; sl < SLICES; sl++)

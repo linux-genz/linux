@@ -9,7 +9,9 @@
 #define GENZ_CTL_FL_PEC    0x40000000ull
 
 static struct genz_device_id genz_ctl_id_table[] = {
-	{ .uuid_str = "76d1ce79-1a28-49c8-befa-b4ef5c458b9f" },
+	{.uuid_str = "76d1ce79-1a28-49c8-befa-b4ef5c458b9f", .driver_data = 0},
+	{.uuid_str = "36a9d6fb-91a7-4790-b33a-c92625031b2c", .driver_data = 1},
+	{.uuid_str = "4bb7234c-42e3-43bc-b141-4439137e5618", .driver_data = 2},
 	{ },
 };
 
@@ -38,19 +40,12 @@ struct genz_rmr_info *__genz_ctl_probe(struct genz_dev *zdev,
 	return rmri;
 }
 
-static int genz_ctl_probe(struct genz_dev *zdev,
-			  const struct genz_device_id *zdev_id)
+static int genz_ctl_map_probe(struct genz_dev *zdev,
+			      const struct genz_device_id *zdev_id)
 {
-	struct genz_bridge_dev *zbdev = zdev->zbdev;
-	struct genz_bridge_info *br_info = &zbdev->br_info;
 	struct genz_resource *zres;
 	struct genz_rmr_info *rmri = ERR_PTR(-EINVAL);
 
-	if (!br_info->load_store) { // Revisit: needed?
-		dev_err(&zdev->dev, "genz-ctl requires load/store-capable bridge\n");
-		return -EOPNOTSUPP;
-	}
-	dev_dbg(&zdev->dev, "entered\n");
 	genz_for_each_resource(zres, zdev) {
 		dev_dbg(&zdev->dev, "resource %s\n", zres->res.name);
 		if (genz_is_control_resource(zres)) {
@@ -60,6 +55,69 @@ static int genz_ctl_probe(struct genz_dev *zdev,
 		}
 	}
 	return PTR_ERR_OR_ZERO(rmri);
+}
+
+static int genz_ctl_pg_probe(struct genz_dev *zdev,
+			     const struct genz_device_id *zdev_id)
+{
+	struct genz_resource *zres_arr[3];
+	struct genz_resource *zres;
+	int i = 0, ret = -EINVAL;
+
+	genz_for_each_resource(zres, zdev) {
+		dev_dbg(&zdev->dev, "resource %s\n", zres->res.name);
+		if (genz_is_control_resource(zres)) {
+			if (i < 3) {
+				zres_arr[i++] = zres;
+			} else {
+				dev_err(&zdev->dev, "expected 3 control resources\n");
+				return ret;
+			}
+		} else {
+			dev_warn(&zdev->dev, "ignoring unexpected data resource %s\n", zres->res.name);
+		}
+	}
+	ret = genz_req_zmmu_setup(zdev, zres_arr);
+	return ret;
+}
+
+static int genz_ctl_kmem_probe(struct genz_dev *zdev,
+			       const struct genz_device_id *zdev_id)
+{
+	struct genz_resource *zres;
+
+	/* this doesn't do anything other than print debug messages */
+	dev_dbg(&zdev->dev, "ref_uuid=%pUb\n", &zdev->ref_uuid);
+	genz_for_each_resource(zres, zdev) {
+		dev_dbg(&zdev->dev, "resource %s: 0x%llx-0x%llx\n",
+			zres->res.name, zres->res.start, zres->res.end);
+	}
+	return 0;
+}
+
+typedef int (*ctl_probe_fn)(struct genz_dev *zdev,
+			    const struct genz_device_id *zdev_id);
+
+static ctl_probe_fn const ctl_probe_funcs[] = {
+	genz_ctl_map_probe,
+	genz_ctl_pg_probe,
+	genz_ctl_kmem_probe
+};
+
+static int genz_ctl_probe(struct genz_dev *zdev,
+			  const struct genz_device_id *zdev_id)
+{
+	struct genz_bridge_dev *zbdev = zdev->zbdev;
+	struct genz_bridge_info *br_info = &zbdev->br_info;
+	int ret;
+
+	if (!br_info->load_store) { // Revisit: needed?
+		dev_err(&zdev->dev, "genz-ctl requires load/store-capable bridge\n");
+		return -EOPNOTSUPP;
+	}
+	dev_dbg(&zdev->dev, "driver_data=%lu\n", zdev_id->driver_data);
+	ret = (*ctl_probe_funcs[zdev_id->driver_data])(zdev, zdev_id);
+	return ret;
 }
 
 static int genz_ctl_remove(struct genz_dev *zdev)

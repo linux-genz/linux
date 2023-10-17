@@ -54,8 +54,7 @@ struct genz_bridge_dev;
 struct genz_os_comp;
 struct genz_pte_info;
 struct genz_mem_data;
-struct genz_driver_aux;
-struct genz_driver_aux;
+//struct genz_driver_aux; // Revisit: unused
 
 /**
  * GENZ_DEVICE - macro used to describe a specific GENZ device
@@ -71,6 +70,7 @@ struct genz_dev {
 	struct list_head	fab_dev_node; /* Node in the per-fabric list */
 	uuid_t 			class_uuid;   /* component/service/virtual UUID */
 	uuid_t 			instance_uuid;
+	uuid_t 			ref_uuid;     /* reference UUID to another zdev */
 	uint16_t		class;
 	uint16_t 		resource_count[2]; /* control 0; data 1 */
 	uint64_t                driver_flags; /* from netlink */
@@ -92,7 +92,7 @@ struct genz_driver {
 	int (*suspend)(struct genz_dev *zdev);
 	int (*resume)(struct genz_dev *zdev);
 	struct device_driver		driver;
-	struct genz_driver_aux		*zaux;
+	//struct genz_driver_aux		*zaux; // Revisit: unused
 };
 #define to_genz_driver(d) container_of(d, struct genz_driver, driver)
 
@@ -136,6 +136,38 @@ void __genz_unregister_driver(struct genz_driver *driver);
 
 typedef loff_t genz_control_cookie;
 
+struct pte_ctl {
+	uint8_t width;
+	uint8_t start;
+};
+
+struct genz_req_pte_config {
+	struct pte_ctl valid;
+	struct pte_ctl et;
+	struct pte_ctl d_attr;
+	struct pte_ctl st;
+	struct pte_ctl drc;
+	struct pte_ctl pp;
+	struct pte_ctl cce;
+	struct pte_ctl ce;
+	struct pte_ctl wpe;
+	struct pte_ctl pse;
+	struct pte_ctl pfme;
+	struct pte_ctl pec;
+	struct pte_ctl lpe;
+	struct pte_ctl nse;
+	struct pte_ctl wr_mode;
+	struct pte_ctl tc;
+	struct pte_ctl pasid;
+	struct pte_ctl loc_dest;
+	struct pte_ctl glb_dest;
+	struct pte_ctl tr_idx;
+	struct pte_ctl co;
+	struct pte_ctl rkey;
+	struct pte_ctl addr;
+	struct pte_ctl dr_iface;
+};
+
 struct genz_page_grid_config {
 	uint     nr_req_page_grids;
 	uint     nr_rsp_page_grids;
@@ -148,6 +180,8 @@ struct genz_page_grid_config {
 	uint64_t min_nonvisible_addr;
 	uint64_t max_nonvisible_addr;
 	uint64_t cpuvisible_phys_offset;
+	struct genz_req_pte_config req_pte_cfg;
+	uint     pte_sz;  /* in bytes */
 };
 
 struct genz_bridge_info {
@@ -203,6 +237,7 @@ struct genz_rdm_info {
 
 struct genz_rmr_info;
 struct genz_sgl_info;
+struct genz_zmmu_info;
 typedef void (*sgl_cmpl_fn)(struct genz_dev *zdev, struct genz_sgl_info *sgli);
 
 struct genz_sgl_info {
@@ -293,13 +328,15 @@ struct genz_bridge_driver {
 			  struct genz_rmr_info *rmri, uint flags);
 	int (*sgl_request)(struct genz_dev *zdev, struct genz_sgl_info *sgli);
 	int (*req_page_grid_write)(struct genz_bridge_dev *br, uint pg_index,
-				   struct genz_page_grid genz_pg[]);
+				   struct genz_page_grid genz_pg[],
+				   struct genz_zmmu_info *zi);
 	int (*rsp_page_grid_write)(struct genz_bridge_dev *br, uint pg_index,
 				   struct genz_page_grid genz_pg[]);
 	int (*req_pte_write)(struct genz_bridge_dev *br,
-			     struct genz_pte_info *info);
+			     struct genz_pte_info *ptei,
+			     struct genz_zmmu_info *zi);
 	int (*rsp_pte_write)(struct genz_bridge_dev *br,
-			     struct genz_pte_info *info);
+			     struct genz_pte_info *ptei);
 	int (*dma_map_sg_attrs)(    /* for genz_umem_pin */
 		struct genz_bridge_dev *br, struct scatterlist *sg, int nents,
 		enum dma_data_direction direction, unsigned long dma_attrs);
@@ -350,11 +387,11 @@ struct genz_req_pte {
 	uint64_t           pec        : 1;  /* processor exception control */
 	uint64_t           lpe        : 1;  /* LPD field enable */
 	uint64_t           nse        : 1;  /* no-snoop enable */
-	uint64_t           write_mode : 3;
+	uint64_t           wr_mode    : 3;  /* write mode */
 	uint64_t           tc         : 4;  /* traffic class */
 	uint64_t           pasid      : 20;
 	uint64_t           dgcid      : 28; /* dest global CID */
-	uint64_t           tr_index   : 4;  /* TR-only */
+	uint64_t           tr_idx     : 4;  /* TR-only */
 	uint64_t           co         : 2;  /* TR-only */
 	uint32_t           rkey;
 	union {
@@ -390,6 +427,7 @@ union genz_pte {
 
 struct genz_pte_info {
 	struct genz_bridge_dev *bridge;
+	struct genz_zmmu_info  *zi;
 	uint64_t               addr;
 	uint64_t               access;
 	size_t                 length;
@@ -586,6 +624,12 @@ enum uuid_type {
 };
 
 #define UUID_TYPE_REMOTE_LOCAL (UUID_TYPE_REMOTE | UUID_TYPE_LOCAL)
+
+enum pg_item {
+	GENZ_PG_STRUCT = 0,
+	GENZ_PG_TABLE  = 1,
+	GENZ_PTE_TABLE = 2
+};
 
 struct uuid_tracker_remote {
 	uint32_t                ro_rkey;
@@ -953,6 +997,11 @@ static inline const char *genz_name(const struct genz_dev *zdev)
         return dev_name(&zdev->dev);
 }
 
+static inline uint64_t genz_sz_0_special(uint64_t fld_val, uint fld_bits)
+{
+	return (fld_val != 0) ? fld_val : BIT_ULL(fld_bits);
+}
+
 static inline int genz_data_read(struct genz_bridge_dev *br, loff_t offset,
 				 size_t size, void *data,
 				 struct genz_rmr_info *rmri, uint flags)
@@ -988,11 +1037,12 @@ void genz_zmmu_clear_all(struct genz_zmmu_info *zi, bool free_radix_tree);
 int genz_zmmu_req_pte_update(struct genz_pte_info *ptei);
 int genz_zmmu_req_pte_alloc(struct genz_pte_info *ptei,
                             struct genz_rmr_info *rmri);
-int genz_zmmu_rsp_pte_alloc(struct genz_pte_info *info, uint64_t *rsp_zaddr,
+int genz_zmmu_rsp_pte_alloc(struct genz_pte_info *ptei, uint64_t *rsp_zaddr,
                             uint32_t *pg_ps);
-void genz_zmmu_req_pte_free(struct genz_pte_info *info);
-void genz_zmmu_rsp_pte_free(struct genz_pte_info *info);
-uint64_t genz_zmmu_pte_addr(const struct genz_pte_info *info, uint64_t addr);
+void genz_zmmu_req_pte_free(struct genz_pte_info *ptei);
+void genz_zmmu_rsp_pte_free(struct genz_pte_info *ptei);
+uint64_t genz_zmmu_pte_addr(const struct genz_pte_info *ptei, uint64_t addr);
+struct genz_zmmu_info *genz_zdev_zmmu_info(struct genz_dev *zdev);
 struct uuid_tracker *genz_uuid_search(uuid_t *uuid);
 struct uuid_tracker *genz_uuid_tracker_alloc(
 	uuid_t *uuid, uint type, gfp_t alloc_flags, int *status);
@@ -1064,6 +1114,8 @@ struct genz_rmr_info *devm_genz_rmr_import(struct genz_dev *zdev,
 void devm_genz_rmr_free(struct genz_dev *zdev, struct genz_rmr_info *rmri);
 struct genz_rmr_info *devm_genz_rmr_import_zres(struct genz_dev *zdev,
 	struct genz_resource *zres, uint64_t access);
+struct genz_dev *genz_ref_zdev(struct genz_dev *zdev);
+int genz_clone_zdev_ref_ptes(struct genz_dev *zdev);
 bool genz_gcid_is_local(struct genz_bridge_dev *br, uint32_t gcid);
 int genz_alloc_queues(struct genz_bridge_dev *br,
 		      struct genz_xdm_info *xdmi, struct genz_rdm_info *rdmi);
@@ -1089,5 +1141,11 @@ void genz_uep_pkt_to_rec(struct genz_uep_pkt *pkt, struct genz_uep_event_rec *re
 int genz_handle_uep(struct genz_bridge_dev *zbdev, struct genz_uep_info *uepi);
 void genz_dev_put(struct genz_dev *zdev);
 struct genz_dev *genz_dev_get(struct genz_dev *zdev);
+int genz_req_zmmu_setup(struct genz_dev *zdev, struct genz_resource *zres[]);
+int genz_req_pte_write(struct genz_bridge_dev *br,
+		       struct genz_pte_info *ptei,
+		       struct genz_zmmu_info *zi);
+int genz_clone_req_pg_ptes(struct genz_dev *zdev, struct genz_pte_info *ptei,
+			   struct genz_zmmu_info *zi);
 
 #endif /* LINUX_GENZ_H */
