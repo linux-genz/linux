@@ -212,6 +212,7 @@ int numa_add_memblk(int nid, u64 start, u64 end)
 	node_set(nid, numa_nodes_parsed);
 	return ret;
 }
+EXPORT_SYMBOL(numa_add_memblk);
 
 /*
  * Initialize NODE_DATA for a node on the local memory
