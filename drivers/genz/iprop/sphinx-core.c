@@ -130,7 +130,7 @@ static int sphinx_control_read(struct genz_bridge_dev *gzbr, loff_t offset,
 		return sphinx_local_control_read(sbr, dev, offset, size, data, flags);
 	}
 
-	src = rmri->cpu_addr + offset;  /* Revisit: CAccess */
+	src = rmri->cpu_addr + (offset - rmri->rsp_zaddr);
 	dev_dbg(dev, "%s offset=0x%llx, size=0x%lx, src=%px\n",
 		genz_gcid_str(rmri->gcid, gcstr, sizeof(gcstr)),
 		offset, size, src);
@@ -251,7 +251,7 @@ static int sphinx_control_write(struct genz_bridge_dev *gzbr, loff_t offset,
 		return sphinx_local_control_write(sbr, dev, offset, size, data, flags);
 	}
 
-	dest = rmri->cpu_addr + offset;  /* Revisit: CAccess */
+	dest = rmri->cpu_addr + (offset - rmri->rsp_zaddr);
 	dev_dbg(dev, "%s offset=0x%llx, size=0x%lx, dest=%px\n",
 		genz_gcid_str(rmri->gcid, gcstr, sizeof(gcstr)),
 		offset, size, dest);
