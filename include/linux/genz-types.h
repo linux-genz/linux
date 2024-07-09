@@ -2043,8 +2043,10 @@ union genz_pt_ctl {
         uint16_t precision_time_gtc_enable       : 1;
         uint16_t migrate_pt_alt_responder        : 1;
         uint16_t ptd_granularity_unit            : 1;
-        uint16_t gtc_cid_location                : 1;
-        uint16_t rsvdp0                          : 10;
+        uint16_t gtc_sid_enable                  : 1;
+        uint16_t pt_rsp_sid_enable               : 1;
+        uint16_t alt_pt_rsp_sid_enable           : 1;
+        uint16_t rsvdp0                          : 8;
     };
 };
 
@@ -5478,6 +5480,11 @@ struct genz_component_precision_time_structure{
     uint64_t alt_ptd_interface        : 12;
     uint64_t r2                       : 20;
     uint64_t next_pt_ptr              : 32;
+    uint64_t master_time;
+    uint64_t local_offset;
+    uint64_t ptrt                     : 40;
+    uint64_t r3                       : 24;
+    uint64_t r4;
 };
 
 struct genz_component_mechanical_structure{
