@@ -135,12 +135,12 @@ DEFINE_MUTEX(genz_blk_lock);  /* used only during initialization */
 #define KERNEL_SECTOR_SHIFT	9
 #define KERNEL_SECTOR_SIZE	(1<<KERNEL_SECTOR_SHIFT)
 
-static int genz_bdev_open(struct block_device *bdev, fmode_t fm)
+static int genz_bdev_open(struct gendisk *bgen, blk_mode_t bm)
 {
 	return 0;
 }
 
-static void genz_bdev_release(struct gendisk *bgen, fmode_t fm)
+static void genz_bdev_release(struct gendisk *bgen)
 {
 	return;
 }

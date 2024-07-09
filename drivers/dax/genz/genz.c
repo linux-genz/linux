@@ -99,7 +99,6 @@ struct dev_dax *__dax_genz_probe(struct genz_dev *zdev,
 	int ret, id, region_id, target_node;
 	resource_size_t offset;
 	unsigned long align, npfns;
-	struct dev_dax *dev_dax;
 	struct dev_dax_data dax_data;
 	struct dax_region *dax_region;
 	struct dev_pagemap pgmap = { };
@@ -167,12 +166,8 @@ struct dev_dax *__dax_genz_probe(struct genz_dev *zdev,
 		.pgmap = &pgmap,
 		.size = range_len(&range),
 	};
-	dev_dax = devm_create_dev_dax(&dax_data);
 
-	/* child dev_dax instances now own the lifetime of the dax_region */
-	dax_region_put(dax_region);
-
-	return dev_dax;
+	return devm_create_dev_dax(&dax_data);
 }
 
 static int dax_genz_probe(struct genz_dev *zdev,

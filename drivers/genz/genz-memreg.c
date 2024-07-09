@@ -37,7 +37,6 @@
 
 #include <linux/kernel.h>
 #include <linux/pci.h>
-#include <linux/hugetlb.h>
 #include <linux/sched/signal.h>
 
 #include "genz.h"
@@ -274,28 +273,26 @@ static void _genz_umem_release(struct genz_umem *umem)
 	}
 }
 
-static inline long genz_get_user_pages(
+static inline long genz_pin_user_pages(
 	unsigned long start, unsigned long nr_pages, bool write, bool force,
-	struct page **pages, struct vm_area_struct **vmas)
+	struct page **pages)
 {
-	unsigned int        gup_flags;
+	unsigned int gup_flags = FOLL_LONGTERM;
 
-	gup_flags = (write ? FOLL_WRITE : 0) | (force ? FOLL_FORCE : 0);
+	gup_flags |= (write ? FOLL_WRITE : 0) | (force ? FOLL_FORCE : 0);
 	/* Revisit: new code shouldn't call get_user_pages */
-	return get_user_pages(start, nr_pages, gup_flags, pages, vmas);
+	return pin_user_pages(start, nr_pages, gup_flags, pages);
 }
 
 static int genz_umem_pin(struct genz_umem *umem)
 {
 	struct page **page_list;
-	struct vm_area_struct **vma_list;
 	uint64_t vaddr;
 	unsigned long locked;
 	unsigned long lock_limit;
 	unsigned long cur_base;
 	unsigned long npages;
 	int ret;
-	int i;
 	struct scatterlist *sg, *sg_list_start;
 	unsigned long dma_attrs = 0;
 
@@ -305,14 +302,6 @@ static int genz_umem_pin(struct genz_umem *umem)
 		pr_debug("failed to allocate page_list\n");
 		return -ENOMEM;
 	}
-
-	/*
-	 * if we can't alloc the vma_list, it's not so bad;
-	 * just assume the memory is not hugetlb memory
-	 */
-	vma_list = (struct vm_area_struct **)__get_free_page(GFP_KERNEL);
-	if (!vma_list)
-		umem->hugetlb = 0;
 
 	vaddr = umem->vaddr;
 	npages = genz_umem_num_pages(umem);
@@ -346,12 +335,12 @@ static int genz_umem_pin(struct genz_umem *umem)
 	sg_list_start = umem->sg_head.sgl;
 
 	while (npages) {
-		ret = genz_get_user_pages(
+		ret = genz_pin_user_pages(
 			cur_base, min_t(unsigned long, npages,
 					PAGE_SIZE / sizeof (struct page *)),
-			true, !umem->writable, page_list, vma_list);
+			true, !umem->writable, page_list);
 		if (ret < 0) {
-			pr_debug("genz_get_user_pages(0x%lx, %lu) failed\n",
+			pr_debug("genz_pin_user_pages(0x%lx, %lu) failed\n",
 				 cur_base, npages);
 			goto out;
 		}
@@ -360,16 +349,16 @@ static int genz_umem_pin(struct genz_umem *umem)
 		//current->mm->pinned_vm += ret; /* Revisit */
 		cur_base += ret * PAGE_SIZE;
 		npages   -= ret;
-
+#ifdef REVISIT // no more vma_list
 		for_each_sg(sg_list_start, sg, ret, i) {
 			if (vma_list && !is_vm_hugetlb_page(vma_list[i]))
 				umem->hugetlb = 0;
 
 			sg_set_page(sg, page_list[i], PAGE_SIZE, 0);
 		}
-
 		/* preparing for next loop */
 		sg_list_start = sg;
+#endif
 	}
 
 	/* Revisit: set DMA direction based on access flags? */
@@ -386,8 +375,6 @@ static int genz_umem_pin(struct genz_umem *umem)
 
  out:
 	mmap_write_unlock(current->mm);
-	if (vma_list)
-		free_page((unsigned long)vma_list);
 	free_page((unsigned long)page_list);
 	return ret;
 }
@@ -400,6 +387,8 @@ static int genz_umem_pin(struct genz_umem *umem)
  * @size:    length of region to pin
  * @access:  GENZ_MR_xxx flags for memory being pinned
  * @pasid:   userspace PASID to use, or NO_PASID
+ * @ro_rkey  read-only R-Key to apply
+ * @rw_rkey  read-write R-Key to apply
  * @kernel:  request is for kernel, not userspace
  */
 struct genz_umem *genz_umem_get(struct genz_mem_data *mdata, uint64_t vaddr,
@@ -420,6 +409,7 @@ struct genz_umem *genz_umem_get(struct genz_mem_data *mdata, uint64_t vaddr,
 	    PAGE_ALIGN(vaddr + size) < (vaddr + size))
 		return ERR_PTR(-EINVAL);
 
+	// Revisit: IB (umem.c) checks can_do_mlock() here
 	umem = kzalloc(sizeof(*umem), GFP_KERNEL);
 	if (!umem)
 		return ERR_PTR(-ENOMEM);
@@ -444,8 +434,6 @@ struct genz_umem *genz_umem_get(struct genz_mem_data *mdata, uint64_t vaddr,
 	ptei->pte.rsp.rw_rkey = rw_rkey;
 	umem->page_shift      = PAGE_SHIFT;
 	umem->writable        = !!(access & (GENZ_MR_GET|GENZ_MR_PUT_REMOTE));
-	/* We assume the memory is from hugetlb until proven otherwise */
-	umem->hugetlb         = 1;
 	kref_init(&umem->refcount);
 	kref_init(&ptei->refcount);
 
@@ -454,6 +442,7 @@ struct genz_umem *genz_umem_get(struct genz_mem_data *mdata, uint64_t vaddr,
 
 	found = umem_insert(umem);
 	if (found != umem) {
+		kfree(ptei);
 		kfree(umem);
 		return found;
 	}

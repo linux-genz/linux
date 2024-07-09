@@ -701,14 +701,11 @@ struct genz_umem {
 	size_t                size;
 	int                   page_shift;
 	bool                  writable;
-	bool                  hugetlb;
 	bool                  need_release;
 	bool                  dirty;
 	bool                  erase;
-	struct work_struct    work;  /* Revisit: these next 3 were copied from */
-	struct mm_struct      *mm;   /* ib_umem and are currently unused */
-	unsigned long         diff;
-	struct sg_table       sg_head;
+	struct mm_struct      *owning_mm; // Revisit: IB has this, but unused in genz
+	struct sg_table       sg_head; // Revisit: IB now has sgt_append
 	int                   nmap;
 	int                   npages;
 };
