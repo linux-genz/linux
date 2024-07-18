@@ -1127,7 +1127,8 @@ struct genz_uuid_info *devm_genz_uuid_import(
 	struct genz_dev *zdev, uuid_t *uuid,
 	uint32_t uu_flags, gfp_t alloc_flags);
 bool genz_validate_structure_type(int type);
-bool genz_validate_structure_size(struct genz_control_structure_header *hdr);
+bool genz_validate_structure_size(struct genz_control_structure_header *hdr,
+				  int *exp_bytes, int *hdr_bytes);
 int genz_control_read(struct genz_bridge_dev *br, loff_t offset,
 		      size_t size, void *data,
 		      struct genz_rmr_info *rmri, uint flags);

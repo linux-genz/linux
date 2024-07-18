@@ -122,6 +122,8 @@ EXPORT_SYMBOL_GPL(genz_validate_structure_type);
 /**
  * genz_validate_structure_size - check structure size
  * hdr: pointer to the structure header
+ * exp_bytes: pointer to return the expected size in bytes, or NULL
+ * hdr_bytes: pointer to return the found header size in bytes, or NULL
  *
  * All Gen-Z control space structures contain a 32-bit structure header
  * at bit 0. The header includes the size of the Gen-Z control structure.
@@ -132,7 +134,8 @@ EXPORT_SYMBOL_GPL(genz_validate_structure_type);
  * false - the size field in the header is not the expected value
  * true  - the size field in the header is the expected value
  */
-bool genz_validate_structure_size(struct genz_control_structure_header *hdr)
+bool genz_validate_structure_size(struct genz_control_structure_header *hdr,
+				  int *exp_bytes, int *hdr_bytes)
 {
 	int sbytes;
 
@@ -141,6 +144,10 @@ bool genz_validate_structure_size(struct genz_control_structure_header *hdr)
 
 	/* Revisit: handle multi-sized & variable-sized structures */
 	sbytes = genz_struct_type_to_ptrs[hdr->type].struct_bytes;
+	if (exp_bytes)
+	  *exp_bytes = sbytes;
+	if (hdr_bytes)
+	  *hdr_bytes = hdr->size * GENZ_CONTROL_SIZE_UNIT;
 	/* Revisit: do better than ">=" */
 	return (hdr->size * GENZ_CONTROL_SIZE_UNIT >= sbytes);
 }

@@ -1224,6 +1224,7 @@ static int read_and_validate_header(struct genz_bridge_dev *zbdev,
 			off_t *hdr_offset)
 {
 	int ret = 0;
+	int hdr_bytes, exp_bytes;
 	uint8_t expected_vers;
 
 	ret = read_header_at_offset(zbdev, rmri, start, csp->ptr_size,
@@ -1262,8 +1263,9 @@ static int read_and_validate_header(struct genz_bridge_dev *zbdev,
 		return EINVAL;
 	}
 	/* Validate the structure size */
-	if (!genz_validate_structure_size(hdr)) {
-		pr_debug("structure size is wrong\n");
+	if (!genz_validate_structure_size(hdr, &exp_bytes, &hdr_bytes)) {
+		pr_debug("structure size is wrong - expected %d, found %d\n",
+			 exp_bytes, hdr_bytes);
 		return EINVAL;
 	}
 	/* Validate the version */
