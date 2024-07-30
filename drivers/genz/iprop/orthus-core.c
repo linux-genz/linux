@@ -54,10 +54,10 @@ static int orthus_bridge_info(struct genz_bridge_dev *gzbr,
 		return -EINVAL;
 
 	*info = orthus_br_info;
-	info->min_cpuvisible_addr = obr->req_zmmu.cpu_res.start;
-	info->max_cpuvisible_addr = obr->req_zmmu.cpu_res.end;
-	info->nr_req_page_grids = obr->req_zmmu.num_pgs;
-	info->nr_req_ptes = obr->req_zmmu.num_ptes;
+	info->pg_config.min_cpuvisible_addr = obr->req_zmmu.cpu_res.start;
+	info->pg_config.max_cpuvisible_addr = obr->req_zmmu.cpu_res.end;
+	info->pg_config.nr_req_page_grids = obr->req_zmmu.num_pgs;
+	info->pg_config.nr_req_ptes = obr->req_zmmu.num_ptes;
 	return 0;
 }
 
@@ -383,11 +383,12 @@ static int orthus_req_page_grid_write(struct genz_bridge_dev *gzbr, uint pg_inde
 	return ret;
 }
 
-static int orthus_req_pte_write(struct genz_bridge_dev *gzbr, struct genz_pte_info *info)
+static int orthus_local_req_pte_write(struct genz_bridge_dev *gzbr,
+				      struct genz_pte_info *info)
 {
 	struct orthus_bridge *obr = orthus_gzbr_to_obr(gzbr);
 	uint i, first = info->pte_index, last = first + info->zmmu_pages - 1;
-	uint64_t addr = info->pte.req.control.addr;
+	uint64_t addr = info->pte.req.control.addr; // Revisit: this is wrong
 	uint64_t ps = BIT_ULL(info->pg->page_grid.page_size_0);
 	int ret = 0;
 
@@ -423,18 +424,18 @@ static int orthus_req_pte_write(struct genz_bridge_dev *gzbr, struct genz_pte_in
 			   info->pte.req.pec,
 			   info->pte.req.lpe,
 			   info->pte.req.nse,
-			   info->pte.req.write_mode,
+			   info->pte.req.wr_mode,
 			   info->pte.req.tc,
 			   info->pte.req.pasid,
 			   genz_gcid_cid(info->pte.req.dgcid),
 			   genz_gcid_sid(info->pte.req.dgcid),
-			   info->pte.req.tr_index,
+			   info->pte.req.tr_idx,
 			   info->pte.req.co,
 			   info->pte.req.rkey,
 			   addr >> 12, //Remove bottom 12 bits
 			   info->pte.req.control.dr_iface);
 
-		print_pte(&req_zmmu->pte_cfg, &pte_buf[0], 0, req_zmmu->pte_sz);
+		//print_pte(&req_zmmu->pte_cfg, &pte_buf[0], 0, req_zmmu->pte_sz);
 
 		//Write the PTE
 		orthus_local_control_write(obr, req_zmmu->pte_base_offset + offset,
@@ -444,6 +445,20 @@ static int orthus_req_pte_write(struct genz_bridge_dev *gzbr, struct genz_pte_in
 	}
 
 	return ret;
+}
+
+static int orthus_req_pte_write(struct genz_bridge_dev *gzbr,
+				struct genz_pte_info *ptei,
+				struct genz_zmmu_info *zi)
+{
+	struct genz_rmr_info *rmri;
+
+	rmri = (!zi) ? NULL : zi->req_zmmu_pg.pg_rmri[GENZ_PTE_TABLE];
+	if (genz_is_local_bridge(gzbr, rmri)) {
+		return orthus_local_req_pte_write(gzbr, ptei);
+	} else {
+		return genz_req_pte_write(gzbr, ptei, zi);
+	}
 }
 
 /* Revisit: this is a copy of sg_copy_buffer, except using
