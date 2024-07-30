@@ -2481,3 +2481,20 @@ const struct address_space_operations ocfs2_aops = {
 	.is_partially_uptodate	= block_is_partially_uptodate,
 	.error_remove_page	= generic_error_remove_page,
 };
+
+static const struct address_space_operations ocfs2_dax_aops = {
+	// .writepages		= ocfs2_dax_writepages, // Revisit: add this
+	.direct_IO		= noop_direct_IO,  // Revisit: fix this
+	.dirty_folio		= noop_dirty_folio,
+	.bmap			= ocfs2_bmap,
+	// Revisit: allow swap to fabric?
+	//.swap_activate		= ocfs2_iomap_swap_activate,
+};
+
+void ocfs2_set_aops(struct inode *inode)
+{
+	if (IS_DAX(inode))
+		inode->i_mapping->a_ops = &ocfs2_dax_aops;
+	else
+		inode->i_mapping->a_ops = &ocfs2_aops;
+}

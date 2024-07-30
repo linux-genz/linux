@@ -72,6 +72,8 @@ modules.order
 /modules.builtin
 /modules.builtin.modinfo
 /modules.nsdeps
+/module_tar
+fitImage.its
 
 #
 # RPM spec file (make rpm-pkg)

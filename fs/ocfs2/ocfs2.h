@@ -277,6 +277,9 @@ enum ocfs2_mount_options
 	OCFS2_MOUNT_JOURNAL_ASYNC_COMMIT = 1 << 15,  /* Journal Async Commit */
 	OCFS2_MOUNT_ERRORS_CONT = 1 << 16, /* Return EIO to the calling process on error */
 	OCFS2_MOUNT_ERRORS_ROFS = 1 << 17, /* Change filesystem to read-only on error */
+	OCFS2_MOUNT_DAX_ALWAYS = 1 << 18,  /* DAX for all regular files */
+	OCFS2_MOUNT_DAX_NEVER  = 1 << 19,  /* DAX for no files */
+	OCFS2_MOUNT_DAX_INODE  = 1 << 20,  /* DAX on marked regular files */
 };
 
 #define OCFS2_OSB_SOFT_RO	0x0001
@@ -467,6 +470,9 @@ struct ocfs2_super
 
 	/* file check related stuff */
 	struct ocfs2_filecheck_sysfs_entry osb_fc_ent;
+
+	struct dax_device *s_daxdev;
+	u64 s_dax_part_off;
 };
 
 #define OCFS2_SB(sb)	    ((struct ocfs2_super *)(sb)->s_fs_info)

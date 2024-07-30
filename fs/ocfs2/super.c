@@ -26,6 +26,7 @@
 #include <linux/seq_file.h>
 #include <linux/quotaops.h>
 #include <linux/signal.h>
+#include <linux/dax.h>
 
 #define CREATE_TRACE_POINTS
 #include "ocfs2_trace.h"
@@ -168,6 +169,9 @@ enum {
 	Opt_grpquota,
 	Opt_coherency_buffered,
 	Opt_coherency_full,
+	Opt_dax_always,
+	Opt_dax_never,
+	Opt_dax_inode,
 	Opt_resv_level,
 	Opt_dir_resv_level,
 	Opt_journal_async_commit,
@@ -201,6 +205,9 @@ static const match_table_t tokens = {
 	{Opt_grpquota, "grpquota"},
 	{Opt_coherency_buffered, "coherency=buffered"},
 	{Opt_coherency_full, "coherency=full"},
+	{Opt_dax_always, "dax=always"},
+	{Opt_dax_never, "dax=never"},
+	{Opt_dax_inode, "dax=inode"},
 	{Opt_resv_level, "resv_level=%u"},
 	{Opt_dir_resv_level, "dir_resv_level=%u"},
 	{Opt_journal_async_commit, "journal_async_commit"},
@@ -1407,6 +1414,21 @@ static int ocfs2_parse_options(struct super_block *sb,
 		case Opt_coherency_full:
 			mopt->mount_opt &= ~OCFS2_MOUNT_COHERENCY_BUFFERED;
 			break;
+		case Opt_dax_always:
+			mopt->mount_opt |= OCFS2_MOUNT_DAX_ALWAYS;
+			mopt->mount_opt &= ~(OCFS2_MOUNT_DAX_NEVER |
+					     OCFS2_MOUNT_DAX_INODE);
+			break;
+		case Opt_dax_never:
+			mopt->mount_opt |= OCFS2_MOUNT_DAX_NEVER;
+			mopt->mount_opt &= ~(OCFS2_MOUNT_DAX_ALWAYS |
+					     OCFS2_MOUNT_DAX_INODE);
+			break;
+		case Opt_dax_inode:
+			mopt->mount_opt |= OCFS2_MOUNT_DAX_INODE;
+			mopt->mount_opt &= ~(OCFS2_MOUNT_DAX_ALWAYS |
+					     OCFS2_MOUNT_DAX_NEVER);
+			break;
 		case Opt_acl:
 			mopt->mount_opt |= OCFS2_MOUNT_POSIX_ACL;
 			mopt->mount_opt &= ~OCFS2_MOUNT_NO_POSIX_ACL;
@@ -1459,6 +1481,13 @@ static int ocfs2_parse_options(struct super_block *sb,
 			status = 0;
 			goto bail;
 		}
+	}
+
+	if (!(mopt->mount_opt & (OCFS2_MOUNT_DAX_INODE |
+				 OCFS2_MOUNT_DAX_NEVER |
+				 OCFS2_MOUNT_DAX_ALWAYS))) {
+		// default to dax=inode
+		mopt->mount_opt |= OCFS2_MOUNT_DAX_INODE;
 	}
 
 	status = 1;
@@ -1549,6 +1578,13 @@ static int ocfs2_show_options(struct seq_file *s, struct dentry *root)
 
 	if (opts & OCFS2_MOUNT_JOURNAL_ASYNC_COMMIT)
 		seq_printf(s, ",journal_async_commit");
+
+	if (opts & OCFS2_MOUNT_DAX_ALWAYS)
+		seq_printf(s, ",dax=always");
+	if (opts & OCFS2_MOUNT_DAX_NEVER)
+		seq_printf(s, ",dax=never");
+	if (opts & OCFS2_MOUNT_DAX_INODE)
+		seq_printf(s, ",dax=inode");
 
 	return 0;
 }
@@ -1934,6 +1970,7 @@ static void ocfs2_dismount_volume(struct super_block *sb, int mnt_err)
 	printk(KERN_INFO "ocfs2: Unmounting device (%s) on (node %s)\n",
 	       osb->dev_str, nodestr);
 
+	fs_put_dax(osb->s_daxdev, NULL);
 	ocfs2_delete_osb(osb);
 	kfree(osb);
 	sb->s_dev = 0;
@@ -2039,6 +2076,8 @@ static int ocfs2_initialize_super(struct super_block *sb,
 	osb->sb = sb;
 	osb->s_sectsize_bits = blksize_bits(sector_size);
 	BUG_ON(!osb->s_sectsize_bits);
+	osb->s_daxdev = fs_dax_get_by_bdev(sb->s_bdev, &osb->s_dax_part_off,
+					   NULL, NULL);
 
 	spin_lock_init(&osb->dc_task_lock);
 	init_waitqueue_head(&osb->dc_event);
@@ -2071,7 +2110,7 @@ static int ocfs2_initialize_super(struct super_block *sb,
 		mlog(ML_ERROR, "Invalid number of node slots (%u)\n",
 		     osb->max_slots);
 		status = -EINVAL;
-		goto out;
+		goto out_dax;
 	}
 
 	ocfs2_orphan_scan_init(osb);
@@ -2080,7 +2119,7 @@ static int ocfs2_initialize_super(struct super_block *sb,
 	if (status) {
 		mlog(ML_ERROR, "Unable to initialize recovery state\n");
 		mlog_errno(status);
-		goto out;
+		goto out_dax;
 	}
 
 	init_waitqueue_head(&osb->checkpoint_event);
@@ -2303,6 +2342,8 @@ out_vol_label:
 	kfree(osb->vol_label);
 out_recovery_map:
 	kfree(osb->recovery_map);
+out_dax:
+	fs_put_dax(osb->s_daxdev, NULL);
 out:
 	kfree(osb);
 	sb->s_fs_info = NULL;

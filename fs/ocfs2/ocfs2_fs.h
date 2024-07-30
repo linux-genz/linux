@@ -222,6 +222,7 @@
 #define OCFS2_QUOTA_FL		(0x00001000)	/* Quota file */
 #define OCFS2_DIO_ORPHANED_FL	(0X00002000)	/* On the orphan list especially
 						 * for dio */
+#define OCFS2_DAX_FL		(0x00004000)	/* Inode is DAX */
 
 /*
  * Flags on ocfs2_dinode.i_dyn_features

@@ -109,6 +109,7 @@ static inline struct ocfs2_inode_info *OCFS2_I(struct inode *inode)
 
 extern const struct address_space_operations ocfs2_aops;
 extern const struct ocfs2_caching_operations ocfs2_inode_caching_ops;
+extern const struct iomap_ops ocfs2_iomap_ops;
 
 static inline struct ocfs2_caching_info *INODE_CACHE(struct inode *inode)
 {

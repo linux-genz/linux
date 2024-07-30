@@ -75,4 +75,6 @@ enum ocfs2_iocb_lock_bits {
 #define ocfs2_iocb_rw_locked_level(iocb) \
 	test_bit(OCFS2_IOCB_RW_LOCK_LEVEL, (unsigned long *)&iocb->private)
 
+void ocfs2_set_aops(struct inode *inode);
+
 #endif /* OCFS2_FILE_H */

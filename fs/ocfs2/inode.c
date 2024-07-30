@@ -13,6 +13,7 @@
 #include <linux/pagemap.h>
 #include <linux/quotaops.h>
 #include <linux/iversion.h>
+#include <linux/iomap.h>
 
 #include <asm/byteorder.h>
 
@@ -1657,3 +1658,76 @@ const struct ocfs2_caching_operations ocfs2_inode_caching_ops = {
 	.co_io_unlock		= ocfs2_inode_cache_io_unlock,
 };
 
+static int ocfs2_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
+		unsigned flags, struct iomap *iomap, struct iomap *srcmap)
+{
+#ifdef NOT_YET
+	int ret;
+	struct ext4_map_blocks map;
+	u8 blkbits = inode->i_blkbits;
+
+	if ((offset >> blkbits) > EXT4_MAX_LOGICAL_BLOCK)
+		return -EINVAL;
+
+	if (WARN_ON_ONCE(ext4_has_inline_data(inode)))
+		return -ERANGE;
+
+	/*
+	 * Calculate the first and last logical blocks respectively.
+	 */
+	map.m_lblk = offset >> blkbits;
+	map.m_len = min_t(loff_t, (offset + length - 1) >> blkbits,
+			  EXT4_MAX_LOGICAL_BLOCK) - map.m_lblk + 1;
+
+	if (flags & IOMAP_WRITE) {
+		/*
+		 * We check here if the blocks are already allocated, then we
+		 * don't need to start a journal txn and we can directly return
+		 * the mapping information. This could boost performance
+		 * especially in multi-threaded overwrite requests.
+		 */
+		if (offset + length <= i_size_read(inode)) {
+			ret = ext4_map_blocks(NULL, inode, &map, 0);
+			if (ret > 0 && (map.m_flags & EXT4_MAP_MAPPED))
+				goto out;
+		}
+		ret = ext4_iomap_alloc(inode, &map, flags);
+	} else {
+		ret = ext4_map_blocks(NULL, inode, &map, 0);
+	}
+
+	if (ret < 0)
+		return ret;
+out:
+	/*
+	 * When inline encryption is enabled, sometimes I/O to an encrypted file
+	 * has to be broken up to guarantee DUN contiguity.  Handle this by
+	 * limiting the length of the mapping returned.
+	 */
+	map.m_len = fscrypt_limit_io_blocks(inode, map.m_lblk, map.m_len);
+
+	ext4_set_iomap(inode, iomap, &map, offset, length, flags);
+#endif
+	return 0;
+}
+
+static int ocfs2_iomap_end(struct inode *inode, loff_t offset, loff_t length,
+			   ssize_t written, unsigned flags, struct iomap *iomap)
+{
+	/*
+	 * Check to see whether an error occurred while writing out the data to
+	 * the allocated blocks. If so, return the magic error code so that we
+	 * fallback to buffered I/O and attempt to complete the remainder of
+	 * the I/O. Any blocks that may have been allocated in preparation for
+	 * the direct I/O will be reused during buffered I/O.
+	 */
+	if (flags & (IOMAP_WRITE | IOMAP_DIRECT) && written == 0)
+		return -ENOTBLK;
+
+	return 0;
+}
+
+const struct iomap_ops ocfs2_iomap_ops = {
+	.iomap_begin		= ocfs2_iomap_begin,
+	.iomap_end		= ocfs2_iomap_end,
+};

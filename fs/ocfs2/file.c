@@ -22,6 +22,7 @@
 #include <linux/quotaops.h>
 #include <linux/blkdev.h>
 #include <linux/backing-dev.h>
+#include <linux/dax.h>
 
 #include <cluster/masklog.h>
 
@@ -2346,6 +2347,84 @@ out:
 	return ret;
 }
 
+#ifdef CONFIG_FS_DAX
+static ssize_t ocfs2_dax_write_iter(struct kiocb *iocb,
+				    struct iov_iter *from,
+				    const bool append_write)
+{
+	int rw_level;
+	ssize_t ret;
+	ssize_t written = 0, count;
+	struct file *filp = iocb->ki_filp;
+	struct inode *inode = file_inode(filp);
+	bool nowait = iocb->ki_flags & IOCB_NOWAIT ? 1 : 0;
+
+	// dax_iomap_rw requires inode lock be held
+	if (nowait) {
+		if (!inode_trylock(inode))
+			return -EAGAIN;
+	} else {
+		inode_lock(inode);
+	}
+
+	// For append write, we must take rw EX.
+	rw_level = append_write;
+
+	if (nowait)
+		ret = ocfs2_try_rw_lock(inode, rw_level);
+	else
+		ret = ocfs2_rw_lock(inode, rw_level);
+	if (ret < 0) {
+		if (ret != -EAGAIN)
+			mlog_errno(ret);
+		goto local_unlock;
+	}
+
+	if (nowait) {
+		ret = ocfs2_try_inode_lock(inode, NULL, 1);
+	} else {
+		ret = ocfs2_inode_lock(inode, NULL, 1);
+	}
+	if (ret < 0) {
+		if (ret != -EAGAIN)
+			mlog_errno(ret);
+		goto rw_unlock;
+	}
+
+	ret = generic_write_checks(iocb, from);
+	if (ret <= 0) {
+		if (ret)
+			mlog_errno(ret);
+		goto ocfs2_unlock;
+	}
+	count = ret;
+
+	ret = ocfs2_prepare_inode_for_write(filp, iocb->ki_pos, count, !nowait);
+	if (ret < 0) {
+		if (ret != -EAGAIN)
+			mlog_errno(ret);
+		goto ocfs2_unlock;
+	}
+
+	ret = dax_iomap_rw(iocb, from, &ocfs2_iomap_ops);
+
+	// Revisit: finish this
+ocfs2_unlock:
+	ocfs2_inode_unlock(inode, 1);
+
+rw_unlock:
+	if (rw_level != -1)
+		ocfs2_rw_unlock(inode, rw_level);
+
+local_unlock:
+	inode_unlock(inode);
+	// Revisit: ext4 does generic_write_sync() here
+	if (written)
+		ret = written;
+	return ret;
+}
+#endif
+
 static ssize_t ocfs2_file_write_iter(struct kiocb *iocb,
 				    struct iov_iter *from)
 {
@@ -2376,6 +2455,10 @@ static ssize_t ocfs2_file_write_iter(struct kiocb *iocb,
 	if (count == 0)
 		return 0;
 
+#ifdef CONFIG_FS_DAX
+	if (IS_DAX(inode))  // initial check while holding no locks
+		return ocfs2_dax_write_iter(iocb, from, append_write);
+#endif
 	if (nowait) {
 		if (!inode_trylock(inode))
 			return -EAGAIN;
@@ -2503,6 +2586,54 @@ out_mutex:
 	return ret;
 }
 
+#ifdef CONFIG_FS_DAX
+static ssize_t ocfs2_dax_read_iter(struct kiocb *iocb,
+				   struct iov_iter *to)
+{
+	int ret = 0;
+	struct file *filp = iocb->ki_filp;
+	struct inode *inode = file_inode(filp);
+	bool nowait = iocb->ki_flags & IOCB_NOWAIT ? 1 : 0;
+
+	// Revisit: add trace_ocfs2?
+	// dax_iomap_rw requires inode lock be held
+	if (nowait) {
+		if (!inode_trylock_shared(inode))
+			return -EAGAIN;
+		ret = ocfs2_try_inode_lock(inode, NULL, 0);
+	} else {
+		inode_lock_shared(inode);
+		ret = ocfs2_inode_lock(inode, NULL, 0);
+	}
+	if (ret < 0) {
+		if (ret != -EAGAIN)
+			mlog_errno(ret);
+		goto local_unlock;
+	}
+	/*
+	 * Recheck under inode locks - at this point we are sure it cannot
+	 * change anymore
+	 */
+	if (!IS_DAX(inode)) {
+		ocfs2_inode_unlock(inode, 0);
+		inode_unlock_shared(inode);
+		/* Fallback to buffered IO in case inode is no longer DAX */
+		return generic_file_read_iter(iocb, to);
+	}
+	ret = dax_iomap_rw(iocb, to, &ocfs2_iomap_ops);
+
+	ocfs2_inode_unlock(inode, 0);
+	inode_unlock_shared(inode);
+	file_accessed(filp);
+
+	return ret;
+
+local_unlock:
+	inode_unlock_shared(inode);
+	return ret;
+}
+#endif
+
 static ssize_t ocfs2_file_read_iter(struct kiocb *iocb,
 				   struct iov_iter *to)
 {
@@ -2566,6 +2697,10 @@ static ssize_t ocfs2_file_read_iter(struct kiocb *iocb,
 	}
 	ocfs2_inode_unlock(inode, lock_level);
 
+#ifdef CONFIG_FS_DAX
+	if (IS_DAX(inode))  // initial check while holding no locks
+		return ocfs2_dax_read_iter(iocb, to);
+#endif
 	ret = generic_file_read_iter(iocb, to);
 	trace_generic_file_read_iter_ret(ret);
 
